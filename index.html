@@ -792,13 +792,13 @@ async function renderRoster() {
   const el = document.getElementById('page-roster');
   setLoading('page-roster', 'Loading roster...');
   try {
-    const data = await apiCall({ action: 'get_students' });
-    console.log('Roster data:', JSON.stringify(data).substring(0, 200));
-    console.log('Selected year:', state.selectedYear);
-    rosterStudents = data.data || [];
-    console.log('Students loaded:', rosterStudents.length);
+    const [studentsRes, guardiansRes] = await Promise.all([
+      apiCall({ action: 'get_students' }),
+      apiCall({ action: 'get_guardians' })
+    ]);
+    rosterStudents  = studentsRes.data || [];
+    rosterGuardians = guardiansRes.data || [];
     renderRosterTable();
-    console.log('renderRosterTable complete, el innerHTML length:', el.innerHTML.length);
   } catch(e) {
     console.error('Roster error:', e);
     el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Error: ' + e.message + '</div></div>';
@@ -838,6 +838,9 @@ function renderRosterTable() {
         <option value="inactive" ${rosterFilter.status==='inactive'?'selected':''}>Inactive</option>
       </select>
       <span style="color:var(--gray-500);font-size:13px;margin-left:auto;">${filtered.length} student${filtered.length!==1?'s':''}</span>
+      <button class="btn btn-sm btn-secondary" onclick="printRoster('full')">&#128424; Print roster</button>
+      <button class="btn btn-sm btn-secondary" onclick="printRoster('trip')">&#128652; Trip sheet</button>
+      <button class="btn btn-sm btn-secondary" onclick="printRoster('medical')">&#9888; Medical list</button>
       <button class="btn btn-primary btn-sm" onclick="openStudentModal()">+ Add student</button>
     </div>
 
@@ -849,10 +852,13 @@ function renderRosterTable() {
                <div class="empty-state-text">${rosterStudents.length === 0 ? 'No students yet - add your first student!' : 'No students match your filters.'}</div>
              </div>`
           : `<div class="table-wrap"><table>
-              <thead><tr><th>Name</th><th>Grade</th><th>Section</th><th>Instrument</th><th>Shirt</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th></th><th>Name</th><th>Grade</th><th>Section</th><th>Instrument</th><th>Shirt</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 ${filtered.map(s=>`
                   <tr>
+                    <td style="text-align:center;width:28px;">
+                      ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
+                    </td>
                     <td><strong>${s.first_name} ${s.last_name}</strong></td>
                     <td>${s.grade}</td>
                     <td>${s.section||'&mdash;'}</td>
@@ -1095,6 +1101,9 @@ function renderFeesOverview() {
               <tbody>
                 ${studentSummary.map(s => `
                   <tr>
+                    <td style="text-align:center;width:28px;">
+                      ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
+                    </td>
                     <td><strong>${s.first_name} ${s.last_name}</strong></td>
                     <td>${s.grade}</td>
                     <td>${s.section||'—'}</td>
@@ -1634,12 +1643,18 @@ function renderAttendanceOverview() {
               <tbody>
                 ${studentSummary.map(s => `
                   <tr>
+                    <td style="text-align:center;width:28px;">
+                      ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
+                    </td>
                     <td><strong>${s.first_name} ${s.last_name}</strong></td>
                     <td>${s.grade}</td>
                     <td>${s.section||'—'}</td>
                     <td><span class="badge badge-green">${s.present}</span></td>
                     <td><span class="badge badge-red">${s.absent}</span></td>
-                    <td><span class="badge badge-gray">${s.excused}</span></td>
+                    <td title="${records.filter(r=>r.student_id===s.student_id&&r.status==='excused'&&r.notes).map(r=>r.notes).join(', ')||''}" style="cursor:${records.filter(r=>r.student_id===s.student_id&&r.status==='excused'&&r.notes).length?'help':'default'}">
+                      <span class="badge badge-gray">${s.excused}</span>
+                      ${records.filter(r=>r.student_id===s.student_id&&(r.status==='excused'||r.status==='absent')&&r.notes).length?`<span style="font-size:10px;color:var(--gray-500);margin-left:4px;">&#128077;</span>`:''}
+                    </td>
                     <td>
                       <div style="display:flex;align-items:center;gap:8px;">
                         <div style="flex:1;height:6px;background:var(--gray-200);border-radius:3px;min-width:60px;">
@@ -1715,7 +1730,7 @@ async function openAttendanceForEvent(eventId) {
                   <div class="roll-row" id="roll-${s.student_id}" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:8px;margin-bottom:4px;background:${attendState[s.student_id]==='present'?'#F0FDF4':attendState[s.student_id]==='absent'?'#FEF2F2':'#FFFBEB'};">
                     <div style="flex:1;font-size:14px;font-weight:500;">${s.first_name} ${s.last_name}</div>
                     <div style="font-size:12px;color:var(--gray-500);">${s.instrument||''}</div>
-                    <div style="display:flex;gap:4px;">
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
                       <button class="btn btn-sm" id="btn-present-${s.student_id}"
                         style="background:${attendState[s.student_id]==='present'?'var(--success)':'var(--gray-100)'};color:${attendState[s.student_id]==='present'?'white':'var(--gray-700)'};"
                         onclick="setAttendance('${s.student_id}','present')">Present</button>
@@ -1726,6 +1741,11 @@ async function openAttendanceForEvent(eventId) {
                         style="background:${attendState[s.student_id]==='excused'?'#F59E0B':'var(--gray-100)'};color:${attendState[s.student_id]==='excused'?'white':'var(--gray-700)'};"
                         onclick="setAttendance('${s.student_id}','excused')">Excused</button>
                     </div>
+                    <input type="text" id="note-${s.student_id}"
+                      placeholder="Excuse note..." 
+                      value="${(existing.find(r=>r.student_id===s.student_id)||{}).notes||''}"
+                      style="margin-top:4px;width:100%;padding:4px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;color:var(--gray-700);display:${attendState[s.student_id]==='excused'||attendState[s.student_id]==='absent'?'block':'none'};"
+                      oninput="window._attendNotes['${s.student_id}']=this.value"/>
                   </div>`).join('')}
               </div>`;
           }).join('')}
@@ -1740,6 +1760,8 @@ async function openAttendanceForEvent(eventId) {
 
   // Store state for save
   window._attendState = attendState;
+  window._attendNotes = {};
+  existing.forEach(r => { if (r.notes) window._attendNotes[r.student_id] = r.notes; });
   backdrop.classList.add('open');
 }
 
@@ -1756,6 +1778,9 @@ function setAttendance(studentId, status) {
     btn.style.background = active ? (s==='present'?'var(--success)':s==='absent'?'var(--danger)':'#F59E0B') : 'var(--gray-100)';
     btn.style.color = active ? 'white' : 'var(--gray-700)';
   });
+  // Show note field for absent/excused, hide for present
+  const noteField = document.getElementById('note-' + studentId);
+  if (noteField) noteField.style.display = (status==='absent'||status==='excused') ? 'block' : 'none';
 }
 
 function markAll(status) {
@@ -1770,6 +1795,7 @@ async function saveAllAttendance() {
     event_id:    attendanceEventId,
     student_id:  studentId,
     status:      attStatus,
+    notes:       window._attendNotes[studentId] || '',
     recorded_by: state.user ? state.user.email : ''
   }));
   try {
@@ -3296,6 +3322,236 @@ function generateLabels() {
   const win = window.open('', '_blank', 'width=900,height=700');
   win.document.write(html);
   win.document.close();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  ROSTER PRINT & EXPORT
+// ════════════════════════════════════════════════════════════
+function printRoster(mode) {
+  const students = rosterStudents.filter(s => {
+    const matchYear   = !state.selectedYear || s.school_year === state.selectedYear;
+    const matchStatus = s.status === 'active';
+    return matchYear && matchStatus;
+  });
+
+  if (students.length === 0) { toast('No active students to print.', 'error'); return; }
+
+  const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  const medStudents = students.filter(s => s.medical_notes && s.medical_notes.trim());
+
+  let title, subtitle, tableHTML;
+
+  if (mode === 'trip') {
+    title    = 'Trip Roster';
+    subtitle = 'Check-in sheet — ' + state.selectedYear;
+    tableHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th style="width:24px;">#</th>
+            <th>Student name</th>
+            <th>Grade</th>
+            <th>Section</th>
+            <th>Instrument</th>
+            <th>Emergency contact</th>
+            <th>Phone</th>
+            <th style="width:60px;text-align:center;">&#9744; On bus</th>
+            <th style="width:60px;text-align:center;">&#9744; Return</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${students.map((s, i) => {
+            const guardian = rosterGuardians ? rosterGuardians.find(g => g.student_id === s.student_id && String(g.is_primary).toUpperCase() === 'TRUE') : null;
+            return '<tr' + (s.medical_notes ? ' style="background:#FFF8E1;"' : '') + '>' +
+              '<td style="color:#999;">' + (i+1) + '</td>' +
+              '<td><strong>' + s.first_name + ' ' + s.last_name + '</strong>' + (s.medical_notes ? ' <span style="color:#C62828;">&#9888;</span>' : '') + '</td>' +
+              '<td>' + (s.grade||'—') + '</td>' +
+              '<td>' + (s.section||'—') + '</td>' +
+              '<td>' + (s.instrument||'—') + '</td>' +
+              '<td>' + (guardian ? guardian.first_name + ' ' + guardian.last_name : '—') + '</td>' +
+              '<td style="font-size:11px;">' + (guardian ? (guardian.phone||'—') : '—') + '</td>' +
+              '<td style="text-align:center;">&#9744;</td>' +
+              '<td style="text-align:center;">&#9744;</td>' +
+            '</tr>';
+          }).join('')}
+        </tbody>
+      </table>
+      ${medStudents.length > 0 ? '<div class="medical-box"><div class="med-title">&#9888; Students with medical notes</div>' +
+        medStudents.map(s => '<div class="med-row"><strong>' + s.first_name + ' ' + s.last_name + ':</strong> ' + s.medical_notes + '</div>').join('') +
+        '</div>' : ''}`;
+
+  } else if (mode === 'medical') {
+    title    = 'Medical & Allergy Reference';
+    subtitle = state.selectedYear + ' — CONFIDENTIAL';
+    tableHTML = medStudents.length === 0
+      ? '<div style="text-align:center;padding:40px;color:#666;font-size:14px;">No students with medical notes on file.</div>'
+      : `<table>
+          <thead>
+            <tr>
+              <th>Student name</th>
+              <th>Grade</th>
+              <th>Section</th>
+              <th>Medical notes / allergies</th>
+              <th>Emergency contact</th>
+              <th>Phone</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${medStudents.map(s => {
+              const guardian = rosterGuardians ? rosterGuardians.find(g => g.student_id === s.student_id && String(g.is_primary).toUpperCase() === 'TRUE') : null;
+              return '<tr style="background:#FFF8E1;">' +
+                '<td><strong>' + s.first_name + ' ' + s.last_name + '</strong></td>' +
+                '<td>' + (s.grade||'—') + '</td>' +
+                '<td>' + (s.section||'—') + '</td>' +
+                '<td style="color:#C62828;font-weight:500;">' + s.medical_notes + '</td>' +
+                '<td>' + (guardian ? guardian.first_name + ' ' + guardian.last_name : '—') + '</td>' +
+                '<td>' + (guardian ? (guardian.phone||'—') : '—') + '</td>' +
+              '</tr>';
+            }).join('')}
+          </tbody>
+        </table>`;
+
+  } else {
+    // Full roster
+    title    = 'Band Roster';
+    subtitle = state.selectedYear;
+    // Group by section
+    const sections = [...new Set(students.map(s => s.section||'Other'))].sort();
+    tableHTML = sections.map(section => {
+      const sStudents = students.filter(s => (s.section||'Other') === section);
+      return '<div style="margin-bottom:24px;">' +
+        '<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#1565C0;margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid #1565C0;">' + section + ' (' + sStudents.length + ')</div>' +
+        '<table>' +
+        '<thead><tr><th>Name</th><th>Grade</th><th>Instrument</th><th>Shirt</th><th>Guardian</th><th>Phone</th><th>Email</th></tr></thead>' +
+        '<tbody>' +
+        sStudents.map(s => {
+          const guardian = rosterGuardians ? rosterGuardians.find(g => g.student_id === s.student_id && String(g.is_primary).toUpperCase() === 'TRUE') : null;
+          return '<tr>' +
+            '<td><strong>' + s.first_name + ' ' + s.last_name + '</strong>' + (s.medical_notes ? ' <span style="color:#C62828;" title="'+s.medical_notes+'">&#9888;</span>' : '') + '</td>' +
+            '<td>' + (s.grade||'—') + '</td>' +
+            '<td>' + (s.instrument||'—') + '</td>' +
+            '<td>' + (s.shirt_size||'—') + '</td>' +
+            '<td>' + (guardian ? guardian.first_name+' '+guardian.last_name : '—') + '</td>' +
+            '<td style="font-size:11px;">' + (guardian ? (guardian.phone||'—') : '—') + '</td>' +
+            '<td style="font-size:11px;">' + (guardian ? (guardian.email||'—') : '—') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }).join('');
+  }
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>${title} — Estill County Band Boosters</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 24px; }
+    .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; padding-bottom:12px; border-bottom:2px solid #1565C0; }
+    .header-left img { height:48px; margin-bottom:6px; display:block; }
+    .header-right { text-align:right; }
+    h1 { font-size:22px; font-weight:700; color:#111; }
+    .subtitle { font-size:13px; color:#666; margin-top:2px; }
+    .date { font-size:11px; color:#999; margin-top:4px; }
+    .summary { display:flex; gap:20px; margin-bottom:16px; background:#f3f4f6; padding:10px 14px; border-radius:6px; font-size:12px; }
+    .summary-item strong { font-size:18px; display:block; }
+    table { width:100%; border-collapse:collapse; margin-bottom:16px; font-size:11px; }
+    th { text-align:left; padding:6px 8px; background:#1565C0; color:white; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+    td { padding:5px 8px; border-bottom:1px solid #f0f0f0; }
+    tr:nth-child(even) { background:#fafafa; }
+    .medical-box { background:#FFF8E1; border:1px solid #FFE082; border-radius:6px; padding:12px; margin-top:16px; }
+    .med-title { font-weight:700; color:#C62828; margin-bottom:8px; font-size:12px; }
+    .med-row { margin-bottom:6px; font-size:11px; padding:4px 0; border-bottom:1px solid #FFE082; }
+    .confidential { background:#FFEBEE; border:1px solid #FFCDD2; padding:6px 12px; text-align:center; font-size:11px; color:#C62828; font-weight:600; margin-bottom:12px; border-radius:4px; }
+    .footer { margin-top:20px; padding-top:10px; border-top:1px solid #e5e7eb; font-size:10px; color:#999; text-align:center; }
+    @media print { .no-print { display:none; } body { padding:12px; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="padding:12px;background:#f3f4f6;text-align:center;margin-bottom:16px;border-radius:6px;">
+    <button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">
+      &#128424; Print
+    </button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">
+      Close
+    </button>
+  </div>
+  ${mode==='medical' ? '<div class="confidential">CONFIDENTIAL — For authorized personnel only</div>' : ''}
+  <div class="header">
+    <div class="header-left">
+      <img src="${LOGO_DATA_URL}" alt="ECBB"/>
+      <div style="font-size:10px;color:#666;">Estill County Band Boosters</div>
+    </div>
+    <div class="header-right">
+      <h1>${title}</h1>
+      <div class="subtitle">${subtitle}</div>
+      <div class="date">Printed: ${today}</div>
+    </div>
+  </div>
+  <div class="summary">
+    <div class="summary-item"><strong>${students.length}</strong>Total students</div>
+    <div class="summary-item"><strong>${[...new Set(students.map(s=>s.section).filter(Boolean))].length}</strong>Sections</div>
+    ${medStudents.length > 0 ? '<div class="summary-item" style="color:#C62828;"><strong>' + medStudents.length + '</strong>Medical alerts</div>' : ''}
+  </div>
+  ${tableHTML}
+  <div class="footer">
+    Estill County Band Boosters · Cadence Band Management · ${today}
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=800');
+  win.document.write(html);
+  win.document.close();
+}
+
+// Store guardians for roster printing
+let rosterGuardians = [];
+
+// ── Medical alert modal ──────────────────────────────────────
+function showMedicalAlert(studentId) {
+  const student = rosterStudents.find(s => s.student_id === studentId);
+  if (!student || !student.medical_notes) return;
+  const guardian = rosterGuardians.find(g => g.student_id === studentId && String(g.is_primary).toUpperCase() === 'TRUE');
+
+  let backdrop = document.getElementById('medical-alert-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'medical-alert-modal';
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = `
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header" style="background:#FFEBEE;border-bottom:1px solid #FFCDD2;">
+        <div>
+          <div class="modal-title" style="color:#C62828;">&#9888; Medical Alert</div>
+          <div style="font-size:13px;color:#C62828;margin-top:2px;">${student.first_name} ${student.last_name} · Grade ${student.grade}</div>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('medical-alert-modal').classList.remove('open')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:var(--radius);padding:14px;margin-bottom:16px;">
+          <div style="font-size:12px;font-weight:600;color:#C62828;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;">Medical notes / allergies</div>
+          <div style="font-size:14px;line-height:1.6;">${student.medical_notes}</div>
+        </div>
+        ${guardian ? `
+        <div style="font-size:13px;">
+          <div style="font-weight:500;margin-bottom:6px;">Emergency contact</div>
+          <div style="color:var(--gray-700);">${guardian.first_name} ${guardian.last_name} (${guardian.relationship||'Guardian'})</div>
+          ${guardian.phone ? `<div><a href="tel:${guardian.phone}" style="color:var(--blue);font-weight:600;font-size:15px;">&#128222; ${guardian.phone}</a></div>` : ''}
+          ${guardian.alt_phone ? `<div style="color:var(--gray-500);font-size:12px;">Alt: ${guardian.alt_phone}</div>` : ''}
+        </div>` : '<div style="color:var(--gray-500);font-size:13px;">No guardian contact on file.</div>'}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('medical-alert-modal').classList.remove('open')">Close</button>
+        <button class="btn btn-primary" onclick="openStudentModal(rosterStudents.find(s=>s.student_id==='${studentId}'))">Edit student</button>
+      </div>
+    </div>`;
+  backdrop.classList.add('open');
 }
 
 // ════════════════════════════════════════════════════════════
