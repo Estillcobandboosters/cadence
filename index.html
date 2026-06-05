@@ -2529,7 +2529,266 @@ async function deleteEvent() {
 function renderVolunteers()  { placeholderPage('page-volunteers',  'Volunteers',          'Volunteer module — Phase 2'); }
 function renderFundraising() { placeholderPage('page-fundraising', 'Fundraising',         'Fundraising module — Phase 2'); }
 function renderForms()       { placeholderPage('page-forms',       'Forms &amp; Documents','Forms module — Phase 2'); }
-function renderUsers()       { placeholderPage('page-users',       'Users &amp; Access',   'Admin module — Phase 2'); }
+// ════════════════════════════════════════════════════════════
+//  USERS & ACCESS — Full module
+// ════════════════════════════════════════════════════════════
+let usersData = [];
+let editingUserId = null;
+
+async function renderUsers() {
+  const el = document.getElementById('page-users');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading users...</div>';
+  try {
+    const data = await apiCall({ action: 'get_users' });
+    usersData = data.data || [];
+    renderUsersTable();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load users.</div></div>';
+  }
+}
+
+function renderUsersTable() {
+  const el = document.getElementById('page-users');
+  const activeUsers   = usersData.filter(u => String(u.active).toUpperCase() === 'TRUE');
+  const inactiveUsers = usersData.filter(u => String(u.active).toUpperCase() !== 'TRUE');
+
+  el.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+      <div class="stat-card accent">
+        <div class="stat-label">Total users</div>
+        <div class="stat-value">${usersData.length}</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Active</div>
+        <div class="stat-value">${activeUsers.length}</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Admins</div>
+        <div class="stat-value">${usersData.filter(u=>u.role==='admin').length}</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Staff</div>
+        <div class="stat-value">${usersData.filter(u=>u.role==='staff').length}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Authorized users</div>
+        <button class="btn btn-primary btn-sm" onclick="openUserForm()">+ Add user</button>
+      </div>
+      <div class="card-body" style="padding:0;">
+        ${usersData.length === 0
+          ? `<div class="empty-state"><div class="empty-state-icon">&#9711;</div><div class="empty-state-text">No users found.</div></div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Notes</th><th></th></tr></thead>
+              <tbody>
+                ${usersData.map(u => `
+                  <tr style="opacity:${String(u.active).toUpperCase()==='TRUE'?'1':'0.5'}">
+                    <td>
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:50%;background:${u.role==='admin'?'var(--blue)':u.role==='staff'?'var(--success)':'var(--gray-400)'};color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;">
+                          ${(u.name||u.email).charAt(0).toUpperCase()}
+                        </div>
+                        <strong>${u.name||'—'}</strong>
+                      </div>
+                    </td>
+                    <td style="font-size:13px;">${u.email}</td>
+                    <td>
+                      <span class="badge ${u.role==='admin'?'badge-blue':u.role==='staff'?'badge-green':'badge-gray'}">
+                        ${u.role||'—'}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="badge ${String(u.active).toUpperCase()==='TRUE'?'badge-green':'badge-red'}">
+                        ${String(u.active).toUpperCase()==='TRUE'?'Active':'Inactive'}
+                      </span>
+                    </td>
+                    <td style="font-size:12px;color:var(--gray-500);">
+                      ${u.last_login ? new Date(u.last_login).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Never'}
+                    </td>
+                    <td style="font-size:12px;color:var(--gray-500);">${u.notes||'—'}</td>
+                    <td style="text-align:right;">
+                      <button class="btn btn-sm btn-secondary" onclick="openUserForm(${JSON.stringify(u).split('"').join('&quot;')})">Edit</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Role permissions</div></div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Feature</th><th>Admin</th><th>Staff</th><th>Parent</th></tr></thead>
+          <tbody>
+            ${[
+              ['Dashboard',             true,  true,  false],
+              ['View roster',           true,  true,  false],
+              ['Edit roster',           true,  true,  false],
+              ['Guardians',             true,  true,  false],
+              ['Fees & dues',           true,  false, false],
+              ['Record payments',       true,  false, false],
+              ['Print receipts',        true,  true,  false],
+              ['Events',                true,  true,  false],
+              ['Take attendance',       true,  true,  false],
+              ['Uniforms & instruments',true,  true,  false],
+              ['Volunteers',            true,  true,  false],
+              ['Fundraising',           true,  true,  false],
+              ['Forms',                 true,  true,  false],
+              ['Manage users',          true,  false, false],
+            ].map(([feature, admin, staff, parent]) => `
+              <tr>
+                <td>${feature}</td>
+                <td style="text-align:center;">${admin  ? '<span style="color:var(--success);font-size:16px;">&#10003;</span>' : '<span style="color:var(--gray-300);">—</span>'}</td>
+                <td style="text-align:center;">${staff  ? '<span style="color:var(--success);font-size:16px;">&#10003;</span>' : '<span style="color:var(--gray-300);">—</span>'}</td>
+                <td style="text-align:center;">${parent ? '<span style="color:var(--success);font-size:16px;">&#10003;</span>' : '<span style="color:var(--gray-300);">—</span>'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">How to add a new user</div></div>
+      <div class="card-body">
+        <div style="font-size:14px;line-height:1.8;color:var(--gray-700);">
+          <div style="display:flex;gap:12px;margin-bottom:10px;">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;">1</div>
+            <div>Click <strong>+ Add user</strong> above and fill in their name, email, and role.</div>
+          </div>
+          <div style="display:flex;gap:12px;margin-bottom:10px;">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;">2</div>
+            <div>Go to <a href="https://console.cloud.google.com" target="_blank" style="color:var(--blue);">console.cloud.google.com</a> → your Cadence project → <strong>APIs & Services → OAuth consent screen → Audience → Test users</strong> and add their Gmail address.</div>
+          </div>
+          <div style="display:flex;gap:12px;">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;">3</div>
+            <div>They visit <strong>estillcobandboosters.github.io/cadence</strong> and sign in with their Google account.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Form Modal -->
+    <div class="modal-backdrop" id="user-form-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="user-form-title">Add user</div>
+          <button class="modal-close" onclick="closeUserForm()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Full name *</label>
+              <input class="form-input" id="uf-name" placeholder="e.g. Jane Smith"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Gmail address *</label>
+              <input class="form-input" id="uf-email" type="email" placeholder="name@gmail.com"/>
+              <div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Must match their Google account exactly</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select class="form-select" id="uf-role">
+                <option value="admin">Admin — full access</option>
+                <option value="staff">Staff — roster, attendance, inventory</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="uf-active">
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <input class="form-input" id="uf-notes" placeholder="e.g. Band director, Treasurer, etc."/>
+            </div>
+          </div>
+
+          <div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:var(--radius);padding:12px;margin-top:16px;font-size:13px;color:#5D4037;">
+            <strong>Remember:</strong> After adding a user here, you also need to add their email as a test user in Google Cloud Console before they can sign in.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeUserForm()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="deactivate-user-btn" style="display:none;margin-right:auto;" onclick="toggleUserActive()"></button>
+          <button class="btn btn-primary" onclick="saveUser()">Save user</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function openUserForm(user) {
+  editingUserId = null;
+  const fields = ['name','email','role','active','notes'];
+  fields.forEach(f => {
+    const el = document.getElementById('uf-' + f);
+    if (el) el.value = user ? (user[f]||'') : (f==='role'?'staff':f==='active'?'true':'');
+  });
+  if (user) {
+    editingUserId = user.user_id;
+    document.getElementById('user-form-title').textContent = 'Edit user';
+    const deactBtn = document.getElementById('deactivate-user-btn');
+    deactBtn.style.display = 'inline-flex';
+    const isActive = String(user.active).toUpperCase() === 'TRUE';
+    deactBtn.textContent = isActive ? 'Deactivate' : 'Reactivate';
+    deactBtn.className = isActive ? 'btn btn-danger btn-sm' : 'btn btn-secondary btn-sm';
+    // Prevent self-deactivation
+    if (user.email === state.user?.email) {
+      deactBtn.style.display = 'none';
+    }
+  } else {
+    document.getElementById('user-form-title').textContent = 'Add user';
+    document.getElementById('deactivate-user-btn').style.display = 'none';
+  }
+  document.getElementById('user-form-modal').classList.add('open');
+}
+
+function closeUserForm() { document.getElementById('user-form-modal').classList.remove('open'); }
+
+async function saveUser() {
+  const name  = document.getElementById('uf-name').value.trim();
+  const email = document.getElementById('uf-email').value.trim().toLowerCase();
+  if (!name)  { toast('Name is required.', 'error'); return; }
+  if (!email) { toast('Email is required.', 'error'); return; }
+  if (!email.includes('@')) { toast('Please enter a valid email address.', 'error'); return; }
+
+  const record = { user_id: editingUserId || '' };
+  ['name','role','active','notes'].forEach(f => {
+    record[f] = document.getElementById('uf-' + f).value;
+  });
+  record.email = email;
+
+  try {
+    const result = await apiCall({ action: 'save_user', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingUserId ? 'User updated!' : 'User added!', 'success');
+      closeUserForm();
+      await renderUsers();
+    } else {
+      toast('Error: ' + (result.error||'Unknown — make sure you are an admin.'), 'error');
+    }
+  } catch(e) { toast('Could not save user.', 'error'); }
+}
+
+async function toggleUserActive() {
+  const user = usersData.find(u => u.user_id === editingUserId);
+  if (!user) return;
+  const isActive = String(user.active).toUpperCase() === 'TRUE';
+  const action   = isActive ? 'deactivate' : 'reactivate';
+  if (!confirm(`${action.charAt(0).toUpperCase()+action.slice(1)} ${user.name}? They will ${isActive?'lose':'regain'} access to Cadence immediately.`)) return;
+  try {
+    const result = await apiCall({ action: 'save_user', record: JSON.stringify({ ...user, active: isActive ? 'false' : 'true' }) });
+    if (result.success) {
+      toast(`User ${action}d successfully.`, 'success');
+      closeUserForm();
+      await renderUsers();
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not update user.', 'error'); }
+}
 
 function placeholderPage(id, title, label) {
   document.getElementById(id).innerHTML = `
