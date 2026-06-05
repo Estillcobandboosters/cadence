@@ -1434,7 +1434,7 @@ function openStudentFeeDetail(studentId) {
                 <tr style="border-bottom:1px solid var(--gray-100);">
                   <td style="padding:8px;"><span class="badge badge-blue">${f.fee_type}</span></td>
                   <td style="padding:8px;">${f.description||'—'}</td>
-                  <td style="padding:8px;">${f.due_date||'—'}</td>
+                  <td style="padding:8px;">${f.due_date ? new Date(f.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
                   <td style="padding:8px;text-align:right;">$${parseFloat(f.amount_due||0).toFixed(2)}</td>
                   <td style="padding:8px;text-align:right;">$${parseFloat(f.amount_paid||0).toFixed(2)}</td>
                   <td style="padding:8px;text-align:right;font-weight:600;color:${parseFloat(f.balance||0)>0?'var(--danger)':'var(--success)'};">
@@ -1466,7 +1466,7 @@ function openStudentFeeDetail(studentId) {
               ${sPayments.map(p=>`
                 <tr style="border-bottom:1px solid var(--gray-100);">
                   <td style="padding:8px;font-family:monospace;font-size:12px;">${p.receipt_num||'—'}</td>
-                  <td style="padding:8px;">${p.payment_date||'—'}</td>
+                  <td style="padding:8px;">${p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
                   <td style="padding:8px;text-transform:capitalize;">${p.method||'—'}</td>
                   <td style="padding:8px;">${p.check_number||'—'}</td>
                   <td style="padding:8px;text-align:right;font-weight:600;color:var(--success);">$${parseFloat(p.amount||0).toFixed(2)}</td>
