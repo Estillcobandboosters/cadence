@@ -2563,7 +2563,553 @@ async function deleteEvent() {
     } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
   } catch(e) { toast('Could not delete event.', 'error'); }
 }
-function renderVolunteers()  { placeholderPage('page-volunteers',  'Volunteers',          'Volunteer module — Phase 2'); }
+// ════════════════════════════════════════════════════════════
+//  VOLUNTEERS — Full module
+// ════════════════════════════════════════════════════════════
+let volunteersData = { volunteers: [], guardians: [], events: [], students: [] };
+let editingVolId = null;
+
+async function renderVolunteers() {
+  const el = document.getElementById('page-volunteers');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading volunteers...</div>';
+  try {
+    const [volRes, guardRes, eventsRes, studentsRes] = await Promise.all([
+      apiCall({ action: 'get_volunteers' }),
+      apiCall({ action: 'get_guardians' }),
+      apiCall({ action: 'get_events' }),
+      apiCall({ action: 'get_students' })
+    ]);
+    volunteersData.volunteers = volRes.data  || [];
+    volunteersData.guardians  = guardRes.data || [];
+    volunteersData.events     = eventsRes.data || [];
+    volunteersData.students   = (studentsRes.data||[]).filter(s => s.school_year === state.selectedYear);
+    renderVolunteersView();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load volunteers.</div></div>';
+  }
+}
+
+function renderVolunteersView() {
+  const el         = document.getElementById('page-volunteers');
+  const guardians  = volunteersData.guardians;
+  const volunteers = volunteersData.volunteers;
+  const events     = volunteersData.events;
+  const today      = new Date();
+
+  // Build guardian profiles with training status
+  const profiles = guardians.filter((g,i,arr) =>
+    arr.findIndex(x => x.guardian_id === g.guardian_id) === i
+  ).map(g => {
+    const volRecords  = volunteers.filter(v => v.guardian_id === g.guardian_id);
+    const totalHours  = volRecords.reduce((s,v) => s + parseFloat(v.hours||0), 0);
+    const completed   = volRecords.filter(v => String(v.completed).toUpperCase()==='TRUE').length;
+    // Training fields stored in notes as JSON or in dedicated columns
+    // We use the guardian record's notes field to store training data
+    let training = {};
+    try { training = g.training ? JSON.parse(g.training) : {}; } catch(e) { training = {}; }
+
+    const confDate   = training.conf_date   || '';
+    const confExp    = training.conf_exp    || '';
+    const bgDate     = training.bg_date     || '';
+    const bgExp      = training.bg_exp      || '';
+    const confValid  = confExp ? new Date(confExp) > today : (confDate ? true : false);
+    const bgValid    = bgExp   ? new Date(bgExp)   > today : (bgDate   ? true : false);
+    const canChaperone = confValid && bgValid;
+
+    // Find linked student
+    const student = volunteersData.students.find(s => s.student_id === g.student_id);
+
+    return { ...g, volRecords, totalHours, completed, training, confDate, confExp, bgDate, bgExp, confValid, bgValid, canChaperone, student };
+  });
+
+  const trained     = profiles.filter(p => p.canChaperone).length;
+  const needsUpdate = profiles.filter(p => p.volRecords.length > 0 && !p.canChaperone).length;
+  const totalHours  = profiles.reduce((s,p) => s + p.totalHours, 0);
+
+  el.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="stat-card accent">
+        <div class="stat-label">Total volunteers</div>
+        <div class="stat-value">${profiles.length}</div>
+        <div class="stat-sub">registered guardians</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Chaperone eligible</div>
+        <div class="stat-value">${trained}</div>
+        <div class="stat-sub">training current</div>
+      </div>
+      <div class="stat-card ${needsUpdate>0?'danger':'accent'}">
+        <div class="stat-label">Needs update</div>
+        <div class="stat-value">${needsUpdate}</div>
+        <div class="stat-sub">training expired/missing</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Total hours</div>
+        <div class="stat-value">${totalHours.toFixed(1)}</div>
+        <div class="stat-sub">this season</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:0;">
+      <button id="vol-tab-roster"  class="vol-tab active-tab" onclick="switchVolTab('roster')"  style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer;">Volunteer roster</button>
+      <button id="vol-tab-signups" class="vol-tab" onclick="switchVolTab('signups')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">Event sign-ups</button>
+      <button id="vol-tab-training" class="vol-tab" onclick="switchVolTab('training')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">Training tracker</button>
+    </div>
+
+    <!-- Volunteer Roster Tab -->
+    <div id="vol-panel-roster">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Parent & guardian volunteers</div>
+          <button class="btn btn-primary btn-sm" onclick="openVolunteerSignup()">+ Sign up volunteer</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${profiles.length === 0
+            ? `<div class="empty-state"><div class="empty-state-icon">&#10022;</div><div class="empty-state-text">No volunteers yet. Volunteers are linked from your Guardians list.</div></div>`
+            : `<div class="table-wrap"><table>
+                <thead><tr><th>Volunteer</th><th>Student</th><th>Conf. training</th><th>Background check</th><th>Chaperone?</th><th>Events</th><th>Hours</th><th></th></tr></thead>
+                <tbody>
+                  ${profiles.map(p => `
+                    <tr>
+                      <td>
+                        <div style="font-weight:600;">${p.first_name} ${p.last_name}</div>
+                        <div style="font-size:11px;color:var(--gray-500);">${p.email||''}</div>
+                      </td>
+                      <td style="font-size:13px;">${p.student ? p.student.first_name+' '+p.student.last_name : '—'}</td>
+                      <td>
+                        ${p.confDate
+                          ? `<span class="badge ${p.confValid?'badge-green':'badge-red'}">${p.confValid?'Current':'Expired'}</span>
+                             <div style="font-size:11px;color:var(--gray-500);">${p.confDate}${p.confExp?' · Exp: '+p.confExp:''}</div>`
+                          : '<span class="badge badge-gray">Not on file</span>'}
+                      </td>
+                      <td>
+                        ${p.bgDate
+                          ? `<span class="badge ${p.bgValid?'badge-green':'badge-red'}">${p.bgValid?'Current':'Expired'}</span>
+                             <div style="font-size:11px;color:var(--gray-500);">${p.bgDate}${p.bgExp?' · Exp: '+p.bgExp:''}</div>`
+                          : '<span class="badge badge-gray">Not on file</span>'}
+                      </td>
+                      <td style="text-align:center;">
+                        <span style="font-size:20px;">${p.canChaperone?'✅':'❌'}</span>
+                      </td>
+                      <td>${p.volRecords.length}</td>
+                      <td>${p.totalHours.toFixed(1)} hrs</td>
+                      <td style="text-align:right;">
+                        <button class="btn btn-sm btn-secondary" onclick="openTrainingModal('${p.guardian_id}')">Training</button>
+                        <button class="btn btn-sm btn-secondary" onclick="openVolDetail('${p.guardian_id}')">View</button>
+                      </td>
+                    </tr>`).join('')}
+                </tbody></table></div>`
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Sign-ups Tab -->
+    <div id="vol-panel-signups" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Event volunteer sign-ups</div>
+          <button class="btn btn-primary btn-sm" onclick="openVolunteerSignup()">+ Add sign-up</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${events.length === 0
+            ? `<div class="empty-state"><div class="empty-state-text">No events yet. Add events first!</div></div>`
+            : `<div class="table-wrap"><table>
+                <thead><tr><th>Event</th><th>Date</th><th>Volunteer</th><th>Role</th><th>Completed</th><th>Hours</th><th>Notes</th><th></th></tr></thead>
+                <tbody>
+                  ${volunteers.length === 0
+                    ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray-500);">No sign-ups yet.</td></tr>'
+                    : volunteers.map(v => {
+                        const event   = events.find(e => e.event_id === v.event_id);
+                        const guardian = guardians.find(g => g.guardian_id === v.guardian_id);
+                        return `<tr>
+                          <td><strong>${event ? event.title : '—'}</strong></td>
+                          <td style="font-size:12px;">${event ? formatDate(event.date) : '—'}</td>
+                          <td>${guardian ? guardian.first_name+' '+guardian.last_name : '—'}</td>
+                          <td><span class="badge badge-blue">${v.role||'Volunteer'}</span></td>
+                          <td><span class="badge ${String(v.completed).toUpperCase()==='TRUE'?'badge-green':'badge-gray'}">${String(v.completed).toUpperCase()==='TRUE'?'Yes':'Pending'}</span></td>
+                          <td>${v.hours||'—'}</td>
+                          <td style="font-size:12px;color:var(--gray-500);">${v.notes||'—'}</td>
+                          <td style="text-align:right;">
+                            <button class="btn btn-sm btn-secondary" onclick="openVolSignupEdit('${v.vol_id}')">Edit</button>
+                          </td>
+                        </tr>`;
+                      }).join('')
+                  }
+                </tbody></table></div>`
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Training Tracker Tab -->
+    <div id="vol-panel-training" style="display:none;">
+      <div style="background:#E3F2FD;border:1px solid #90CAF9;border-radius:var(--radius);padding:12px 16px;font-size:13px;color:#0D47A1;margin-bottom:16px;">
+        <strong>Chaperone eligibility requires both:</strong> Confidentiality training AND background check must be on file and current.
+        Expired records are highlighted in red. Click <strong>Training</strong> on any volunteer to update their records.
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Volunteer</th><th>Conf. training date</th><th>Conf. expiry</th><th>BG check date</th><th>BG expiry</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${profiles.map(p => `
+                <tr style="background:${!p.canChaperone&&(p.confDate||p.bgDate)?'#FFF8E1':''};"> 
+                  <td>
+                    <strong>${p.first_name} ${p.last_name}</strong>
+                    <div style="font-size:11px;color:var(--gray-500);">${p.student?p.student.first_name+' '+p.student.last_name:''}</div>
+                  </td>
+                  <td>${p.confDate ? `<span style="color:${p.confValid?'var(--success)':'var(--danger)'};">&#9679;</span> ${p.confDate}` : '<span style="color:var(--gray-400);">Not on file</span>'}</td>
+                  <td>${p.confExp || '—'}</td>
+                  <td>${p.bgDate ? `<span style="color:${p.bgValid?'var(--success)':'var(--danger)'};">&#9679;</span> ${p.bgDate}` : '<span style="color:var(--gray-400);">Not on file</span>'}</td>
+                  <td>${p.bgExp || '—'}</td>
+                  <td>
+                    <span class="badge ${p.canChaperone?'badge-green':p.confDate||p.bgDate?'badge-red':'badge-gray'}">
+                      ${p.canChaperone?'Chaperone eligible':p.confDate||p.bgDate?'Incomplete/expired':'No records'}
+                    </span>
+                  </td>
+                  <td><button class="btn btn-sm btn-primary" onclick="openTrainingModal('${p.guardian_id}')">Update</button></td>
+                </tr>`).join('')}
+            </tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Volunteer Sign-up Modal -->
+    <div class="modal-backdrop" id="vol-signup-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="vol-signup-title">Add volunteer sign-up</div>
+          <button class="modal-close" onclick="document.getElementById('vol-signup-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Volunteer (guardian) *</label>
+              <select class="form-select" id="vs-guardian_id">
+                <option value="">Select volunteer</option>
+                ${guardians.filter((g,i,a)=>a.findIndex(x=>x.guardian_id===g.guardian_id)===i).map(g =>
+                  `<option value="${g.guardian_id}">${g.first_name} ${g.last_name} ${g.email?'('+g.email+')':''}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Event</label>
+              <select class="form-select" id="vs-event_id">
+                <option value="">Select event (optional)</option>
+                ${events.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e =>
+                  `<option value="${e.event_id}">${e.title} — ${formatDate(e.date)}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role *</label>
+              <select class="form-select" id="vs-role">
+                <option value="Food Team">Food Team</option>
+                <option value="Chaperone">Chaperone</option>
+                <option value="Equipment Crew">Equipment Crew</option>
+                <option value="Pit Crew">Pit Crew</option>
+                <option value="Uniform Help">Uniform Help</option>
+                <option value="Concessions">Concessions</option>
+                <option value="Fundraising">Fundraising</option>
+                <option value="General Help">General Help</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Completed?</label>
+              <select class="form-select" id="vs-completed">
+                <option value="false">Pending</option>
+                <option value="true">Completed</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hours</label>
+              <input class="form-input" id="vs-hours" type="number" step="0.5" placeholder="e.g. 2.5"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="vs-notes" placeholder="Any notes about this sign-up..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('vol-signup-modal').classList.remove('open')">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-vol-btn" style="display:none;margin-right:auto;" onclick="deleteVolSignup()">Remove</button>
+          <button class="btn btn-primary" onclick="saveVolSignup()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Training Modal -->
+    <div class="modal-backdrop" id="vol-training-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="vol-training-name">Update training records</div>
+          <button class="modal-close" onclick="document.getElementById('vol-training-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="background:#E3F2FD;border:1px solid #90CAF9;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#0D47A1;margin-bottom:16px;">
+            Both confidentiality training AND background check must be current for chaperone eligibility.
+          </div>
+          <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Confidentiality / FERPA training</div>
+          <div class="form-grid" style="margin-bottom:20px;">
+            <div class="form-group">
+              <label class="form-label">Date completed</label>
+              <input class="form-input" id="tr-conf_date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Expiration date</label>
+              <input class="form-input" id="tr-conf_exp" type="date"/>
+              <div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Leave blank if no expiration</div>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Verified by</label>
+              <input class="form-input" id="tr-conf_verified" placeholder="Name of person who verified"/>
+            </div>
+          </div>
+          <div style="font-size:14px;font-weight:500;margin-bottom:12px;">Background check</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Date completed</label>
+              <input class="form-input" id="tr-bg_date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Expiration date</label>
+              <input class="form-input" id="tr-bg_exp" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="tr-bg_status">
+                <option value="cleared">Cleared</option>
+                <option value="pending">Pending</option>
+                <option value="denied">Denied</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Verified by</label>
+              <input class="form-input" id="tr-bg_verified" placeholder="Name of person who verified"/>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('vol-training-modal').classList.remove('open')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveTraining()">Save training records</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Show only roster tab by default
+  window._volActiveTab = 'roster';
+}
+
+function switchVolTab(tab) {
+  ['roster','signups','training'].forEach(t => {
+    const panel = document.getElementById('vol-panel-'+t);
+    const btn   = document.getElementById('vol-tab-'+t);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.style.color       = t === tab ? 'var(--blue)' : 'var(--gray-500)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--blue)' : 'none';
+      btn.style.marginBottom = t === tab ? '-2px' : '0';
+    }
+  });
+  window._volActiveTab = tab;
+}
+
+function openVolunteerSignup(volId) {
+  editingVolId = volId || null;
+  const fields = ['guardian_id','event_id','role','completed','hours','notes'];
+  if (volId) {
+    const v = volunteersData.volunteers.find(v => v.vol_id === volId);
+    fields.forEach(f => {
+      const el = document.getElementById('vs-'+f);
+      if (el) el.value = v ? (v[f]||'') : '';
+    });
+    document.getElementById('vol-signup-title').textContent = 'Edit sign-up';
+    document.getElementById('delete-vol-btn').style.display = 'inline-flex';
+  } else {
+    fields.forEach(f => {
+      const el = document.getElementById('vs-'+f);
+      if (el) el.value = f==='completed'?'false':f==='role'?'Food Team':'';
+    });
+    document.getElementById('vol-signup-title').textContent = 'Add volunteer sign-up';
+    document.getElementById('delete-vol-btn').style.display = 'none';
+  }
+  document.getElementById('vol-signup-modal').classList.add('open');
+}
+
+function openVolSignupEdit(volId) { openVolunteerSignup(volId); }
+
+async function saveVolSignup() {
+  const guardianId = document.getElementById('vs-guardian_id').value;
+  const role       = document.getElementById('vs-role').value;
+  if (!guardianId) { toast('Please select a volunteer.', 'error'); return; }
+
+  // Check if chaperone role requires training
+  if (role === 'Chaperone') {
+    const guardian = volunteersData.guardians.find(g => g.guardian_id === guardianId);
+    let training = {};
+    try { training = guardian && guardian.training ? JSON.parse(guardian.training) : {}; } catch(e) {}
+    const confValid = training.conf_exp ? new Date(training.conf_exp) > new Date() : !!training.conf_date;
+    const bgValid   = training.bg_exp   ? new Date(training.bg_exp)   > new Date() : !!training.bg_date;
+    if (!confValid || !bgValid) {
+      if (!confirm('⚠️ This volunteer does not have current chaperone training on file. Assign them anyway?')) return;
+    }
+  }
+
+  const record = { vol_id: editingVolId || '' };
+  ['guardian_id','event_id','role','completed','hours','notes'].forEach(f => {
+    record[f] = document.getElementById('vs-'+f).value;
+  });
+  try {
+    const result = await apiCall({ action: 'save_volunteer', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingVolId ? 'Sign-up updated!' : 'Volunteer added!', 'success');
+      document.getElementById('vol-signup-modal').classList.remove('open');
+      await renderVolunteers();
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save.', 'error'); }
+}
+
+async function deleteVolSignup() {
+  if (!editingVolId || !confirm('Remove this sign-up?')) return;
+  try {
+    await apiCall({ action: 'save_volunteer', record: JSON.stringify({ vol_id: editingVolId, guardian_id: '_deleted_', role: '', event_id: '' }) });
+    toast('Sign-up removed.', 'info');
+    document.getElementById('vol-signup-modal').classList.remove('open');
+    await renderVolunteers();
+  } catch(e) { toast('Could not remove.', 'error'); }
+}
+
+let trainingGuardianId = null;
+
+function openTrainingModal(guardianId) {
+  trainingGuardianId = guardianId;
+  const g = volunteersData.guardians.find(g => g.guardian_id === guardianId);
+  let training = {};
+  try { training = g && g.training ? JSON.parse(g.training) : {}; } catch(e) {}
+
+  document.getElementById('vol-training-name').textContent =
+    (g ? g.first_name+' '+g.last_name : '')+' — Training records';
+
+  ['conf_date','conf_exp','conf_verified','bg_date','bg_exp','bg_verified'].forEach(f => {
+    const el = document.getElementById('tr-'+f);
+    if (el) el.value = training[f] || '';
+  });
+  const bgStatus = document.getElementById('tr-bg_status');
+  if (bgStatus) bgStatus.value = training.bg_status || 'cleared';
+  document.getElementById('vol-training-modal').classList.add('open');
+}
+
+async function saveTraining() {
+  const g = volunteersData.guardians.find(g => g.guardian_id === trainingGuardianId);
+  if (!g) return;
+  const training = {
+    conf_date:     document.getElementById('tr-conf_date').value,
+    conf_exp:      document.getElementById('tr-conf_exp').value,
+    conf_verified: document.getElementById('tr-conf_verified').value,
+    bg_date:       document.getElementById('tr-bg_date').value,
+    bg_exp:        document.getElementById('tr-bg_exp').value,
+    bg_status:     document.getElementById('tr-bg_status').value,
+    bg_verified:   document.getElementById('tr-bg_verified').value
+  };
+  const updatedGuardian = { ...g, training: JSON.stringify(training) };
+  try {
+    const result = await apiCall({ action: 'save_guardian', record: JSON.stringify(updatedGuardian) });
+    if (result.success) {
+      toast('Training records saved!', 'success');
+      document.getElementById('vol-training-modal').classList.remove('open');
+      await renderVolunteers();
+      // Re-open training tab
+      setTimeout(() => switchVolTab('training'), 100);
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save training.', 'error'); }
+}
+
+function openVolDetail(guardianId) {
+  const g        = volunteersData.guardians.find(g => g.guardian_id === guardianId);
+  const volRecs  = volunteersData.volunteers.filter(v => v.guardian_id === guardianId);
+  const student  = volunteersData.students.find(s => s.student_id === g?.student_id);
+  if (!g) return;
+
+  let training = {};
+  try { training = g.training ? JSON.parse(g.training) : {}; } catch(e) {}
+
+  let backdrop = document.getElementById('vol-detail-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'vol-detail-modal';
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = `
+    <div class="modal" style="width:600px;max-width:96vw;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">${g.first_name} ${g.last_name}</div>
+          <div style="font-size:12px;color:var(--gray-500);">${student?'Parent of '+student.first_name+' '+student.last_name:''} · ${g.email||''}</div>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('vol-detail-modal').classList.remove('open')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+          <div style="background:${training.conf_date?(new Date(training.conf_exp||'2099')>new Date()?'#E8F5E9':'#FFEBEE'):'var(--gray-50)'};border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--gray-500);margin-bottom:6px;">Confidentiality training</div>
+            ${training.conf_date
+              ? `<div style="font-size:13px;"><strong>Completed:</strong> ${training.conf_date}</div>
+                 <div style="font-size:13px;">${training.conf_exp?'<strong>Expires:</strong> '+training.conf_exp:'No expiration'}</div>
+                 ${training.conf_verified?'<div style="font-size:12px;color:var(--gray-500);">Verified by: '+training.conf_verified+'</div>':''}`
+              : '<div style="color:var(--gray-400);font-size:13px;">Not on file</div>'}
+          </div>
+          <div style="background:${training.bg_date?(new Date(training.bg_exp||'2099')>new Date()?'#E8F5E9':'#FFEBEE'):'var(--gray-50)'};border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--gray-500);margin-bottom:6px;">Background check</div>
+            ${training.bg_date
+              ? `<div style="font-size:13px;"><strong>Completed:</strong> ${training.bg_date}</div>
+                 <div style="font-size:13px;">${training.bg_exp?'<strong>Expires:</strong> '+training.bg_exp:'No expiration'}</div>
+                 <div style="font-size:13px;text-transform:capitalize;"><strong>Status:</strong> ${training.bg_status||'cleared'}</div>
+                 ${training.bg_verified?'<div style="font-size:12px;color:var(--gray-500);">Verified by: '+training.bg_verified+'</div>':''}`
+              : '<div style="color:var(--gray-400);font-size:13px;">Not on file</div>'}
+          </div>
+        </div>
+        <div style="font-size:14px;font-weight:500;margin-bottom:8px;">Volunteer history (${volRecs.length} sign-ups)</div>
+        ${volRecs.length === 0
+          ? '<div style="color:var(--gray-500);font-size:13px;">No volunteer records yet.</div>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead><tr style="border-bottom:1px solid var(--gray-200);">
+                <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Event</th>
+                <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Role</th>
+                <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Status</th>
+                <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Hours</th>
+              </tr></thead>
+              <tbody>
+                ${volRecs.map(v => {
+                  const ev = volunteersData.events.find(e => e.event_id === v.event_id);
+                  return '<tr style="border-bottom:1px solid var(--gray-100);">' +
+                    '<td style="padding:6px 8px;">' + (ev?ev.title:'General') + '</td>' +
+                    '<td style="padding:6px 8px;"><span class="badge badge-blue">' + (v.role||'Volunteer') + '</span></td>' +
+                    '<td style="padding:6px 8px;"><span class="badge ' + (String(v.completed).toUpperCase()==='TRUE'?'badge-green':'badge-gray') + '">' + (String(v.completed).toUpperCase()==='TRUE'?'Completed':'Pending') + '</span></td>' +
+                    '<td style="padding:6px 8px;text-align:right;">' + (v.hours||'—') + '</td>' +
+                    '</tr>';
+                }).join('')}
+                <tr style="border-top:2px solid var(--gray-200);font-weight:600;">
+                  <td colspan="3" style="padding:8px;">Total hours</td>
+                  <td style="padding:8px;text-align:right;">${volRecs.reduce((s,v)=>s+parseFloat(v.hours||0),0).toFixed(1)}</td>
+                </tr>
+              </tbody>
+            </table>`
+        }
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('vol-detail-modal').classList.remove('open')">Close</button>
+        <button class="btn btn-secondary" onclick="openTrainingModal('${guardianId}');document.getElementById('vol-detail-modal').classList.remove('open')">Update training</button>
+        <button class="btn btn-primary" onclick="openVolunteerSignup();document.getElementById('vol-detail-modal').classList.remove('open')">+ Add sign-up</button>
+      </div>
+    </div>`;
+  backdrop.classList.add('open');
+}
 function renderFundraising() { placeholderPage('page-fundraising', 'Fundraising',         'Fundraising module — Phase 2'); }
 function renderForms()       { placeholderPage('page-forms',       'Forms &amp; Documents','Forms module — Phase 2'); }
 // ════════════════════════════════════════════════════════════
