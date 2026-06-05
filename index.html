@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cadence — Band Booster Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet"/>
+  <!-- Google Sign-In -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    /* ── Reset & base ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:        #1565C0;
+      --blue-light:  #1976D2;
+      --blue-dark:   #0D47A1;
+      --blue-pale:   #E3F2FD;
+      --blue-mid:    #90CAF9;
+      --black:       #0A0A0A;
+      --gray-900:    #111827;
+      --gray-800:    #1F2937;
+      --gray-700:    #374151;
+      --gray-500:    #6B7280;
+      --gray-300:    #D1D5DB;
+      --gray-100:    #F3F4F6;
+      --gray-50:     #F9FAFB;
+      --white:       #FFFFFF;
+      --danger:      #C62828;
+      --success:     #2E7D32;
+      --warning:     #E65100;
+      --font:        'DM Sans', sans-serif;
+      --font-serif:  'DM Serif Display', serif;
+      --nav-w:       240px;
+      --header-h:    60px;
+      --radius:      10px;
+      --shadow:      0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md:   0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+    }
+    html, body { height: 100%; font-family: var(--font); background: var(--gray-50); color: var(--gray-900); font-size: 15px; line-height: 1.5; }
+
+    /* ── Login Screen ─────────────────────────────────── */
+    #login-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+      background: var(--black);
+      position: relative; overflow: hidden;
+    }
+    #login-screen::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent 0px, transparent 40px,
+        rgba(21,101,192,0.04) 40px, rgba(21,101,192,0.04) 41px
+      );
+    }
+    #login-screen::after {
+      content: '';
+      position: absolute;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(21,101,192,0.18) 0%, transparent 70%);
+      top: -100px; right: -100px;
+      pointer-events: none;
+    }
+    .login-card {
+      position: relative; z-index: 1;
+      background: var(--gray-900);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 52px 48px;
+      width: 420px;
+      text-align: center;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    }
+    .login-logo {
+      font-family: var(--font-serif);
+      font-size: 42px;
+      color: var(--white);
+      letter-spacing: -1px;
+      margin-bottom: 4px;
+    }
+    .login-logo span { color: var(--blue-mid); }
+    .login-tagline {
+      font-size: 13px;
+      color: var(--gray-500);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 40px;
+    }
+    .login-divider {
+      width: 40px; height: 1px;
+      background: var(--blue);
+      margin: 0 auto 40px;
+    }
+    .login-title {
+      font-size: 16px; font-weight: 500;
+      color: var(--gray-300);
+      margin-bottom: 24px;
+    }
+    #google-signin-btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 13px 20px;
+      background: var(--white);
+      border: none; border-radius: var(--radius);
+      font-family: var(--font); font-size: 15px; font-weight: 500;
+      color: var(--gray-800);
+      cursor: pointer; transition: background 0.15s, transform 0.1s;
+    }
+    #google-signin-btn:hover { background: var(--gray-100); transform: translateY(-1px); }
+    #google-signin-btn:active { transform: translateY(0); }
+    #google-signin-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .login-note {
+      margin-top: 24px; font-size: 12px; color: var(--gray-500); line-height: 1.6;
+    }
+    #login-error {
+      display: none; margin-top: 16px; padding: 10px 14px;
+      background: rgba(198,40,40,0.15); border: 1px solid rgba(198,40,40,0.3);
+      border-radius: 8px; font-size: 13px; color: #EF9A9A;
+    }
+
+    /* ── App Shell ────────────────────────────────────── */
+    #app-shell { display: none; height: 100vh; flex-direction: row; }
+    #app-shell.visible { display: flex; }
+
+    /* Sidebar */
+    #sidebar {
+      width: var(--nav-w); height: 100vh;
+      background: var(--black);
+      display: flex; flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+      position: sticky; top: 0;
+    }
+    .sidebar-logo {
+      padding: 22px 20px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .sidebar-logo-text {
+      font-family: var(--font-serif);
+      font-size: 28px; color: var(--white);
+      letter-spacing: -0.5px;
+    }
+    .sidebar-logo-text span { color: var(--blue-mid); }
+    .sidebar-logo-sub {
+      font-size: 11px; color: var(--gray-500);
+      letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px;
+    }
+    .nav-section { padding: 18px 12px 4px; }
+    .nav-section-label {
+      font-size: 10px; color: var(--gray-500);
+      letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 0 8px; margin-bottom: 4px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 8px;
+      color: var(--gray-400, #9CA3AF);
+      font-size: 14px; font-weight: 400;
+      cursor: pointer; text-decoration: none;
+      transition: background 0.12s, color 0.12s;
+      margin-bottom: 2px;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.06); color: var(--white); }
+    .nav-item.active { background: var(--blue); color: var(--white); font-weight: 500; }
+    .nav-item .nav-icon { font-size: 17px; opacity: 0.8; flex-shrink: 0; }
+    .nav-item.active .nav-icon { opacity: 1; }
+    .sidebar-footer {
+      margin-top: auto; padding: 16px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+    }
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--blue); color: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600; flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 13px; font-weight: 500; color: var(--white); truncate: ellipsis; white-space: nowrap; overflow: hidden; }
+    .user-role { font-size: 11px; color: var(--gray-500); text-transform: capitalize; }
+    .signout-btn {
+      background: none; border: none; color: var(--gray-500);
+      cursor: pointer; font-size: 18px; padding: 4px;
+      transition: color 0.12s;
+    }
+    .signout-btn:hover { color: var(--white); }
+
+    /* Main content area */
+    #main-content {
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden; min-width: 0;
+    }
+    #top-bar {
+      height: var(--header-h); background: var(--white);
+      border-bottom: 1px solid var(--gray-300);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; flex-shrink: 0;
+      box-shadow: var(--shadow);
+    }
+    #page-title {
+      font-size: 18px; font-weight: 500; color: var(--gray-900);
+    }
+    .top-bar-actions { display: flex; align-items: center; gap: 12px; }
+    .badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 2px 9px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    }
+    .badge-blue  { background: var(--blue-pale); color: var(--blue-dark); }
+    .badge-green { background: #E8F5E9; color: #1B5E20; }
+    .badge-red   { background: #FFEBEE; color: #B71C1C; }
+    .badge-gray  { background: var(--gray-100); color: var(--gray-700); }
+
+    #page-body {
+      flex: 1; overflow-y: auto; padding: 28px;
+      display: flex; flex-direction: column; gap: 24px;
+    }
+
+    /* ── Cards & Layout ───────────────────────────────── */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .card-title { font-size: 15px; font-weight: 500; color: var(--gray-900); }
+    .card-body { padding: 20px; }
+
+    /* Stat cards */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+    .stat-card {
+      background: var(--white);
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+    .stat-card.accent { border-left: 4px solid var(--blue); }
+    .stat-card.danger  { border-left: 4px solid var(--danger); }
+    .stat-card.success { border-left: 4px solid var(--success); }
+    .stat-card.warning { border-left: 4px solid var(--warning); }
+    .stat-label { font-size: 12px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: 600; color: var(--gray-900); line-height: 1; }
+    .stat-sub   { font-size: 12px; color: var(--gray-500); margin-top: 6px; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th {
+      text-align: left; padding: 10px 14px;
+      font-size: 11px; font-weight: 600; color: var(--gray-500);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--gray-200, #E5E7EB);
+      background: var(--gray-50);
+    }
+    tbody tr { border-bottom: 1px solid var(--gray-100); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--gray-50); }
+    tbody td { padding: 11px 14px; color: var(--gray-800); }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px;
+      font-family: var(--font); font-size: 14px; font-weight: 500;
+      border: none; cursor: pointer; transition: background 0.12s, transform 0.1s;
+      text-decoration: none;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--blue); color: var(--white); }
+    .btn-primary:hover { background: var(--blue-dark); }
+    .btn-secondary { background: var(--gray-100); color: var(--gray-800); }
+    .btn-secondary:hover { background: var(--gray-200, #E5E7EB); }
+    .btn-danger  { background: var(--danger); color: var(--white); }
+    .btn-sm { padding: 5px 11px; font-size: 13px; }
+    .btn-icon { padding: 7px; }
+
+    /* Forms */
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+    .form-input, .form-select, .form-textarea {
+      padding: 9px 12px; border: 1px solid var(--gray-300);
+      border-radius: 8px; font-family: var(--font); font-size: 14px;
+      color: var(--gray-900); background: var(--white);
+      transition: border-color 0.12s, box-shadow 0.12s;
+      width: 100%;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none; border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(21,101,192,0.12);
+    }
+    .form-textarea { resize: vertical; min-height: 80px; }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.45);
+      align-items: center; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--white); border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      width: 560px; max-width: 95vw;
+      max-height: 88vh; overflow-y: auto;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px; border-bottom: 1px solid var(--gray-100);
+      position: sticky; top: 0; background: var(--white); z-index: 1;
+    }
+    .modal-title { font-size: 17px; font-weight: 500; }
+    .modal-close {
+      background: none; border: none; font-size: 22px;
+      color: var(--gray-500); cursor: pointer; line-height: 1; padding: 2px;
+    }
+    .modal-close:hover { color: var(--gray-900); }
+    .modal-body { padding: 24px; }
+    .modal-footer {
+      display: flex; justify-content: flex-end; gap: 10px;
+      padding: 16px 24px; border-top: 1px solid var(--gray-100);
+    }
+
+    /* Loading spinner */
+    .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--gray-300);
+      border-top-color: var(--blue);
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center; padding: 48px 24px;
+      color: var(--gray-500);
+    }
+    .empty-state-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+    .empty-state-text { font-size: 15px; }
+
+    /* Toast */
+    #toast-container {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 8px; z-index: 9999;
+    }
+    .toast {
+      padding: 12px 18px; border-radius: 10px;
+      font-size: 14px; font-weight: 500; color: var(--white);
+      box-shadow: var(--shadow-md);
+      animation: slideUp 0.2s ease;
+      max-width: 320px;
+    }
+    .toast.success { background: var(--success); }
+    .toast.error   { background: var(--danger); }
+    .toast.info    { background: var(--blue); }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #page-body { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  LOGIN SCREEN                                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">C<span>.</span></div>
+    <div class="login-tagline">Band Booster Management</div>
+    <div class="login-divider"></div>
+    <div class="login-title">Sign in to continue</div>
+
+    <button id="google-signin-btn" onclick="signInWithGoogle()">
+      <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.7 2.3 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6.1C12.3 13.1 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.6 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.2-10.1 7.2-17z"/><path fill="#FBBC05" d="M10.4 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.6 13.3A23.8 23.8 0 0 0 0 24c0 3.8.9 7.4 2.6 10.7l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.7 2.2-7.7 2.2-6.3 0-11.7-3.6-13.6-8.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+      Continue with Google
+    </button>
+
+    <div id="login-error"></div>
+
+    <p class="login-note">
+      Access is restricted to authorized band booster members.<br>
+      Contact your booster admin if you need access.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  APP SHELL                                              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="app-shell">
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-text">C<span>.</span></div>
+      <div class="sidebar-logo-sub">Cadence</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Overview</div>
+      <a class="nav-item active" onclick="navigate('dashboard')" href="#">
+        <span class="nav-icon">⊞</span> Dashboard
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Students</div>
+      <a class="nav-item" onclick="navigate('roster')" href="#">
+        <span class="nav-icon">♪</span> Roster
+      </a>
+      <a class="nav-item" onclick="navigate('attendance')" href="#">
+        <span class="nav-icon">✓</span> Attendance
+      </a>
+      <a class="nav-item" onclick="navigate('forms')" href="#">
+        <span class="nav-icon">◫</span> Forms
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Finance</div>
+      <a class="nav-item" onclick="navigate('fees')" href="#">
+        <span class="nav-icon">$</span> Fees &amp; Dues
+      </a>
+      <a class="nav-item" onclick="navigate('fundraising')" href="#">
+        <span class="nav-icon">◈</span> Fundraising
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Inventory</div>
+      <a class="nav-item" onclick="navigate('uniforms')" href="#">
+        <span class="nav-icon">◉</span> Uniforms
+      </a>
+      <a class="nav-item" onclick="navigate('instruments')" href="#">
+        <span class="nav-icon">♩</span> Instruments
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">Community</div>
+      <a class="nav-item" onclick="navigate('events')" href="#">
+        <span class="nav-icon">◷</span> Events
+      </a>
+      <a class="nav-item" onclick="navigate('volunteers')" href="#">
+        <span class="nav-icon">✦</span> Volunteers
+      </a>
+    </div>
+
+    <div class="nav-section" id="admin-nav" style="display:none;">
+      <div class="nav-section-label">Admin</div>
+      <a class="nav-item" onclick="navigate('users')" href="#">
+        <span class="nav-icon">⊙</span> Users
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-role">—</div>
+        </div>
+        <button class="signout-btn" onclick="signOut()" title="Sign out">↩</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div id="main-content">
+    <div id="top-bar">
+      <div id="page-title">Dashboard</div>
+      <div class="top-bar-actions">
+        <span id="school-year-badge" class="badge badge-blue"></span>
+      </div>
+    </div>
+    <div id="page-body">
+      <!-- Pages are rendered here by JS -->
+      <div id="page-dashboard"></div>
+      <div id="page-roster"      style="display:none"></div>
+      <div id="page-fees"        style="display:none"></div>
+      <div id="page-attendance"  style="display:none"></div>
+      <div id="page-uniforms"    style="display:none"></div>
+      <div id="page-instruments" style="display:none"></div>
+      <div id="page-events"      style="display:none"></div>
+      <div id="page-volunteers"  style="display:none"></div>
+      <div id="page-fundraising" style="display:none"></div>
+      <div id="page-forms"       style="display:none"></div>
+      <div id="page-users"       style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  JAVASCRIPT                                             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<script>
+// ── Config ─────────────────────────────────────────────────
+const CONFIG = {
+  SCRIPT_URL:    'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec',
+  GOOGLE_CLIENT: '559712921969-q245u83327e3v53qkurfe3b0rttkiudc.apps.googleusercontent.com',
+  SCHOOL_YEAR:   '2025-2026'
+};
+
+// ── State ──────────────────────────────────────────────────
+let state = {
+  user:         null,
+  token:        null,
+  currentPage:  'dashboard',
+  cache:        {}
+};
+
+// ── Google Sign-In ─────────────────────────────────────────
+function signInWithGoogle() {
+  google.accounts.id.initialize({
+    client_id: CONFIG.GOOGLE_CLIENT,
+    callback: handleGoogleCredential,
+    auto_select: false
+  });
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      // Fallback: render button
+      google.accounts.id.renderButton(
+        document.getElementById('google-signin-btn'),
+        { theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular', width: 300 }
+      );
+    }
+  });
+}
+
+async function handleGoogleCredential(response) {
+  const payload = parseJwt(response.credential);
+  const email   = payload.email;
+  try {
+    const result = await apiCall({ action: 'auth_check', email });
+    if (result.valid) {
+      state.user  = result;
+      state.token = result.token;
+      localStorage.setItem('cadence_token', result.token);
+      localStorage.setItem('cadence_user', JSON.stringify(result));
+      showApp();
+    } else {
+      showLoginError('Your Google account (' + email + ') is not authorized. Contact your booster admin.');
+    }
+  } catch (e) {
+    showLoginError('Could not connect to Cadence. Please try again.');
+  }
+}
+
+function parseJwt(token) {
+  const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(atob(base64));
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function signOut() {
+  localStorage.removeItem('cadence_token');
+  localStorage.removeItem('cadence_user');
+  state.user = null; state.token = null;
+  document.getElementById('app-shell').classList.remove('visible');
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+// ── Show App ───────────────────────────────────────────────
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').classList.add('visible');
+
+  const u = state.user;
+  document.getElementById('user-name').textContent  = u.name || u.email;
+  document.getElementById('user-role').textContent  = u.role;
+  document.getElementById('user-avatar').textContent = (u.name || u.email).charAt(0).toUpperCase();
+  document.getElementById('school-year-badge').textContent = CONFIG.SCHOOL_YEAR;
+
+  if (u.role === 'admin') {
+    document.getElementById('admin-nav').style.display = 'block';
+  }
+
+  navigate('dashboard');
+}
+
+// ── Navigation ─────────────────────────────────────────────
+const PAGE_TITLES = {
+  dashboard:   'Dashboard',
+  roster:      'Roster',
+  fees:        'Fees & Dues',
+  attendance:  'Attendance',
+  uniforms:    'Uniforms',
+  instruments: 'Instruments',
+  events:      'Events',
+  volunteers:  'Volunteers',
+  fundraising: 'Fundraising',
+  forms:       'Forms & Documents',
+  users:       'Users & Access'
+};
+
+function navigate(page) {
+  // Hide all pages
+  document.querySelectorAll('[id^="page-"]').forEach(el => el.style.display = 'none');
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const navEl = document.querySelector(`.nav-item[onclick="navigate('${page}')"]`);
+  if (navEl) navEl.classList.add('active');
+
+  document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
+  document.getElementById('page-' + page).style.display = 'block';
+  state.currentPage = page;
+
+  // Render
+  const renderers = {
+    dashboard:   renderDashboard,
+    roster:      renderRoster,
+    fees:        renderFees,
+    attendance:  renderAttendance,
+    uniforms:    renderInventory.bind(null, 'Uniform'),
+    instruments: renderInventory.bind(null, 'Instrument'),
+    events:      renderEvents,
+    volunteers:  renderVolunteers,
+    fundraising: renderFundraising,
+    forms:       renderForms,
+    users:       renderUsers
+  };
+  if (renderers[page]) renderers[page]();
+}
+
+// ── API Helper ─────────────────────────────────────────────
+async function apiCall(params) {
+  const body = Object.assign({ token: state.token }, params);
+  const res = await fetch(CONFIG.SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return res.json();
+}
+
+// ── Toast ──────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Loading helper ─────────────────────────────────────────
+function setLoading(containerId, msg = 'Loading…') {
+  document.getElementById(containerId).innerHTML =
+    `<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);">
+       <div class="spinner"></div> ${msg}
+     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ════════════════════════════════════════════════════════════
+async function renderDashboard() {
+  const el = document.getElementById('page-dashboard');
+  setLoading('page-dashboard', 'Loading dashboard…');
+  try {
+    const data = await apiCall({ action: 'get_dashboard' });
+    const s = data.stats || {};
+    el.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card accent">
+          <div class="stat-label">Active students</div>
+          <div class="stat-value">${s.active_students || 0}</div>
+          <div class="stat-sub">${CONFIG.SCHOOL_YEAR}</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-label">Outstanding balances</div>
+          <div class="stat-value">${s.students_with_balance || 0}</div>
+          <div class="stat-sub">$${s.total_outstanding || '0.00'} total owed</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Items checked out</div>
+          <div class="stat-value">${s.items_checked_out || 0}</div>
+          <div class="stat-sub">uniforms &amp; instruments</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-label">Upcoming events</div>
+          <div class="stat-value">${s.upcoming_events || 0}</div>
+          <div class="stat-sub">next 30 days</div>
+        </div>
+        <div class="stat-card ${s.missing_forms > 0 ? 'danger' : 'success'}">
+          <div class="stat-label">Missing forms</div>
+          <div class="stat-value">${s.missing_forms || 0}</div>
+          <div class="stat-sub">incomplete submissions</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Upcoming events</div>
+            <button class="btn btn-sm btn-secondary" onclick="navigate('events')">View all</button>
+          </div>
+          <div class="card-body" style="padding:0;">
+            ${(data.upcoming_events||[]).length === 0
+              ? '<div class="empty-state"><div class="empty-state-icon">◷</div><div class="empty-state-text">No upcoming events</div></div>'
+              : `<table><thead><tr><th>Event</th><th>Date</th><th>Type</th></tr></thead><tbody>
+                  ${(data.upcoming_events||[]).map(e=>`
+                    <tr>
+                      <td><strong>${e.title}</strong></td>
+                      <td>${formatDate(e.date)}</td>
+                      <td><span class="badge badge-blue">${e.event_type||'event'}</span></td>
+                    </tr>`).join('')}
+                </tbody></table>`
+            }
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Outstanding balances</div>
+            <button class="btn btn-sm btn-secondary" onclick="navigate('fees')">View all</button>
+          </div>
+          <div class="card-body" style="padding:0;">
+            ${(data.recent_unpaid||[]).length === 0
+              ? '<div class="empty-state"><div class="empty-state-icon">$</div><div class="empty-state-text">All caught up!</div></div>'
+              : `<table><thead><tr><th>Student</th><th>Type</th><th>Balance</th></tr></thead><tbody>
+                  ${(data.recent_unpaid||[]).slice(0,8).map(f=>`
+                    <tr>
+                      <td>${f.student_id}</td>
+                      <td>${f.fee_type||''}</td>
+                      <td><span class="badge badge-red">$${parseFloat(f.balance||0).toFixed(2)}</span></td>
+                    </tr>`).join('')}
+                </tbody></table>`
+            }
+          </div>
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error loading dashboard. Check your Apps Script URL in config.</div></div>`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  ROSTER (placeholder — full module in next phase)
+// ════════════════════════════════════════════════════════════
+async function renderRoster() {
+  const el = document.getElementById('page-roster');
+  setLoading('page-roster', 'Loading roster…');
+  try {
+    const data = await apiCall({ action: 'get_students' });
+    const students = data.data || [];
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Students (${students.length})</div>
+          <button class="btn btn-primary btn-sm" onclick="toast('Roster module coming in Phase 2!','info')">
+            + Add student
+          </button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${students.length === 0
+            ? `<div class="empty-state">
+                 <div class="empty-state-icon">♪</div>
+                 <div class="empty-state-text">No students yet — add your first student to get started.</div>
+               </div>`
+            : `<div class="table-wrap"><table>
+                <thead><tr><th>Name</th><th>Grade</th><th>Section</th><th>Instrument</th><th>Status</th></tr></thead>
+                <tbody>
+                  ${students.map(s=>`
+                    <tr>
+                      <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                      <td>${s.grade}</td>
+                      <td>${s.section}</td>
+                      <td>${s.instrument}</td>
+                      <td><span class="badge ${s.status==='active'?'badge-green':'badge-gray'}">${s.status}</span></td>
+                    </tr>`).join('')}
+                </tbody></table></div>`
+          }
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Could not load roster.</div></div>`;
+  }
+}
+
+// Placeholder renderers for other modules
+function renderFees()        { placeholderPage('page-fees',        'Fees &amp; Dues',     'Finance module — Phase 2'); }
+function renderAttendance()  { placeholderPage('page-attendance',  'Attendance',          'Attendance module — Phase 2'); }
+function renderInventory(t)  { placeholderPage('page-uniforms',    t + ' inventory',      'Inventory module — Phase 2'); placeholderPage('page-instruments', t + ' inventory', ''); }
+function renderEvents()      { placeholderPage('page-events',      'Events',              'Events module — Phase 2'); }
+function renderVolunteers()  { placeholderPage('page-volunteers',  'Volunteers',          'Volunteer module — Phase 2'); }
+function renderFundraising() { placeholderPage('page-fundraising', 'Fundraising',         'Fundraising module — Phase 2'); }
+function renderForms()       { placeholderPage('page-forms',       'Forms &amp; Documents','Forms module — Phase 2'); }
+function renderUsers()       { placeholderPage('page-users',       'Users &amp; Access',   'Admin module — Phase 2'); }
+
+function placeholderPage(id, title, label) {
+  document.getElementById(id).innerHTML = `
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <div class="empty-state-icon">◈</div>
+          <div class="empty-state-text" style="font-size:17px;font-weight:500;margin-bottom:8px;">${title}</div>
+          <div style="font-size:13px;color:var(--gray-500);margin-bottom:20px;">${label}</div>
+          <button class="btn btn-primary" onclick="toast('This module is coming soon in the next phase!','info')">Coming soon</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Utilities ──────────────────────────────────────────────
+function formatDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Auto-login from stored token ───────────────────────────
+(function init() {
+  const stored = localStorage.getItem('cadence_user');
+  const token  = localStorage.getItem('cadence_token');
+  if (stored && token) {
+    try {
+      state.user  = JSON.parse(stored);
+      state.token = token;
+      showApp();
+      return;
+    } catch(e) {}
+  }
+  // Show login
+  document.getElementById('login-screen').style.display = 'flex';
+})();
+</script>
+</body>
+</html>
