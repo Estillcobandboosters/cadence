@@ -785,13 +785,18 @@ let rosterFilter = { search: '', section: '', grade: '', status: 'active' };
 
 async function renderRoster() {
   const el = document.getElementById('page-roster');
-  setLoading('page-roster', 'Loading roster…');
+  setLoading('page-roster', 'Loading roster...');
   try {
     const data = await apiCall({ action: 'get_students' });
+    console.log('Roster data:', JSON.stringify(data).substring(0, 200));
+    console.log('Selected year:', state.selectedYear);
     rosterStudents = data.data || [];
+    console.log('Students loaded:', rosterStudents.length);
     renderRosterTable();
+    console.log('renderRosterTable complete, el innerHTML length:', el.innerHTML.length);
   } catch(e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Could not load roster.</div></div>`;
+    console.error('Roster error:', e);
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Error: ' + e.message + '</div></div>';
   }
 }
 
