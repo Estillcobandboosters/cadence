@@ -516,9 +516,9 @@
 <script>
 // ── Config ─────────────────────────────────────────────────
 const CONFIG = {
-  SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec',  // Replace after deploying Apps Script
-  GOOGLE_CLIENT: '559712921969-q245u83327e3v53qkurfe3b0rttkiudc.apps.googleusercontent.com', // Replace with your OAuth client ID
-  SCHOOL_YEAR:   '2025-2026'
+  SCRIPT_URL:    'YOUR_APPS_SCRIPT_URL_HERE',  // Replace after deploying Apps Script
+  GOOGLE_CLIENT: 'YOUR_GOOGLE_CLIENT_ID_HERE', // Replace with your OAuth client ID
+  SCHOOL_YEAR:   '2026-2027'
 };
 
 // ── State ──────────────────────────────────────────────────
@@ -684,7 +684,8 @@ async function renderDashboard() {
   const el = document.getElementById('page-dashboard');
   setLoading('page-dashboard', 'Loading dashboard…');
   try {
-    const data = await apiCall({ action: 'get_dashboard' });
+    const data = await apiCall({ action: 'get_dashboard' }) || {};
+    const _s = data.stats;
     const s = data.stats || {};
     el.innerHTML = `
       <div class="stat-grid">
@@ -762,45 +763,218 @@ async function renderDashboard() {
 }
 
 // ════════════════════════════════════════════════════════════
-//  ROSTER (placeholder — full module in next phase)
+//  ROSTER — Full module
 // ════════════════════════════════════════════════════════════
+let rosterStudents = [];
+let rosterFilter = { search: '', section: '', grade: '', status: 'active' };
+
 async function renderRoster() {
   const el = document.getElementById('page-roster');
   setLoading('page-roster', 'Loading roster…');
   try {
     const data = await apiCall({ action: 'get_students' });
-    const students = data.data || [];
-    el.innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">Students (${students.length})</div>
-          <button class="btn btn-primary btn-sm" onclick="toast('Roster module coming in Phase 2!','info')">
-            + Add student
-          </button>
-        </div>
-        <div class="card-body" style="padding:0;">
-          ${students.length === 0
-            ? `<div class="empty-state">
-                 <div class="empty-state-icon">♪</div>
-                 <div class="empty-state-text">No students yet — add your first student to get started.</div>
-               </div>`
-            : `<div class="table-wrap"><table>
-                <thead><tr><th>Name</th><th>Grade</th><th>Section</th><th>Instrument</th><th>Status</th></tr></thead>
-                <tbody>
-                  ${students.map(s=>`
-                    <tr>
-                      <td><strong>${s.first_name} ${s.last_name}</strong></td>
-                      <td>${s.grade}</td>
-                      <td>${s.section}</td>
-                      <td>${s.instrument}</td>
-                      <td><span class="badge ${s.status==='active'?'badge-green':'badge-gray'}">${s.status}</span></td>
-                    </tr>`).join('')}
-                </tbody></table></div>`
-          }
-        </div>
-      </div>`;
+    rosterStudents = data.data || [];
+    renderRosterTable();
   } catch(e) {
     el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Could not load roster.</div></div>`;
+  }
+}
+
+function renderRosterTable() {
+  const el = document.getElementById('page-roster');
+  const sections = [...new Set(rosterStudents.map(s => s.section).filter(Boolean))].sort();
+  const grades   = [...new Set(rosterStudents.map(s => s.grade).filter(Boolean))].sort();
+
+  let filtered = rosterStudents.filter(s => {
+    const q = rosterFilter.search.toLowerCase();
+    const matchSearch  = !q || (s.first_name+' '+s.last_name).toLowerCase().includes(q) || (s.instrument||'').toLowerCase().includes(q);
+    const matchSection = !rosterFilter.section || s.section === rosterFilter.section;
+    const matchGrade   = !rosterFilter.grade   || s.grade   === rosterFilter.grade;
+    const matchStatus  = !rosterFilter.status  || s.status  === rosterFilter.status;
+    return matchSearch && matchSection && matchGrade && matchStatus;
+  });
+
+  el.innerHTML = `
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <input class="form-input" style="max-width:240px;" placeholder="Search name or instrument..."
+        value="${rosterFilter.search}" oninput="rosterFilter.search=this.value;renderRosterTable()"/>
+      <select class="form-select" style="max-width:160px;" onchange="rosterFilter.section=this.value;renderRosterTable()">
+        <option value="">All sections</option>
+        ${sections.map(s=>`<option value="${s}" ${rosterFilter.section===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <select class="form-select" style="max-width:120px;" onchange="rosterFilter.grade=this.value;renderRosterTable()">
+        <option value="">All grades</option>
+        ${grades.map(g=>`<option value="${g}" ${rosterFilter.grade===g?'selected':''}>${g}</option>`).join('')}
+      </select>
+      <select class="form-select" style="max-width:130px;" onchange="rosterFilter.status=this.value;renderRosterTable()">
+        <option value="">All statuses</option>
+        <option value="active" ${rosterFilter.status==='active'?'selected':''}>Active</option>
+        <option value="inactive" ${rosterFilter.status==='inactive'?'selected':''}>Inactive</option>
+      </select>
+      <span style="color:var(--gray-500);font-size:13px;margin-left:auto;">${filtered.length} student${filtered.length!==1?'s':''}</span>
+      <button class="btn btn-primary btn-sm" onclick="openStudentModal()">+ Add student</button>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0;">
+        ${filtered.length === 0
+          ? `<div class="empty-state">
+               <div class="empty-state-icon">&#9834;</div>
+               <div class="empty-state-text">${rosterStudents.length === 0 ? 'No students yet - add your first student!' : 'No students match your filters.'}</div>
+             </div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr><th>Name</th><th>Grade</th><th>Section</th><th>Instrument</th><th>Shirt</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                ${filtered.map(s=>`
+                  <tr>
+                    <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                    <td>${s.grade}</td>
+                    <td>${s.section||'&mdash;'}</td>
+                    <td>${s.instrument||'&mdash;'}</td>
+                    <td>${s.shirt_size||'&mdash;'}</td>
+                    <td><span class="badge ${s.status==='active'?'badge-green':'badge-gray'}">${s.status}</span></td>
+                    <td style="text-align:right;">
+                      <button class="btn btn-sm btn-secondary" onclick='openStudentModal(${JSON.stringify(s)})'>Edit</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="student-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="student-modal-title">Add student</div>
+          <button class="modal-close" onclick="closeStudentModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">First name *</label>
+              <input class="form-input" id="sf-first_name" placeholder="First name"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last name *</label>
+              <input class="form-input" id="sf-last_name" placeholder="Last name"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Grade</label>
+              <select class="form-select" id="sf-grade">
+                <option value="">Select grade</option>
+                <option>9</option><option>10</option><option>11</option><option>12</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Section</label>
+              <input class="form-input" id="sf-section" placeholder="e.g. Woodwinds, Brass..."/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Instrument</label>
+              <input class="form-input" id="sf-instrument" placeholder="e.g. Flute, Trumpet..."/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Shirt size</label>
+              <select class="form-select" id="sf-shirt_size">
+                <option value="">Select size</option>
+                <option>YS</option><option>YM</option><option>YL</option>
+                <option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">School year</label>
+              <input class="form-input" id="sf-school_year"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="sf-status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Medical notes</label>
+              <textarea class="form-textarea" id="sf-medical_notes" placeholder="Allergies, medications, etc."></textarea>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Photo consent</label>
+              <select class="form-select" id="sf-photo_consent">
+                <option value="">Not recorded</option>
+                <option value="yes">Yes - consent given</option>
+                <option value="no">No - no consent</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeStudentModal()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-student-btn" style="display:none;margin-right:auto;" onclick="deleteStudent()">Delete</button>
+          <button class="btn btn-primary" onclick="saveStudent()">Save student</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+let editingStudentId = null;
+
+function openStudentModal(student) {
+  editingStudentId = null;
+  const fields = ['first_name','last_name','grade','section','instrument','shirt_size','school_year','status','medical_notes','photo_consent'];
+  fields.forEach(f => {
+    const el = document.getElementById('sf-' + f);
+    if (el) el.value = student ? (student[f] || '') : (f === 'status' ? 'active' : f === 'school_year' ? CONFIG.SCHOOL_YEAR : '');
+  });
+  if (student) {
+    editingStudentId = student.student_id;
+    document.getElementById('student-modal-title').textContent = 'Edit student';
+    document.getElementById('delete-student-btn').style.display = 'inline-flex';
+  } else {
+    document.getElementById('student-modal-title').textContent = 'Add student';
+    document.getElementById('delete-student-btn').style.display = 'none';
+  }
+  document.getElementById('student-modal').classList.add('open');
+}
+
+function closeStudentModal() {
+  document.getElementById('student-modal').classList.remove('open');
+}
+
+async function saveStudent() {
+  const first = document.getElementById('sf-first_name').value.trim();
+  const last  = document.getElementById('sf-last_name').value.trim();
+  if (!first || !last) { toast('First and last name are required.', 'error'); return; }
+  const record = { student_id: editingStudentId || '' };
+  ['first_name','last_name','grade','section','instrument','shirt_size','school_year','status','medical_notes','photo_consent'].forEach(f => {
+    record[f] = document.getElementById('sf-' + f).value;
+  });
+  try {
+    const result = await apiCall({ action: 'save_student', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingStudentId ? 'Student updated!' : 'Student added!', 'success');
+      closeStudentModal();
+      await renderRoster();
+    } else {
+      toast('Error: ' + (result.error || 'Unknown error'), 'error');
+    }
+  } catch(e) {
+    toast('Could not save student.', 'error');
+  }
+}
+
+async function deleteStudent() {
+  if (!editingStudentId) return;
+  if (!confirm('Delete this student? This cannot be undone.')) return;
+  try {
+    const result = await apiCall({ action: 'delete_student', id: editingStudentId });
+    if (result.success) {
+      toast('Student deleted.', 'info');
+      closeStudentModal();
+      await renderRoster();
+    } else {
+      toast('Error deleting student.', 'error');
+    }
+  } catch(e) {
+    toast('Could not delete student.', 'error');
   }
 }
 
