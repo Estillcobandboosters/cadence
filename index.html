@@ -1541,12 +1541,474 @@ async function savePaymentRecord() {
     } else { toast('Error: ' + (result.error || 'Unknown'), 'error'); }
   } catch(e) { toast('Could not record payment.', 'error'); }
 }
-function renderAttendance()  { placeholderPage('page-attendance',  'Attendance',          'Attendance module — Phase 2'); }
+// ════════════════════════════════════════════════════════════
+//  ATTENDANCE — Full module
+// ════════════════════════════════════════════════════════════
+let attendanceData = { events: [], students: [], records: [] };
+let attendanceEventId = null;
+
+async function renderAttendance() {
+  const el = document.getElementById('page-attendance');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading attendance...</div>';
+  try {
+    const [eventsRes, studentsRes, attendRes] = await Promise.all([
+      apiCall({ action: 'get_events' }),
+      apiCall({ action: 'get_students' }),
+      apiCall({ action: 'get_attendance' })
+    ]);
+    attendanceData.events   = (eventsRes.data || []).sort((a,b) => new Date(b.date) - new Date(a.date));
+    attendanceData.students = (studentsRes.data || []).filter(s => s.school_year === state.selectedYear && s.status === 'active');
+    attendanceData.records  = attendRes.data || [];
+    renderAttendanceOverview();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load attendance.</div></div>';
+  }
+}
+
+function renderAttendanceOverview() {
+  const el = document.getElementById('page-attendance');
+  const events   = attendanceData.events;
+  const students = attendanceData.students;
+  const records  = attendanceData.records;
+  const today    = new Date(); today.setHours(0,0,0,0);
+
+  // Per-student summary
+  const required = events.filter(e => e.required==='true'||e.required==='TRUE');
+  const studentSummary = students.map(s => {
+    const sRecords  = records.filter(r => r.student_id === s.student_id);
+    const present   = sRecords.filter(r => r.status==='present').length;
+    const absent    = sRecords.filter(r => r.status==='absent').length;
+    const excused   = sRecords.filter(r => r.status==='excused').length;
+    const pct       = required.length > 0 ? Math.round((present / required.length) * 100) : 100;
+    return { ...s, present, absent, excused, pct };
+  });
+
+  el.innerHTML = `
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+      <div style="font-size:15px;font-weight:500;">Select an event to take attendance</div>
+      <button class="btn btn-sm btn-primary" style="margin-left:auto;" onclick="navigate('events')">+ Add event</button>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Events</div></div>
+      <div class="card-body" style="padding:0;">
+        ${events.length === 0
+          ? `<div class="empty-state"><div class="empty-state-text">No events yet. Add events first!</div></div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr><th>Event</th><th>Date</th><th>Type</th><th>Present</th><th>Absent</th><th>Excused</th><th>Not taken</th><th></th></tr></thead>
+              <tbody>
+                ${events.slice(0,20).map(e => {
+                  const eRecords = records.filter(r => r.event_id === e.event_id);
+                  const present  = eRecords.filter(r => r.status==='present').length;
+                  const absent   = eRecords.filter(r => r.status==='absent').length;
+                  const excused  = eRecords.filter(r => r.status==='excused').length;
+                  const notTaken = students.length - eRecords.length;
+                  const isPast   = new Date(e.date) < today;
+                  return `<tr>
+                    <td><strong>${e.title}</strong></td>
+                    <td>${formatDate(e.date)}</td>
+                    <td><span class="badge badge-blue">${e.event_type||''}</span></td>
+                    <td><span class="badge badge-green">${present}</span></td>
+                    <td><span class="badge badge-red">${absent}</span></td>
+                    <td><span class="badge badge-gray">${excused}</span></td>
+                    <td><span class="badge ${notTaken>0?'badge-red':'badge-green'}">${notTaken}</span></td>
+                    <td><button class="btn btn-sm btn-primary" onclick="openAttendanceForEvent('${e.event_id}')">
+                      ${eRecords.length > 0 ? 'View/Edit' : 'Take roll'}
+                    </button></td>
+                  </tr>`;
+                }).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Student attendance summary</div></div>
+      <div class="card-body" style="padding:0;">
+        ${studentSummary.length === 0
+          ? `<div class="empty-state"><div class="empty-state-text">No students in roster.</div></div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr><th>Name</th><th>Grade</th><th>Section</th><th>Present</th><th>Absent</th><th>Excused</th><th>Rate</th></tr></thead>
+              <tbody>
+                ${studentSummary.map(s => `
+                  <tr>
+                    <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                    <td>${s.grade}</td>
+                    <td>${s.section||'—'}</td>
+                    <td><span class="badge badge-green">${s.present}</span></td>
+                    <td><span class="badge badge-red">${s.absent}</span></td>
+                    <td><span class="badge badge-gray">${s.excused}</span></td>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <div style="flex:1;height:6px;background:var(--gray-200);border-radius:3px;min-width:60px;">
+                          <div style="height:6px;border-radius:3px;background:${s.pct>=90?'var(--success)':s.pct>=75?'#F59E0B':'var(--danger)'};width:${s.pct}%;"></div>
+                        </div>
+                        <span style="font-size:12px;font-weight:500;color:${s.pct>=90?'var(--success)':s.pct>=75?'#F59E0B':'var(--danger)'}">${s.pct}%</span>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>`;
+}
+
+async function openAttendanceForEvent(eventId) {
+  // Can be called from Events page too
+  if (!attendanceData.students.length) {
+    const [studentsRes, attendRes, eventsRes] = await Promise.all([
+      apiCall({ action: 'get_students' }),
+      apiCall({ action: 'get_attendance' }),
+      apiCall({ action: 'get_events' })
+    ]);
+    attendanceData.students = (studentsRes.data||[]).filter(s => s.school_year===state.selectedYear && s.status==='active');
+    attendanceData.records  = attendRes.data||[];
+    attendanceData.events   = eventsRes.data||[];
+  }
+
+  attendanceEventId = eventId;
+  const event    = attendanceData.events.find(e => e.event_id === eventId);
+  const students = attendanceData.students;
+  const existing = attendanceData.records.filter(r => r.event_id === eventId);
+
+  // Build attendance state
+  const attendState = {};
+  students.forEach(s => {
+    const rec = existing.find(r => r.student_id === s.student_id);
+    attendState[s.student_id] = rec ? rec.status : 'present';
+  });
+
+  // Group by section
+  const sections = [...new Set(students.map(s => s.section||'Other'))].sort();
+
+  let backdrop = document.getElementById('attendance-roll-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'attendance-roll-modal';
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = `
+    <div class="modal" style="width:720px;max-width:96vw;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">${event ? event.title : 'Attendance'}</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">${event ? formatDate(event.date) + (event.start_time?' at '+event.start_time:'') : ''} &nbsp;·&nbsp; ${students.length} students</div>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('attendance-roll-modal').classList.remove('open')">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-secondary" onclick="markAll('present')">&#10003; Mark all present</button>
+          <button class="btn btn-sm btn-secondary" onclick="markAll('absent')">&#10007; Mark all absent</button>
+        </div>
+        <div id="roll-call-body">
+          ${sections.map(section => {
+            const sectionStudents = students.filter(s => (s.section||'Other') === section);
+            return `
+              <div style="margin-bottom:20px;">
+                <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-500);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--gray-200);">${section}</div>
+                ${sectionStudents.map(s => `
+                  <div class="roll-row" id="roll-${s.student_id}" style="display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:8px;margin-bottom:4px;background:${attendState[s.student_id]==='present'?'#F0FDF4':attendState[s.student_id]==='absent'?'#FEF2F2':'#FFFBEB'};">
+                    <div style="flex:1;font-size:14px;font-weight:500;">${s.first_name} ${s.last_name}</div>
+                    <div style="font-size:12px;color:var(--gray-500);">${s.instrument||''}</div>
+                    <div style="display:flex;gap:4px;">
+                      <button class="btn btn-sm" id="btn-present-${s.student_id}"
+                        style="background:${attendState[s.student_id]==='present'?'var(--success)':'var(--gray-100)'};color:${attendState[s.student_id]==='present'?'white':'var(--gray-700)'};"
+                        onclick="setAttendance('${s.student_id}','present')">Present</button>
+                      <button class="btn btn-sm" id="btn-absent-${s.student_id}"
+                        style="background:${attendState[s.student_id]==='absent'?'var(--danger)':'var(--gray-100)'};color:${attendState[s.student_id]==='absent'?'white':'var(--gray-700)'};"
+                        onclick="setAttendance('${s.student_id}','absent')">Absent</button>
+                      <button class="btn btn-sm" id="btn-excused-${s.student_id}"
+                        style="background:${attendState[s.student_id]==='excused'?'#F59E0B':'var(--gray-100)'};color:${attendState[s.student_id]==='excused'?'white':'var(--gray-700)'};"
+                        onclick="setAttendance('${s.student_id}','excused')">Excused</button>
+                    </div>
+                  </div>`).join('')}
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div id="attendance-save-status" style="font-size:13px;color:var(--gray-500);margin-right:auto;"></div>
+        <button class="btn btn-secondary" onclick="document.getElementById('attendance-roll-modal').classList.remove('open')">Close</button>
+        <button class="btn btn-primary" onclick="saveAllAttendance()">Save attendance</button>
+      </div>
+    </div>`;
+
+  // Store state for save
+  window._attendState = attendState;
+  backdrop.classList.add('open');
+}
+
+function setAttendance(studentId, status) {
+  window._attendState[studentId] = status;
+  const row = document.getElementById('roll-' + studentId);
+  if (row) {
+    row.style.background = status==='present'?'#F0FDF4':status==='absent'?'#FEF2F2':'#FFFBEB';
+  }
+  ['present','absent','excused'].forEach(s => {
+    const btn = document.getElementById('btn-'+s+'-'+studentId);
+    if (!btn) return;
+    const active = s === status;
+    btn.style.background = active ? (s==='present'?'var(--success)':s==='absent'?'var(--danger)':'#F59E0B') : 'var(--gray-100)';
+    btn.style.color = active ? 'white' : 'var(--gray-700)';
+  });
+}
+
+function markAll(status) {
+  Object.keys(window._attendState).forEach(id => setAttendance(id, status));
+}
+
+async function saveAllAttendance() {
+  const status = document.getElementById('attendance-save-status');
+  status.textContent = 'Saving...';
+  const records = Object.entries(window._attendState).map(([studentId, attStatus]) => ({
+    attend_id:   '',
+    event_id:    attendanceEventId,
+    student_id:  studentId,
+    status:      attStatus,
+    recorded_by: state.user ? state.user.email : ''
+  }));
+  try {
+    const result = await apiCall({ action: 'bulk_attendance', records: JSON.stringify(records) });
+    if (result.success) {
+      status.textContent = 'Saved ' + result.saved + ' records!';
+      status.style.color = 'var(--success)';
+      // Refresh attendance data
+      const attendRes = await apiCall({ action: 'get_attendance' });
+      attendanceData.records = attendRes.data || [];
+      setTimeout(() => {
+        document.getElementById('attendance-roll-modal').classList.remove('open');
+        if (state.currentPage === 'attendance') renderAttendanceOverview();
+      }, 1200);
+    } else {
+      status.textContent = 'Error: ' + (result.error||'Unknown');
+      status.style.color = 'var(--danger)';
+    }
+  } catch(e) {
+    status.textContent = 'Could not save.';
+    status.style.color = 'var(--danger)';
+  }
+}
 function renderInventory(t) {
   const pageId = t === 'Uniform' ? 'page-uniforms' : 'page-instruments';
   placeholderPage(pageId, t + ' inventory', 'Inventory module — coming soon!');
 }
-function renderEvents()      { placeholderPage('page-events',      'Events',              'Events module — Phase 2'); }
+// ════════════════════════════════════════════════════════════
+//  EVENTS — Full module
+// ════════════════════════════════════════════════════════════
+let eventsData = [];
+let eventsFilter = { type: '', upcoming: 'all' };
+let editingEventId = null;
+
+async function renderEvents() {
+  const el = document.getElementById('page-events');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading events...</div>';
+  try {
+    const data = await apiCall({ action: 'get_events' });
+    eventsData = (data.data || []).sort((a,b) => new Date(a.date) - new Date(b.date));
+    renderEventsTable();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load events.</div></div>';
+  }
+}
+
+function renderEventsTable() {
+  const el = document.getElementById('page-events');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const types = [...new Set(eventsData.map(e => e.event_type).filter(Boolean))].sort();
+
+  let filtered = eventsData.filter(e => {
+    const matchType = !eventsFilter.type || e.event_type === eventsFilter.type;
+    const eDate = new Date(e.date);
+    const matchTime = eventsFilter.upcoming === 'upcoming' ? eDate >= today
+      : eventsFilter.upcoming === 'past' ? eDate < today : true;
+    return matchType && matchTime;
+  });
+
+  const upcoming = eventsData.filter(e => new Date(e.date) >= today).slice(0,3);
+
+  el.innerHTML = `
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <select class="form-select" style="max-width:160px;" onchange="eventsFilter.type=this.value;renderEventsTable()">
+        <option value="">All types</option>
+        ${types.map(t=>`<option value="${t}" ${eventsFilter.type===t?'selected':''} >${t}</option>`).join('')}
+        <option value="Rehearsal">Rehearsal</option>
+        <option value="Performance">Performance</option>
+        <option value="Football Game">Football Game</option>
+        <option value="Competition">Competition</option>
+        <option value="Trip">Trip</option>
+        <option value="Other">Other</option>
+      </select>
+      <select class="form-select" style="max-width:140px;" onchange="eventsFilter.upcoming=this.value;renderEventsTable()">
+        <option value="all">All events</option>
+        <option value="upcoming" ${eventsFilter.upcoming==='upcoming'?'selected':''}>Upcoming</option>
+        <option value="past" ${eventsFilter.upcoming==='past'?'selected':''}>Past</option>
+      </select>
+      <span style="color:var(--gray-500);font-size:13px;margin-left:auto;">${filtered.length} event${filtered.length!==1?'s':''}</span>
+      <button class="btn btn-primary btn-sm" onclick="openEventForm()">+ Add event</button>
+    </div>
+
+    ${upcoming.length > 0 ? `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+      ${upcoming.map(e => {
+        const d = new Date(e.date);
+        const isToday = d.toDateString() === today.toDateString();
+        const daysAway = Math.ceil((d - today) / (1000*60*60*24));
+        return `<div style="background:${isToday?'var(--blue)':'var(--white)'};border:1px solid ${isToday?'var(--blue)':'var(--gray-300)'};border-radius:var(--radius);padding:16px;">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${isToday?'rgba(255,255,255,0.8)':'var(--gray-500)'};margin-bottom:4px;">${isToday?'TODAY':daysAway===1?'TOMORROW':'IN '+daysAway+' DAYS'}</div>
+          <div style="font-size:15px;font-weight:600;color:${isToday?'white':'var(--gray-900)'};margin-bottom:4px;">${e.title}</div>
+          <div style="font-size:12px;color:${isToday?'rgba(255,255,255,0.8)':'var(--gray-500)'};">${e.start_time||''} ${e.location?'· '+e.location:''}</div>
+          <button class="btn btn-sm" style="margin-top:10px;background:${isToday?'rgba(255,255,255,0.2)':'var(--gray-100)'};color:${isToday?'white':'var(--gray-800)'};" onclick="openAttendanceForEvent('${e.event_id}')">Take attendance</button>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+
+    <div class="card">
+      <div class="card-body" style="padding:0;">
+        ${filtered.length === 0
+          ? `<div class="empty-state"><div class="empty-state-icon">&#9711;</div><div class="empty-state-text">No events found. Add your first event!</div></div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr><th>Event</th><th>Type</th><th>Date</th><th>Time</th><th>Location</th><th>Required</th><th></th></tr></thead>
+              <tbody>
+                ${filtered.map(e => {
+                  const eDate = new Date(e.date);
+                  const isPast = eDate < today;
+                  return `<tr style="opacity:${isPast?'0.6':'1'}">
+                    <td><strong>${e.title}</strong>${e.notes?`<div style="font-size:11px;color:var(--gray-500);">${e.notes}</div>`:''}</td>
+                    <td><span class="badge badge-blue">${e.event_type||'Event'}</span></td>
+                    <td>${formatDate(e.date)}</td>
+                    <td>${e.start_time||'—'}${e.end_time?' - '+e.end_time:''}</td>
+                    <td>${e.location||'—'}</td>
+                    <td>${e.required==='true'||e.required==='TRUE'?'<span class="badge badge-red">Required</span>':'<span class="badge badge-gray">Optional</span>'}</td>
+                    <td style="text-align:right;white-space:nowrap;">
+                      <button class="btn btn-sm btn-primary" onclick="openAttendanceForEvent('${e.event_id}')">Attendance</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openEventForm(${JSON.stringify(e).split('"').join('&quot;')})">Edit</button>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>
+
+    <!-- Event Form Modal -->
+    <div class="modal-backdrop" id="event-form-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="event-form-title">Add event</div>
+          <button class="modal-close" onclick="closeEventForm()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Event title *</label>
+              <input class="form-input" id="ef-title" placeholder="e.g. Friday Night Football Game"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Event type</label>
+              <select class="form-select" id="ef-event_type">
+                <option value="Rehearsal">Rehearsal</option>
+                <option value="Performance">Performance</option>
+                <option value="Football Game">Football Game</option>
+                <option value="Competition">Competition</option>
+                <option value="Trip">Trip</option>
+                <option value="Meeting">Meeting</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Required?</label>
+              <select class="form-select" id="ef-required">
+                <option value="true">Yes — required</option>
+                <option value="false">No — optional</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date *</label>
+              <input class="form-input" id="ef-date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Start time</label>
+              <input class="form-input" id="ef-start_time" type="time"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">End time</label>
+              <input class="form-input" id="ef-end_time" type="time"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Location</label>
+              <input class="form-input" id="ef-location" placeholder="e.g. Stadium, School Gymnasium"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description / notes</label>
+              <textarea class="form-textarea" id="ef-notes" placeholder="Any additional details..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeEventForm()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-event-btn" style="display:none;margin-right:auto;" onclick="deleteEvent()">Delete</button>
+          <button class="btn btn-primary" onclick="saveEvent()">Save event</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function openEventForm(event) {
+  editingEventId = null;
+  const fields = ['title','event_type','required','date','start_time','end_time','location','notes'];
+  fields.forEach(f => {
+    const el = document.getElementById('ef-' + f);
+    if (!el) return;
+    if (event) {
+      el.value = event[f] || '';
+    } else {
+      el.value = f === 'event_type' ? 'Rehearsal' : f === 'required' ? 'true' : '';
+    }
+  });
+  if (event) {
+    editingEventId = event.event_id;
+    document.getElementById('event-form-title').textContent = 'Edit event';
+    document.getElementById('delete-event-btn').style.display = 'inline-flex';
+  } else {
+    document.getElementById('event-form-title').textContent = 'Add event';
+    document.getElementById('delete-event-btn').style.display = 'none';
+  }
+  document.getElementById('event-form-modal').classList.add('open');
+}
+
+function closeEventForm() { document.getElementById('event-form-modal').classList.remove('open'); }
+
+async function saveEvent() {
+  const title = document.getElementById('ef-title').value.trim();
+  const date  = document.getElementById('ef-date').value;
+  if (!title) { toast('Event title is required.', 'error'); return; }
+  if (!date)  { toast('Event date is required.', 'error'); return; }
+  const record = { event_id: editingEventId || '' };
+  ['title','event_type','required','date','start_time','end_time','location','notes'].forEach(f => {
+    record[f] = document.getElementById('ef-' + f).value;
+  });
+  try {
+    const result = await apiCall({ action: 'save_event', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingEventId ? 'Event updated!' : 'Event added!', 'success');
+      closeEventForm();
+      await renderEvents();
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save event.', 'error'); }
+}
+
+async function deleteEvent() {
+  if (!editingEventId || !confirm('Delete this event?')) return;
+  try {
+    await apiCall({ action: 'save_event', record: JSON.stringify({ event_id: editingEventId, title: '_deleted_', event_type: '', date: '', status: 'deleted' }) });
+    toast('Event deleted.', 'info');
+    closeEventForm();
+    await renderEvents();
+  } catch(e) { toast('Could not delete event.', 'error'); }
+}
 function renderVolunteers()  { placeholderPage('page-volunteers',  'Volunteers',          'Volunteer module — Phase 2'); }
 function renderFundraising() { placeholderPage('page-fundraising', 'Fundraising',         'Fundraising module — Phase 2'); }
 function renderForms()       { placeholderPage('page-forms',       'Forms &amp; Documents','Forms module — Phase 2'); }
