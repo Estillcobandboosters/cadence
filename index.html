@@ -625,19 +625,23 @@ const PAGE_TITLES = {
   users:       'Users & Access'
 };
 
+const ALL_PAGES = ['dashboard','roster','fees','attendance','uniforms','instruments','events','volunteers','fundraising','forms','users'];
+
 function navigate(page) {
-  // Hide all pages
-  document.querySelectorAll('[id^="page-"]').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
-  // Update nav
+  // Hide all known page divs
+  ALL_PAGES.forEach(p => {
+    const el = document.getElementById('page-' + p);
+    if (el) el.style.display = 'none';
+  });
+  // Update nav active state
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  const navEl = document.querySelector(`.nav-item[onclick="navigate('${page}')"]`);
+  const navEl = document.querySelector('.nav-item[onclick="navigate(\''+page+'\')"]');
   if (navEl) navEl.classList.add('active');
 
   document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
   const pageEl = document.getElementById('page-' + page);
   if (!pageEl) { console.error('Page not found: page-' + page); return; }
   pageEl.style.display = 'block';
-  pageEl.style.minHeight = '200px';
   state.currentPage = page;
 
   // Render
