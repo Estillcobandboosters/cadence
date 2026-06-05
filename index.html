@@ -1457,7 +1457,13 @@ function openStudentFeeDetail(studentId) {
     </div>
 
     <div>
-      <div style="font-size:14px;font-weight:500;margin-bottom:8px;">Payment history</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:500;">Payment history</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-secondary" onclick="printStatement('${studentId}')">&#128424; Print statement</button>
+          <button class="btn btn-sm btn-secondary" onclick="emailStatement('${studentId}')">&#9993; Email statement</button>
+        </div>
+      </div>
       ${sPayments.length === 0
         ? '<div style="color:var(--gray-500);font-size:13px;">No payments recorded yet.</div>'
         : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -1467,6 +1473,7 @@ function openStudentFeeDetail(studentId) {
               <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Method</th>
               <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Check #</th>
               <th style="text-align:right;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Amount</th>
+              <th style="text-align:right;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;"></th>
             </tr></thead>
             <tbody>
               ${sPayments.map(p=>`
@@ -1476,6 +1483,9 @@ function openStudentFeeDetail(studentId) {
                   <td style="padding:8px;text-transform:capitalize;">${p.method||'—'}</td>
                   <td style="padding:8px;">${p.check_number||'—'}</td>
                   <td style="padding:8px;text-align:right;font-weight:600;color:var(--success);">$${parseFloat(p.amount||0).toFixed(2)}</td>
+                  <td style="padding:8px;text-align:right;">
+                    <button class="btn btn-sm btn-secondary" onclick="printReceipt('${studentId}','${p.receipt_num}')">Receipt</button>
+                  </td>
                 </tr>`).join('')}
             </tbody>
           </table>`
@@ -1715,6 +1725,278 @@ async function runNewSeasonWizard() {
   } catch(e) {
     toast('Error creating season: ' + e.message, 'error');
   }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  RECEIPTS & STATEMENTS
+// ════════════════════════════════════════════════════════════
+
+function buildStatementHTML(studentId, singleReceiptNum) {
+  const student  = feesData.students.find(s => s.student_id === studentId);
+  if (!student) return '';
+  const sFees     = feesData.fees.filter(f => f.student_id === studentId);
+  const sPayments = singleReceiptNum
+    ? feesData.payments.filter(p => p.student_id === studentId && p.receipt_num === singleReceiptNum)
+    : feesData.payments.filter(p => p.student_id === studentId);
+
+  const totalDue  = sFees.reduce((s, f) => s + parseFloat(f.amount_due  || 0), 0);
+  const totalPaid = sFees.reduce((s, f) => s + parseFloat(f.amount_paid || 0), 0);
+  const balance   = totalDue - totalPaid;
+  const today     = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  const isReceipt = !!singleReceiptNum;
+  const payment   = isReceipt ? sPayments[0] : null;
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>${isReceipt ? 'Receipt' : 'Statement'} — ${student.first_name} ${student.last_name}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; color: #111; background: #fff; padding: 40px; max-width: 680px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 2px solid #1565C0; }
+    .org-name { font-size: 24px; font-weight: 700; color: #1565C0; }
+    .org-sub { font-size: 13px; color: #666; margin-top: 4px; }
+    .doc-title { text-align: right; }
+    .doc-type { font-size: 22px; font-weight: 600; color: #111; }
+    .doc-date { font-size: 12px; color: #666; margin-top: 4px; }
+    .student-box { background: #F3F4F6; border-radius: 8px; padding: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; }
+    .student-name { font-size: 18px; font-weight: 600; }
+    .student-detail { font-size: 13px; color: #555; margin-top: 4px; }
+    .receipt-highlight { background: #E3F2FD; border: 1px solid #90CAF9; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+    .receipt-amount { font-size: 36px; font-weight: 700; color: #1565C0; }
+    .receipt-label { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    .receipt-meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .meta-item { }
+    .meta-label { font-size: 11px; color: #888; text-transform: uppercase; }
+    .meta-value { font-size: 14px; font-weight: 500; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    th { text-align: left; padding: 8px 10px; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #E5E7EB; background: #F9FAFB; }
+    td { padding: 10px; border-bottom: 1px solid #F3F4F6; font-size: 13px; }
+    .amount { text-align: right; font-weight: 500; }
+    .balance-row { display: flex; justify-content: flex-end; gap: 40px; padding: 16px 0; border-top: 2px solid #E5E7EB; }
+    .bal-item { text-align: right; }
+    .bal-label { font-size: 11px; color: #888; text-transform: uppercase; }
+    .bal-value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+    .paid { color: #2E7D32; }
+    .owed { color: #C62828; }
+    .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #888; text-align: center; }
+    @media print { body { padding: 20px; } button { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="org-name">Estill County Band Boosters</div>
+      <div class="org-sub">Cadence Band Booster Management</div>
+    </div>
+    <div class="doc-title">
+      <div class="doc-type">${isReceipt ? 'Payment Receipt' : 'Account Statement'}</div>
+      <div class="doc-date">${today}</div>
+      ${isReceipt && payment ? `<div class="doc-date" style="font-family:monospace;margin-top:4px;">${payment.receipt_num}</div>` : ''}
+    </div>
+  </div>
+
+  <div class="student-box">
+    <div>
+      <div class="student-name">${student.first_name} ${student.last_name}</div>
+      <div class="student-detail">Grade ${student.grade} &nbsp;·&nbsp; ${student.section||''} &nbsp;·&nbsp; ${student.instrument||''}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="student-detail">School Year</div>
+      <div style="font-weight:600;">${student.school_year}</div>
+    </div>
+  </div>
+
+  ${isReceipt && payment ? `
+  <div class="receipt-highlight">
+    <div class="receipt-label">Payment received</div>
+    <div class="receipt-amount">$${parseFloat(payment.amount||0).toFixed(2)}</div>
+    <div class="receipt-meta">
+      <div class="meta-item">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">${payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Method</div>
+        <div class="meta-value" style="text-transform:capitalize;">${payment.method||'—'}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Check #</div>
+        <div class="meta-value">${payment.check_number||'—'}</div>
+      </div>
+    </div>
+  </div>` : ''}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Fee type</th>
+        <th>Description</th>
+        <th>Due date</th>
+        <th class="amount">Amount due</th>
+        <th class="amount">Paid</th>
+        <th class="amount">Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${sFees.map(f => `
+        <tr>
+          <td>${f.fee_type||'—'}</td>
+          <td>${f.description||'—'}</td>
+          <td>${f.due_date ? new Date(f.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+          <td class="amount">$${parseFloat(f.amount_due||0).toFixed(2)}</td>
+          <td class="amount paid">$${parseFloat(f.amount_paid||0).toFixed(2)}</td>
+          <td class="amount ${parseFloat(f.balance||0)>0?'owed':'paid'}">$${parseFloat(f.balance||0).toFixed(2)}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div class="balance-row">
+    <div class="bal-item">
+      <div class="bal-label">Total due</div>
+      <div class="bal-value">$${totalDue.toFixed(2)}</div>
+    </div>
+    <div class="bal-item">
+      <div class="bal-label">Total paid</div>
+      <div class="bal-value paid">$${totalPaid.toFixed(2)}</div>
+    </div>
+    <div class="bal-item">
+      <div class="bal-label">Balance remaining</div>
+      <div class="bal-value ${balance>0?'owed':'paid'}">${balance>0?'$'+balance.toFixed(2):'Paid in full'}</div>
+    </div>
+  </div>
+
+  ${!isReceipt && sPayments.length > 0 ? `
+  <div style="margin-top:24px;">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Payment history</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Receipt #</th>
+          <th>Date</th>
+          <th>Method</th>
+          <th>Check #</th>
+          <th class="amount">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sPayments.map(p=>`
+          <tr>
+            <td style="font-family:monospace;font-size:12px;">${p.receipt_num||'—'}</td>
+            <td>${p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+            <td style="text-transform:capitalize;">${p.method||'—'}</td>
+            <td>${p.check_number||'—'}</td>
+            <td class="amount paid">$${parseFloat(p.amount||0).toFixed(2)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}
+
+  <div class="footer">
+    Thank you for your support of the Estill County Band Program!<br/>
+    Questions? Contact your band booster administrator.
+  </div>
+</body>
+</html>`;
+}
+
+function printReceipt(studentId, receiptNum) {
+  const html = buildStatementHTML(studentId, receiptNum);
+  const win = window.open('', '_blank', 'width=740,height=900');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
+
+function printStatement(studentId) {
+  const html = buildStatementHTML(studentId, null);
+  const win = window.open('', '_blank', 'width=740,height=900');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
+
+function emailStatement(studentId) {
+  const student  = feesData.students.find(s => s.student_id === studentId);
+  const guardian = feesData.guardians ? feesData.guardians.find(g => g.student_id === studentId && g.is_primary === 'TRUE') : null;
+  
+  // Build email body as plain text summary
+  const sFees     = feesData.fees.filter(f => f.student_id === studentId);
+  const sPayments = feesData.payments.filter(p => p.student_id === studentId);
+  const totalDue  = sFees.reduce((s, f) => s + parseFloat(f.amount_due  || 0), 0);
+  const totalPaid = sFees.reduce((s, f) => s + parseFloat(f.amount_paid || 0), 0);
+  const balance   = totalDue - totalPaid;
+
+  // Open email modal
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop open';
+  backdrop.id = 'email-statement-modal';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Email statement — ${student.first_name} ${student.last_name}</div>
+        <button class="modal-close" onclick="document.getElementById('email-statement-modal').remove()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Send to (email address)</label>
+            <input class="form-input" id="email-to" placeholder="parent@email.com" value="${guardian ? guardian.email : ''}"/>
+            <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">Separate multiple addresses with commas</div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Subject</label>
+            <input class="form-input" id="email-subject" value="Band Booster Account Statement — ${student.first_name} ${student.last_name}"/>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Message</label>
+            <textarea class="form-textarea" id="email-body" style="min-height:160px;">Dear Band Family,
+
+Here is the current account statement for ${student.first_name} ${student.last_name} for the ${student.school_year} school year.
+
+ACCOUNT SUMMARY
+${sFees.map(f => `• ${f.fee_type} — ${f.description||''}: Due $${parseFloat(f.amount_due||0).toFixed(2)}, Paid $${parseFloat(f.amount_paid||0).toFixed(2)}, Balance $${parseFloat(f.balance||0).toFixed(2)}`).join('\n')}
+
+Total Due:  $${totalDue.toFixed(2)}
+Total Paid: $${totalPaid.toFixed(2)}
+Balance:    $${balance.toFixed(2)}
+
+${sPayments.length > 0 ? `RECENT PAYMENTS
+${sPayments.slice(-3).map(p => `• ${p.payment_date||''} — $${parseFloat(p.amount||0).toFixed(2)} (${p.method||''}) Receipt: ${p.receipt_num||''}`).join('\n')}` : ''}
+
+If you have any questions, please contact your band booster administrator.
+
+Thank you for supporting the Estill County Band Program!
+Estill County Band Boosters</textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('email-statement-modal').remove()">Cancel</button>
+        <button class="btn btn-secondary" onclick="copyEmailBody()">Copy to clipboard</button>
+        <button class="btn btn-primary" onclick="sendEmailViaMailto('${studentId}')">Open in email app</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+}
+
+function copyEmailBody() {
+  const body = document.getElementById('email-body').value;
+  navigator.clipboard.writeText(body).then(() => toast('Email body copied to clipboard!', 'success'));
+}
+
+function sendEmailViaMailto(studentId) {
+  const to      = document.getElementById('email-to').value;
+  const subject = encodeURIComponent(document.getElementById('email-subject').value);
+  const body    = encodeURIComponent(document.getElementById('email-body').value);
+  if (!to) { toast('Please enter an email address.', 'error'); return; }
+  window.open(`mailto:${to}?subject=${subject}&body=${body}`);
+  document.getElementById('email-statement-modal').remove();
+  toast('Opening your email app...', 'info');
 }
 
 </script>
