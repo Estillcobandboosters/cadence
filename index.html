@@ -2656,6 +2656,7 @@ function renderVolunteersView() {
       <button id="vol-tab-signups" class="vol-tab" onclick="switchVolTab('signups')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">Event sign-ups</button>
       <button id="vol-tab-training" class="vol-tab" onclick="switchVolTab('training')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">Training tracker</button>
       <button id="vol-tab-reports" class="vol-tab" onclick="switchVolTab('reports')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">&#128203; Event reports</button>
+      <button id="vol-tab-summary" class="vol-tab" onclick="switchVolTab('summary')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">&#127942; Volunteer summary</button>
     </div>
 
     <!-- Volunteer Roster Tab -->
@@ -2799,6 +2800,23 @@ function renderVolunteersView() {
       </div>
     </div>
 
+
+    <!-- Volunteer Summary Panel -->
+    <div id="vol-panel-summary" style="display:none;">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="font-size:14px;font-weight:500;">Show volunteers from the last:</div>
+        <select class="form-select" style="max-width:160px;" id="vol-summary-range" onchange="renderVolSummary(this.value)">
+          <option value="3">3 months</option>
+          <option value="6" selected>6 months</option>
+          <option value="9">9 months</option>
+          <option value="12">12 months</option>
+          <option value="all">All time</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" style="margin-left:auto;" onclick="printVolSummary()" id="vol-summary-print-btn">&#128424; Print report</button>
+      </div>
+      <div id="vol-summary-body"></div>
+    </div>
+
     <!-- Volunteer Sign-up Modal -->
     <div class="modal-backdrop" id="vol-signup-modal">
       <div class="modal">
@@ -2928,7 +2946,7 @@ function renderVolunteersView() {
 }
 
 function switchVolTab(tab) {
-  ['roster','signups','training','reports'].forEach(t => {
+  ['roster','signups','training','reports','summary'].forEach(t => {
     const panel = document.getElementById('vol-panel-'+t);
     const btn   = document.getElementById('vol-tab-'+t);
     if (panel) panel.style.display = t === tab ? 'block' : 'none';
@@ -2939,6 +2957,11 @@ function switchVolTab(tab) {
     }
   });
   window._volActiveTab = tab;
+  // Populate volunteer summary when switching to summary tab
+  if (tab === 'summary') {
+    const range = document.getElementById('vol-summary-range');
+    renderVolSummary(range ? range.value : '6');
+  }
   // Populate event dropdown when switching to reports
   if (tab === 'reports') {
     const sel = document.getElementById('vol-report-event');
@@ -4475,6 +4498,646 @@ async function runNewSeasonWizard() {
   }
 }
 
+
+
+// ════════════════════════════════════════════════════════════
+//  VOLUNTEER SUMMARY REPORT
+// ════════════════════════════════════════════════════════════
+function renderVolSummary(range) {
+  const body = document.getElementById('vol-summary-body');
+  if (!body) return;
+
+  const now      = new Date();
+  const cutoff   = range === 'all' ? new Date(0) : new Date(now.getFullYear(), now.getMonth() - parseInt(range), now.getDate());
+  const guardians = volunteersData.guardians.filter((g,i,a) => a.findIndex(x=>x.guardian_id===g.guardian_id)===i);
+
+  // Filter vol records by date range using event dates
+  const volRecs = volunteersData.volunteers.filter(v => {
+    if (range === 'all') return true;
+    const event = volunteersData.events.find(e => e.event_id === v.event_id);
+    if (!event || !event.date) return true;
+    return new Date(event.date) >= cutoff;
+  });
+
+  // Build per-guardian summary
+  const summaries = guardians.map(g => {
+    const gRecs     = volRecs.filter(v => v.guardian_id === g.guardian_id);
+    const hours     = gRecs.reduce((s,v) => s + parseFloat(v.hours||0), 0);
+    const completed = gRecs.filter(v => String(v.completed).toUpperCase()==='TRUE').length;
+    const roles     = [...new Set(gRecs.map(v => v.role||'Volunteer'))];
+    const events    = [...new Set(gRecs.map(v => v.event_id).filter(Boolean))];
+    const student   = volunteersData.students.find(s => s.student_id === g.student_id);
+    let training = {};
+    try { training = g.training ? JSON.parse(g.training) : {}; } catch(e) {}
+    const canChaperone = (training.conf_exp ? new Date(training.conf_exp) > now : !!training.conf_date) &&
+                         (training.bg_exp   ? new Date(training.bg_exp)   > now : !!training.bg_date);
+    return { ...g, gRecs, hours, completed, roles, events, student, canChaperone };
+  }).filter(g => g.gRecs.length > 0)
+    .sort((a,b) => b.hours - a.hours || b.gRecs.length - a.gRecs.length);
+
+  const totalHours   = summaries.reduce((s,g) => s + g.hours, 0);
+  const totalSignups = summaries.reduce((s,g) => s + g.gRecs.length, 0);
+  const rangeLabel   = range === 'all' ? 'All time' : 'Last '+range+' months';
+
+  if (summaries.length === 0) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-icon">&#10022;</div><div class="empty-state-text">No volunteer activity found for this time period.</div></div>`;
+    return;
+  }
+
+  // Medal emojis for top 3
+  const medals = ['&#127947;','&#129352;','&#129353;'];
+
+  body.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px;">
+      <div class="stat-card accent">
+        <div class="stat-label">Active volunteers</div>
+        <div class="stat-value">${summaries.length}</div>
+        <div class="stat-sub">${rangeLabel}</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Total hours</div>
+        <div class="stat-value">${totalHours.toFixed(1)}</div>
+        <div class="stat-sub">across all events</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Total sign-ups</div>
+        <div class="stat-value">${totalSignups}</div>
+        <div class="stat-sub">completed + pending</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Avg hours/volunteer</div>
+        <div class="stat-value">${(totalHours/summaries.length).toFixed(1)}</div>
+        <div class="stat-sub">per person</div>
+      </div>
+    </div>
+
+    <!-- Top volunteers podium -->
+    ${summaries.length >= 3 ? `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header"><div class="card-title">&#127942; Top volunteers — ${rangeLabel}</div></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+          ${summaries.slice(0,3).map((g,i) => `
+            <div style="text-align:center;padding:16px;background:${i===0?'#FFF8E1':i===1?'#F3F4F6':'#FFF3E0'};border-radius:var(--radius);border:1px solid ${i===0?'#FFE082':'var(--gray-300)'}};">
+              <div style="font-size:32px;">${medals[i]}</div>
+              <div style="font-size:16px;font-weight:700;margin-top:6px;">${g.first_name} ${g.last_name}</div>
+              <div style="font-size:12px;color:var(--gray-500);">${g.student?'Parent of '+g.student.first_name:''}</div>
+              <div style="font-size:24px;font-weight:700;color:var(--blue);margin-top:8px;">${g.hours.toFixed(1)}<span style="font-size:13px;font-weight:400;"> hrs</span></div>
+              <div style="font-size:12px;color:var(--gray-500);">${g.gRecs.length} event${g.gRecs.length!==1?'s':''}</div>
+              ${g.canChaperone?'<div style="font-size:11px;color:var(--success);margin-top:4px;">✅ Chaperone eligible</div>':''} 
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- Full leaderboard -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Full volunteer leaderboard</div></div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap"><table>
+          <thead><tr>
+            <th style="width:36px;">#</th>
+            <th>Volunteer</th>
+            <th>Student</th>
+            <th>Events</th>
+            <th>Roles</th>
+            <th>Completed</th>
+            <th>Hours</th>
+            <th>Chaperone</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${summaries.map((g,i) => `
+              <tr style="background:${i===0?'#FFFDE7':i===1?'#F9F9F9':i===2?'#FFF8F0':''}};">
+                <td style="font-weight:700;color:${i<3?'var(--blue)':'var(--gray-400)'};text-align:center;">
+                  ${i<3?medals[i]:i+1}
+                </td>
+                <td>
+                  <div style="font-weight:600;">${g.first_name} ${g.last_name}</div>
+                  <div style="font-size:11px;color:var(--gray-500);">${g.email||''}</div>
+                </td>
+                <td style="font-size:13px;">${g.student?g.student.first_name+' '+g.student.last_name:'—'}</td>
+                <td style="text-align:center;">${g.events.length}</td>
+                <td>${g.roles.map(r=>'<span class="badge badge-blue" style="font-size:10px;margin:1px;">'+ r +'</span>').join(' ')}</td>
+                <td style="text-align:center;">
+                  <span class="badge ${g.completed===g.gRecs.length?'badge-green':g.completed>0?'badge-blue':'badge-gray'}">${g.completed}/${g.gRecs.length}</span>
+                </td>
+                <td>
+                  <strong style="font-size:15px;">${g.hours.toFixed(1)}</strong>
+                  <span style="font-size:11px;color:var(--gray-500);"> hrs</span>
+                </td>
+                <td style="text-align:center;">${g.canChaperone?'✅':'❌'}</td>
+                <td><button class="btn btn-sm btn-secondary" onclick="openVolDetail('${g.guardian_id}')">View</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>
+    </div>`;
+}
+
+function printVolSummary() {
+  const range    = document.getElementById('vol-summary-range')?.value || '6';
+  const now      = new Date();
+  const cutoff   = range === 'all' ? new Date(0) : new Date(now.getFullYear(), now.getMonth() - parseInt(range), now.getDate());
+  const rangeLabel = range === 'all' ? 'All time' : 'Last '+range+' months';
+  const today    = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const guardians = volunteersData.guardians.filter((g,i,a) => a.findIndex(x=>x.guardian_id===g.guardian_id)===i);
+
+  const volRecs = volunteersData.volunteers.filter(v => {
+    if (range === 'all') return true;
+    const event = volunteersData.events.find(e => e.event_id === v.event_id);
+    return !event || !event.date || new Date(event.date) >= cutoff;
+  });
+
+  const summaries = guardians.map(g => {
+    const gRecs   = volRecs.filter(v => v.guardian_id === g.guardian_id);
+    const hours   = gRecs.reduce((s,v) => s + parseFloat(v.hours||0), 0);
+    const completed = gRecs.filter(v => String(v.completed).toUpperCase()==='TRUE').length;
+    const student = volunteersData.students.find(s => s.student_id === g.student_id);
+    return { ...g, gRecs, hours, completed, student };
+  }).filter(g => g.gRecs.length > 0).sort((a,b) => b.hours - a.hours);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Volunteer Summary — ${rangeLabel}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; font-size:12px; padding:24px; color:#111; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; padding-bottom:12px; border-bottom:2px solid #1565C0; }
+  h1 { font-size:20px; font-weight:700; }
+  .summary-bar { display:flex; gap:20px; background:#f3f4f6; padding:10px 14px; border-radius:6px; margin-bottom:16px; }
+  .summary-bar div strong { font-size:18px; display:block; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:6px 8px; background:#1565C0; color:white; font-size:10px; text-transform:uppercase; }
+  td { padding:7px 8px; border-bottom:1px solid #f0f0f0; }
+  tr:nth-child(1) td { background:#FFFDE7; }
+  tr:nth-child(2) td { background:#F9F9F9; }
+  tr:nth-child(3) td { background:#FFF8F0; }
+  .footer { margin-top:20px; padding-top:10px; border-top:1px solid #e5e7eb; font-size:10px; color:#999; text-align:center; }
+  @media print { .no-print { display:none; } }
+</style></head><body>
+  <div class="no-print" style="padding:12px;background:#f3f4f6;text-align:center;margin-bottom:16px;border-radius:6px;">
+    <button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;">&#128424; Print</button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;margin-left:8px;">Close</button>
+  </div>
+  <div class="header">
+    <div><img src="${LOGO_DATA_URL}" style="height:44px;margin-bottom:4px;display:block;"/>
+      <div style="font-size:10px;color:#666;">Estill County Band Boosters</div></div>
+    <div style="text-align:right;"><h1>Volunteer Summary</h1>
+      <div style="color:#666;font-size:13px;">${rangeLabel}</div>
+      <div style="font-size:10px;color:#999;margin-top:4px;">Printed: ${today}</div>
+    </div>
+  </div>
+  <div class="summary-bar">
+    <div><strong>${summaries.length}</strong>Volunteers</div>
+    <div><strong>${summaries.reduce((s,g)=>s+g.hours,0).toFixed(1)}</strong>Total hours</div>
+    <div><strong>${summaries.reduce((s,g)=>s+g.gRecs.length,0)}</strong>Sign-ups</div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Volunteer</th><th>Student</th><th>Sign-ups</th><th>Completed</th><th>Hours</th><th>Phone</th></tr></thead>
+    <tbody>
+      ${summaries.map((g,i) => '<tr><td>'+(i+1)+'</td><td><strong>'+g.first_name+' '+g.last_name+'</strong></td><td>'+(g.student?g.student.first_name+' '+g.student.last_name:'—')+'</td><td>'+g.gRecs.length+'</td><td>'+g.completed+'</td><td><strong>'+g.hours.toFixed(1)+' hrs</strong></td><td>'+(g.phone||'—')+'</td></tr>').join('')}
+    </tbody>
+  </table>
+  <div class="footer">Estill County Band Boosters · Cadence · ${today}</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
+}
+
+// ════════════════════════════════════════════════════════════
+//  FUNDRAISING — Full module
+// ════════════════════════════════════════════════════════════
+let fundraisingData = { campaigns: [], participation: [], students: [] };
+let editingCampaignId = null;
+let editingPartId = null;
+
+async function renderFundraising() {
+  const el = document.getElementById('page-fundraising');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading fundraising...</div>';
+  try {
+    const [campRes, partRes, studentsRes] = await Promise.all([
+      apiCall({ action: 'get_fundraisers' }),
+      apiCall({ action: 'get_fund_participation' }),
+      apiCall({ action: 'get_students' })
+    ]);
+    fundraisingData.campaigns      = campRes.data  || [];
+    fundraisingData.participation  = partRes.data  || [];
+    fundraisingData.students       = (studentsRes.data||[]).filter(s => s.school_year === state.selectedYear && s.status === 'active');
+    renderFundraisingOverview();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load fundraising.</div></div>';
+  }
+}
+
+function renderFundraisingOverview() {
+  const el         = document.getElementById('page-fundraising');
+  const campaigns  = fundraisingData.campaigns;
+  const part       = fundraisingData.participation;
+  const students   = fundraisingData.students;
+
+  const totalRaised  = part.reduce((s,p) => s + parseFloat(p.amount_raised||0), 0);
+  const totalGoal    = campaigns.reduce((s,c) => s + parseFloat(c.goal_amount||0), 0);
+  const activeCamps  = campaigns.filter(c => c.status==='active').length;
+  const today        = new Date();
+
+  el.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="stat-card success">
+        <div class="stat-label">Total raised</div>
+        <div class="stat-value">$${totalRaised.toFixed(2)}</div>
+        <div class="stat-sub">${CONFIG.SCHOOL_YEAR}</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Total goal</div>
+        <div class="stat-value">$${totalGoal.toFixed(2)}</div>
+        <div class="stat-sub">${Math.round(totalGoal>0?(totalRaised/totalGoal)*100:0)}% reached</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Active campaigns</div>
+        <div class="stat-value">${activeCamps}</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Total campaigns</div>
+        <div class="stat-value">${campaigns.length}</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);">
+      <button id="fund-tab-campaigns" onclick="switchFundTab('campaigns')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer;">Campaigns</button>
+      <button id="fund-tab-participation" onclick="switchFundTab('participation')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">Participation</button>
+      <button id="fund-tab-leaderboard" onclick="switchFundTab('leaderboard')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">&#127942; Leaderboard</button>
+      <button id="fund-tab-ideas" onclick="switchFundTab('ideas')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">&#128161; Ideas board</button>
+    </div>
+
+    <!-- Campaigns Tab -->
+    <div id="fund-panel-campaigns">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Fundraising campaigns</div>
+          <button class="btn btn-primary btn-sm" onclick="openCampaignForm()">+ New campaign</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${campaigns.length === 0
+            ? `<div class="empty-state"><div class="empty-state-icon">&#9670;</div><div class="empty-state-text">No campaigns yet. Create your first fundraiser!</div></div>`
+            : campaigns.map(c => {
+                const cPart    = part.filter(p => p.fund_id === c.fund_id);
+                const raised   = cPart.reduce((s,p) => s + parseFloat(p.amount_raised||0), 0);
+                const goal     = parseFloat(c.goal_amount||0);
+                const pct      = goal > 0 ? Math.min(100, Math.round((raised/goal)*100)) : 0;
+                const partCount = cPart.length;
+                return `
+                  <div style="padding:20px;border-bottom:1px solid var(--gray-100);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+                      <div>
+                        <div style="font-size:16px;font-weight:600;">${c.title}</div>
+                        <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">
+                          ${c.start_date?formatDate(c.start_date):''} ${c.end_date?'→ '+formatDate(c.end_date):''}
+                          ${c.description?'· '+c.description:''}
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <span class="badge ${c.status==='active'?'badge-green':c.status==='completed'?'badge-blue':'badge-gray'}">${c.status||'draft'}</span>
+                        <button class="btn btn-sm btn-secondary" onclick="openCampaignParticipation('${c.fund_id}')">Participation</button>
+                        <button class="btn btn-sm btn-secondary" onclick="openCampaignForm(${JSON.stringify(c).split('"').join('&quot;')})">Edit</button>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                      <div style="flex:1;">
+                        <div style="height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">
+                          <div style="height:10px;border-radius:5px;background:${pct>=100?'var(--success)':'var(--blue)'};width:${pct}%;transition:width 0.3s;"></div>
+                        </div>
+                      </div>
+                      <div style="font-size:13px;white-space:nowrap;">
+                        <strong style="color:var(--success);">$${raised.toFixed(2)}</strong>
+                        ${goal>0?'<span style="color:var(--gray-500);"> / $'+goal.toFixed(2)+'</span>':''}
+                        <span style="color:var(--gray-500);margin-left:8px;">${partCount} participant${partCount!==1?'s':''}</span>
+                        ${goal>0?'<span class="badge badge-blue" style="margin-left:6px;">'+pct+'%</span>':''}
+                      </div>
+                    </div>
+                  </div>`;
+              }).join('')
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Participation Tab -->
+    <div id="fund-panel-participation" style="display:none;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Student participation</div></div>
+        <div class="card-body" style="padding:0;">
+          ${students.length === 0
+            ? '<div class="empty-state"><div class="empty-state-text">No active students found.</div></div>'
+            : `<div class="table-wrap"><table>
+                <thead><tr><th>Student</th><th>Grade</th><th>Section</th>
+                  ${campaigns.map(c=>'<th style="text-align:center;font-size:11px;">'+c.title+'</th>').join('')}
+                  <th style="text-align:right;">Total raised</th>
+                </tr></thead>
+                <tbody>
+                  ${students.map(s => {
+                    const sPart  = part.filter(p => p.student_id === s.student_id);
+                    const total  = sPart.reduce((sum,p) => sum + parseFloat(p.amount_raised||0), 0);
+                    return '<tr>'+
+                      '<td><strong>'+s.first_name+' '+s.last_name+'</strong></td>'+
+                      '<td>'+s.grade+'</td>'+
+                      '<td>'+( s.section||'—')+'</td>'+
+                      campaigns.map(c => {
+                        const p = sPart.find(p => p.fund_id === c.fund_id);
+                        return '<td style="text-align:center;">'+
+                          (p ? '<span style="color:var(--success);font-weight:500;">$'+parseFloat(p.amount_raised||0).toFixed(2)+'</span>' :
+                               '<button class="btn btn-sm btn-secondary" onclick="openPartEntry(\''+ s.student_id +'\',\''+ c.fund_id +'\')" style="font-size:10px;">+ Add</button>')+
+                          '</td>';
+                      }).join('')+
+                      '<td style="text-align:right;font-weight:600;color:var(--success);">'+
+                        (total>0?'$'+total.toFixed(2):'<span style="color:var(--gray-400);">—</span>')+
+                      '</td></tr>';
+                  }).join('')}
+                </tbody></table></div>`
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard Tab -->
+    <div id="fund-panel-leaderboard" style="display:none;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">&#127942; Top fundraisers — ${CONFIG.SCHOOL_YEAR}</div></div>
+        <div class="card-body" style="padding:0;">
+          ${(() => {
+            const studentTotals = students.map(s => {
+              const total = part.filter(p=>p.student_id===s.student_id).reduce((sum,p)=>sum+parseFloat(p.amount_raised||0),0);
+              return { ...s, total };
+            }).filter(s => s.total > 0).sort((a,b) => b.total - a.total);
+            const medals2 = ['&#127947;','&#129352;','&#129353;'];
+            if (studentTotals.length === 0) return '<div class="empty-state"><div class="empty-state-text">No fundraising data yet.</div></div>';
+            return '<div class="table-wrap"><table><thead><tr><th style="width:40px;">#</th><th>Student</th><th>Grade</th><th>Section</th>'+
+              campaigns.map(c=>'<th style="text-align:right;font-size:11px;">'+c.title+'</th>').join('')+
+              '<th style="text-align:right;">Total</th></tr></thead><tbody>'+
+              studentTotals.map((s,i) => {
+                const sPart = part.filter(p=>p.student_id===s.student_id);
+                return '<tr style="background:'+( i===0?'#FFFDE7':i===1?'#F9F9F9':i===2?'#FFF8F0':'')+'">'+
+                  '<td style="text-align:center;font-weight:700;">'+( i<3?medals2[i]:i+1)+'</td>'+
+                  '<td><strong>'+s.first_name+' '+s.last_name+'</strong></td>'+
+                  '<td>'+s.grade+'</td><td>'+( s.section||'—')+'</td>'+
+                  campaigns.map(c => {
+                    const p = sPart.find(p=>p.fund_id===c.fund_id);
+                    return '<td style="text-align:right;">'+( p&&parseFloat(p.amount_raised||0)>0?'$'+parseFloat(p.amount_raised).toFixed(2):'—')+'</td>';
+                  }).join('')+
+                  '<td style="text-align:right;font-weight:700;color:var(--success);">$'+s.total.toFixed(2)+'</td></tr>';
+              }).join('')+
+              '</tbody></table></div>';
+          })()}
+        </div>
+      </div>
+    </div>
+
+    <!-- Ideas Board Tab -->
+    <div id="fund-panel-ideas" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">&#128161; Fundraising ideas board</div>
+          <button class="btn btn-primary btn-sm" onclick="openIdeaForm()">+ Submit idea</button>
+        </div>
+        <div class="card-body">
+          <div style="background:var(--blue-pale);border:1px solid var(--blue-mid);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--blue-dark);margin-bottom:16px;">
+            Use this board to collect and track fundraising ideas for future campaigns. Add ideas here, then convert them to a campaign when ready.
+          </div>
+          <div id="ideas-list">
+            ${(() => {
+              const ideaCamps = campaigns.filter(c => c.status === 'idea');
+              if (ideaCamps.length === 0) return '<div class="empty-state"><div class="empty-state-icon">&#128161;</div><div class="empty-state-text">No ideas yet — submit the first one!</div></div>';
+              return ideaCamps.map(c => `
+                <div style="border:1px solid var(--gray-300);border-radius:var(--radius);padding:14px;margin-bottom:10px;background:var(--white);">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <div>
+                      <div style="font-weight:600;font-size:14px;">&#128161; ${c.title}</div>
+                      <div style="font-size:13px;color:var(--gray-600);margin-top:4px;">${c.description||''}</div>
+                      <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">Est. goal: ${c.goal_amount?'$'+parseFloat(c.goal_amount).toFixed(2):'TBD'}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                      <button class="btn btn-sm btn-primary" onclick="convertIdeaToCampaign('${c.fund_id}')">Convert to campaign</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openCampaignForm(${JSON.stringify(c).split('"').join('&quot;')})">Edit</button>
+                    </div>
+                  </div>
+                </div>`).join('');
+            })()}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Campaign Form Modal -->
+    <div class="modal-backdrop" id="campaign-form-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="campaign-form-title">New campaign</div>
+          <button class="modal-close" onclick="closeCampaignForm()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Campaign title *</label>
+              <input class="form-input" id="cf-title" placeholder="e.g. Fall Fruit Sale, Car Wash, Discount Cards"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description</label>
+              <textarea class="form-textarea" id="cf-description" placeholder="Details about the campaign..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Goal amount ($)</label>
+              <input class="form-input" id="cf-goal_amount" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="cf-status">
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="draft">Draft</option>
+                <option value="idea">Idea (board only)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Start date</label>
+              <input class="form-input" id="cf-start_date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">End date</label>
+              <input class="form-input" id="cf-end_date" type="date"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="cf-notes" placeholder="Any additional notes..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeCampaignForm()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-campaign-btn" style="display:none;margin-right:auto;" onclick="deleteCampaign()">Delete</button>
+          <button class="btn btn-primary" onclick="saveCampaign()">Save campaign</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Participation Entry Modal -->
+    <div class="modal-backdrop" id="part-entry-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="part-entry-title">Record participation</div>
+          <button class="modal-close" onclick="document.getElementById('part-entry-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="part-entry-info" style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;margin-bottom:16px;font-size:13px;"></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Amount raised ($)</label>
+              <input class="form-input" id="pe-amount_raised" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Items sold</label>
+              <input class="form-input" id="pe-items_sold" type="number" placeholder="0"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="pe-notes" placeholder="Any notes..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('part-entry-modal').classList.remove('open')">Cancel</button>
+          <button class="btn btn-primary" onclick="savePartEntry()">Save</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function switchFundTab(tab) {
+  ['campaigns','participation','leaderboard','ideas'].forEach(t => {
+    const panel = document.getElementById('fund-panel-'+t);
+    const btn   = document.getElementById('fund-tab-'+t);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--blue)' : 'var(--gray-500)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--blue)' : 'none';
+      btn.style.marginBottom = t === tab ? '-2px' : '0';
+    }
+  });
+}
+
+function openCampaignForm(camp) {
+  editingCampaignId = null;
+  const fields = ['title','description','goal_amount','status','start_date','end_date','notes'];
+  fields.forEach(f => {
+    const el = document.getElementById('cf-'+f);
+    if (el) el.value = camp ? (camp[f]||'') : (f==='status'?'active':'');
+  });
+  if (camp) {
+    editingCampaignId = camp.fund_id;
+    document.getElementById('campaign-form-title').textContent = 'Edit campaign';
+    document.getElementById('delete-campaign-btn').style.display = 'inline-flex';
+  } else {
+    document.getElementById('campaign-form-title').textContent = 'New campaign';
+    document.getElementById('delete-campaign-btn').style.display = 'none';
+  }
+  document.getElementById('campaign-form-modal').classList.add('open');
+}
+
+function closeCampaignForm() { document.getElementById('campaign-form-modal').classList.remove('open'); }
+
+async function saveCampaign() {
+  const title = document.getElementById('cf-title').value.trim();
+  if (!title) { toast('Campaign title is required.', 'error'); return; }
+  const record = { fund_id: editingCampaignId || '' };
+  ['title','description','goal_amount','status','start_date','end_date','notes'].forEach(f => {
+    record[f] = document.getElementById('cf-'+f).value;
+  });
+  try {
+    const result = await apiCall({ action: 'save_fundraiser', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingCampaignId ? 'Campaign updated!' : 'Campaign created!', 'success');
+      closeCampaignForm();
+      await renderFundraising();
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save campaign.', 'error'); }
+}
+
+async function deleteCampaign() {
+  if (!editingCampaignId || !confirm('Delete this campaign? All participation records will remain.')) return;
+  try {
+    await apiCall({ action: 'save_fundraiser', record: JSON.stringify({ fund_id: editingCampaignId, title: '_deleted_', status: 'deleted', description: '', goal_amount: '0' }) });
+    toast('Campaign deleted.', 'info');
+    closeCampaignForm();
+    await renderFundraising();
+  } catch(e) { toast('Could not delete.', 'error'); }
+}
+
+let partEntryStudentId = null;
+let partEntryFundId = null;
+
+function openPartEntry(studentId, fundId) {
+  partEntryStudentId = studentId;
+  partEntryFundId    = fundId;
+  const student  = fundraisingData.students.find(s => s.student_id === studentId);
+  const campaign = fundraisingData.campaigns.find(c => c.fund_id === fundId);
+  const existing = fundraisingData.participation.find(p => p.student_id === studentId && p.fund_id === fundId);
+
+  document.getElementById('part-entry-title').textContent = 'Record participation';
+  document.getElementById('part-entry-info').innerHTML =
+    `<strong>${student ? student.first_name+' '+student.last_name : 'Student'}</strong> &nbsp;·&nbsp; ${campaign ? campaign.title : 'Campaign'}`;
+  document.getElementById('pe-amount_raised').value = existing ? (existing.amount_raised||'0') : '';
+  document.getElementById('pe-items_sold').value    = existing ? (existing.items_sold||'0')    : '';
+  document.getElementById('pe-notes').value         = existing ? (existing.notes||'')           : '';
+  editingPartId = existing ? existing.part_id : null;
+  document.getElementById('part-entry-modal').classList.add('open');
+}
+
+async function savePartEntry() {
+  const amount = document.getElementById('pe-amount_raised').value;
+  const record = {
+    part_id:      editingPartId || '',
+    fund_id:      partEntryFundId,
+    student_id:   partEntryStudentId,
+    amount_raised: amount || '0',
+    items_sold:   document.getElementById('pe-items_sold').value || '0',
+    notes:        document.getElementById('pe-notes').value
+  };
+  try {
+    const result = await apiCall({ action: 'save_fund_participation', record: JSON.stringify(record) });
+    if (result.success) {
+      toast('Participation saved!', 'success');
+      document.getElementById('part-entry-modal').classList.remove('open');
+      await renderFundraising();
+      switchFundTab('participation');
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save.', 'error'); }
+}
+
+function openIdeaForm() {
+  openCampaignForm(null);
+  setTimeout(() => {
+    const statusEl = document.getElementById('cf-status');
+    if (statusEl) statusEl.value = 'idea';
+    document.getElementById('campaign-form-title').textContent = 'Submit fundraising idea';
+  }, 50);
+}
+
+async function convertIdeaToCampaign(fundId) {
+  const camp = fundraisingData.campaigns.find(c => c.fund_id === fundId);
+  if (!camp) return;
+  if (!confirm('Convert "'+camp.title+'" to an active campaign?')) return;
+  try {
+    await apiCall({ action: 'save_fundraiser', record: JSON.stringify({ ...camp, status: 'active' }) });
+    toast('Converted to active campaign!', 'success');
+    await renderFundraising();
+  } catch(e) { toast('Could not convert.', 'error'); }
+}
+
+async function openCampaignParticipation(fundId) {
+  await renderFundraising();
+  switchFundTab('participation');
+}
 
 // ════════════════════════════════════════════════════════════
 //  RECEIPTS & STATEMENTS
