@@ -521,8 +521,8 @@
 <script>
 // ── Config ─────────────────────────────────────────────────
 const CONFIG = {
-  SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec',  // Replace after deploying Apps Script
-  GOOGLE_CLIENT: '559712921969-q245u83327e3v53qkurfe3b0rttkiudc.apps.googleusercontent.com', // Replace with your OAuth client ID
+  SCRIPT_URL:    'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec',
+  GOOGLE_CLIENT: '559712921969-q245u83327e3v53qkurfe3b0rttkiudc.apps.googleusercontent.com',
   SCHOOL_YEAR:   '2026-2027'
 };
 
@@ -635,6 +635,7 @@ function navigate(page) {
 
   document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
   const pageEl = document.getElementById('page-' + page);
+  if (!pageEl) { console.error('Page not found: page-' + page); return; }
   pageEl.style.display = 'block';
   pageEl.style.minHeight = '200px';
   state.currentPage = page;
@@ -991,7 +992,10 @@ async function deleteStudent() {
 // Placeholder renderers for other modules
 function renderFees()        { placeholderPage('page-fees',        'Fees &amp; Dues',     'Finance module — Phase 2'); }
 function renderAttendance()  { placeholderPage('page-attendance',  'Attendance',          'Attendance module — Phase 2'); }
-function renderInventory(t)  { placeholderPage('page-uniforms',    t + ' inventory',      'Inventory module — Phase 2'); placeholderPage('page-instruments', t + ' inventory', ''); }
+function renderInventory(t) {
+  const pageId = t === 'Uniform' ? 'page-uniforms' : 'page-instruments';
+  placeholderPage(pageId, t + ' inventory', 'Inventory module — coming soon!');
+}
 function renderEvents()      { placeholderPage('page-events',      'Events',              'Events module — Phase 2'); }
 function renderVolunteers()  { placeholderPage('page-volunteers',  'Volunteers',          'Volunteer module — Phase 2'); }
 function renderFundraising() { placeholderPage('page-fundraising', 'Fundraising',         'Fundraising module — Phase 2'); }
