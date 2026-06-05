@@ -78,7 +78,7 @@
     }
     .login-logo {
       font-family: var(--font-serif);
-      font-size: 42px;
+      font-size: 36px;
       color: var(--white);
       letter-spacing: -1px;
       margin-bottom: 4px;
@@ -141,7 +141,7 @@
     }
     .sidebar-logo-text {
       font-family: var(--font-serif);
-      font-size: 28px; color: var(--white);
+      font-size: 22px; color: var(--white);
       letter-spacing: -0.5px;
     }
     .sidebar-logo-text span { color: var(--blue-mid); }
@@ -383,7 +383,7 @@
 <div id="login-screen">
   <div class="login-card">
     <img id="login-logo-img" src="" alt="Estill County Band Boosters" style="height:64px;width:auto;margin-bottom:12px;background:white;border-radius:10px;padding:6px;"/>
-    <div class="login-logo">C<span>.</span></div>
+    <div class="login-logo">Cadence<span>.</span></div>
     <div class="login-tagline">Band Booster Management</div>
     <div class="login-divider"></div>
     <div class="login-title">Sign in to continue</div>
@@ -411,7 +411,7 @@
   <nav id="sidebar">
     <div class="sidebar-logo">
       <img id="sidebar-logo-img" src="" alt="ECBB" style="height:40px;width:auto;margin-bottom:6px;display:block;background:white;border-radius:6px;padding:3px;"/>
-      <div class="sidebar-logo-text">C<span>.</span></div>
+      <div class="sidebar-logo-text">Cadence<span>.</span></div>
       <div class="sidebar-logo-sub">Band Booster Management</div>
     </div>
 
@@ -1367,10 +1367,12 @@ async function deleteFee() {
   if (!editingFeeId) return;
   if (!confirm('Delete this fee record? This cannot be undone.')) return;
   try {
-    const result = await apiCall({ action: 'save_fee', record: JSON.stringify({ fee_id: editingFeeId, status: 'deleted' }) });
-    toast('Fee deleted.', 'info');
-    closeFeeModal();
-    await renderFees();
+    const result = await apiCall({ action: 'delete_fee', id: editingFeeId });
+    if (result.success) {
+      toast('Fee deleted.', 'info');
+      closeFeeModal();
+      await renderFees();
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
   } catch(e) { toast('Could not delete fee.', 'error'); }
 }
 
@@ -1694,7 +1696,7 @@ async function openAttendanceForEvent(eventId) {
       <div class="modal-header">
         <div>
           <div class="modal-title">${event ? event.title : 'Attendance'}</div>
-          <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">${event ? formatDate(event.date) + (event.start_time?' at '+event.start_time:'') : ''} &nbsp;·&nbsp; ${students.length} students</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">${event ? formatDate(event.date) + (event.start_time?' at '+formatTime(event.start_time):'') : ''} &nbsp;·&nbsp; ${students.length} students</div>
         </div>
         <button class="modal-close" onclick="document.getElementById('attendance-roll-modal').classList.remove('open')">&times;</button>
       </div>
@@ -2183,12 +2185,14 @@ async function saveItem() {
 }
 
 async function deleteItem() {
-  if (!editingItemId || !confirm('Delete this item?')) return;
+  if (!editingItemId || !confirm('Delete this item? This cannot be undone.')) return;
   try {
-    await apiCall({ action: 'save_inventory_item', record: JSON.stringify({ item_id: editingItemId, type: inventoryType, number: '_deleted_', status: 'retired', description: '' }) });
-    toast('Item deleted.', 'info');
-    closeItemForm();
-    await renderInventory(inventoryType);
+    const result = await apiCall({ action: 'delete_inventory_item', id: editingItemId });
+    if (result.success) {
+      toast('Item deleted.', 'info');
+      closeItemForm();
+      await renderInventory(inventoryType);
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
   } catch(e) { toast('Could not delete item.', 'error'); }
 }
 
@@ -2396,7 +2400,7 @@ function renderEventsTable() {
                     <td><strong>${e.title}</strong>${e.notes?`<div style="font-size:11px;color:var(--gray-500);">${e.notes}</div>`:''}</td>
                     <td><span class="badge badge-blue">${e.event_type||'Event'}</span></td>
                     <td>${formatDate(e.date)}</td>
-                    <td>${e.start_time||'—'}${e.end_time?' - '+e.end_time:''}</td>
+                    <td>${formatTime(e.start_time)}${e.end_time?' - '+formatTime(e.end_time):''}</td>
                     <td>${e.location||'—'}</td>
                     <td>${e.required==='true'||e.required==='TRUE'?'<span class="badge badge-red">Required</span>':'<span class="badge badge-gray">Optional</span>'}</td>
                     <td style="text-align:right;white-space:nowrap;">
@@ -2505,7 +2509,12 @@ async function saveEvent() {
   if (!date)  { toast('Event date is required.', 'error'); return; }
   const record = { event_id: editingEventId || '' };
   ['title','event_type','required','date','start_time','end_time','location','notes'].forEach(f => {
-    record[f] = document.getElementById('ef-' + f).value;
+    let val = document.getElementById('ef-' + f).value;
+    // For time fields, ensure we only store HH:MM not full datetime
+    if ((f === 'start_time' || f === 'end_time') && val) {
+      val = val.substring(0, 5); // Take only HH:MM
+    }
+    record[f] = val;
   });
   try {
     const result = await apiCall({ action: 'save_event', record: JSON.stringify(record) });
@@ -2518,12 +2527,14 @@ async function saveEvent() {
 }
 
 async function deleteEvent() {
-  if (!editingEventId || !confirm('Delete this event?')) return;
+  if (!editingEventId || !confirm('Delete this event? This cannot be undone.')) return;
   try {
-    await apiCall({ action: 'save_event', record: JSON.stringify({ event_id: editingEventId, title: '_deleted_', event_type: '', date: '', status: 'deleted' }) });
-    toast('Event deleted.', 'info');
-    closeEventForm();
-    await renderEvents();
+    const result = await apiCall({ action: 'delete_event', id: editingEventId });
+    if (result.success) {
+      toast('Event deleted.', 'info');
+      closeEventForm();
+      await renderEvents();
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
   } catch(e) { toast('Could not delete event.', 'error'); }
 }
 function renderVolunteers()  { placeholderPage('page-volunteers',  'Volunteers',          'Volunteer module — Phase 2'); }
@@ -2809,6 +2820,25 @@ function formatDate(d) {
   if (!d) return '—';
   const dt = new Date(d);
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(t) {
+  if (!t) return '—';
+  // If it's already HH:MM format, just convert to 12hr
+  const match = String(t).match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    let h = parseInt(match[1]);
+    const m = match[2];
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ampm}`;
+  }
+  // If it's a full date string, extract time
+  try {
+    const dt = new Date(t);
+    if (!isNaN(dt)) return dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  } catch(e) {}
+  return t;
 }
 
 // ── Auto-login from stored token ───────────────────────────
