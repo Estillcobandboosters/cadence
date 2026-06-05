@@ -859,7 +859,8 @@ function renderRosterTable() {
                     <td>${s.instrument||'&mdash;'}</td>
                     <td>${s.shirt_size||'&mdash;'}</td>
                     <td><span class="badge ${s.status==='active'?'badge-green':'badge-gray'}">${s.status}</span></td>
-                    <td style="text-align:right;">
+                    <td style="text-align:right;display:flex;gap:6px;justify-content:flex-end;">
+                      <button class="btn btn-sm btn-secondary" onclick='openGuardianModal("${s.student_id}","${s.first_name} ${s.last_name}")'>Guardians</button>
                       <button class="btn btn-sm btn-secondary" onclick='openStudentModal(${JSON.stringify(s)})'>Edit</button>
                     </td>
                   </tr>`).join('')}
@@ -1015,14 +1016,16 @@ async function renderFees() {
   const el = document.getElementById('page-fees');
   el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading fees...</div>';
   try {
-    const [feesRes, studentsRes, paymentsRes] = await Promise.all([
+    const [feesRes, studentsRes, paymentsRes, guardiansRes] = await Promise.all([
       apiCall({ action: 'get_fees' }),
       apiCall({ action: 'get_students' }),
-      apiCall({ action: 'get_payments' })
+      apiCall({ action: 'get_payments' }),
+      apiCall({ action: 'get_guardians' })
     ]);
-    feesData.fees     = feesRes.data || [];
-    feesData.students = (studentsRes.data || []).filter(s => s.school_year === state.selectedYear && s.status === 'active');
-    feesData.payments = paymentsRes.data || [];
+    feesData.fees      = feesRes.data || [];
+    feesData.students  = (studentsRes.data || []).filter(s => s.school_year === state.selectedYear && s.status === 'active');
+    feesData.payments  = paymentsRes.data || [];
+    feesData.guardians = guardiansRes.data || [];
     renderFeesOverview();
   } catch(e) {
     el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load fees.</div></div>';
@@ -1585,6 +1588,250 @@ function formatDate(d) {
   // Show login
   document.getElementById('login-screen').style.display = 'flex';
 })();
+
+
+// ════════════════════════════════════════════════════════════
+//  GUARDIANS — Full module
+// ════════════════════════════════════════════════════════════
+let guardiansData = [];
+let guardianStudentId = null;
+let guardianStudentName = null;
+let editingGuardianId = null;
+
+async function openGuardianModal(studentId, studentName) {
+  guardianStudentId   = studentId;
+  guardianStudentName = studentName;
+
+  // Create modal if it doesn't exist
+  let backdrop = document.getElementById('guardian-modal-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'guardian-modal-backdrop';
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = `
+    <div class="modal" style="width:680px;max-width:96vw;">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Guardians — ${studentName}</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">Parent & guardian contact information</div>
+        </div>
+        <button class="modal-close" onclick="closeGuardianModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="guardian-list-body">
+        <div style="display:flex;align-items:center;gap:10px;color:var(--gray-500);">
+          <div class="spinner"></div> Loading guardians...
+        </div>
+      </div>
+    </div>`;
+  backdrop.classList.add('open');
+
+  // Load guardians
+  try {
+    const data = await apiCall({ action: 'get_guardians' });
+    guardiansData = (data.data || []).filter(g => g.student_id === studentId);
+    renderGuardianList();
+  } catch(e) {
+    document.getElementById('guardian-list-body').innerHTML =
+      '<div class="empty-state"><div class="empty-state-text">Could not load guardians.</div></div>';
+  }
+}
+
+function renderGuardianList() {
+  const body = document.getElementById('guardian-list-body');
+  if (!body) return;
+
+  body.innerHTML = `
+    ${guardiansData.length === 0
+      ? `<div class="empty-state" style="padding:24px;">
+           <div class="empty-state-icon">&#128100;</div>
+           <div class="empty-state-text">No guardians added yet.</div>
+         </div>`
+      : guardiansData.map(g => `
+          <div style="border:1px solid var(--gray-300);border-radius:var(--radius);padding:16px;margin-bottom:12px;background:${String(g.is_primary).toUpperCase()==='TRUE'?'var(--blue-pale)':'var(--white)'};">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                  <span style="font-size:16px;font-weight:600;">${g.first_name} ${g.last_name}</span>
+                  ${String(g.is_primary).toUpperCase()==='TRUE' ? '<span class="badge badge-blue">Primary</span>' : ''}
+                  <span class="badge badge-gray">${g.relationship||'Guardian'}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:13px;color:var(--gray-700);">
+                  ${g.email ? `<div>&#9993; <a href="mailto:${g.email}" style="color:var(--blue);">${g.email}</a></div>` : '<div style="color:var(--gray-400);">No email</div>'}
+                  ${g.phone ? `<div>&#128222; ${g.phone}</div>` : '<div style="color:var(--gray-400);">No phone</div>'}
+                  ${g.alt_phone ? `<div>&#128222; ${g.alt_phone} <span style="color:var(--gray-400);font-size:11px;">(alt)</span></div>` : ''}
+                  ${String(g.receives_emails).toUpperCase()==='TRUE' ? '<div style="color:var(--success);">&#10003; Receives email updates</div>' : '<div style="color:var(--gray-400);">No email updates</div>'}
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;margin-left:12px;">
+                ${String(g.is_primary).toUpperCase()!=='TRUE' ? `<button class="btn btn-sm btn-secondary" onclick="setPrimaryGuardian('${g.guardian_id}')">Set primary</button>` : ''}
+                <button class="btn btn-sm btn-secondary" onclick="openGuardianForm('${g.guardian_id}')">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteGuardian('${g.guardian_id}')">Remove</button>
+              </div>
+            </div>
+          </div>`).join('')
+    }
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="openGuardianForm(null)">+ Add guardian</button>
+    </div>
+
+    <!-- Guardian form (shown inline) -->
+    <div id="guardian-form-container" style="display:none;margin-top:16px;border:1px solid var(--blue);border-radius:var(--radius);padding:20px;background:var(--blue-pale);">
+      <div style="font-size:15px;font-weight:500;margin-bottom:16px;" id="guardian-form-title">Add guardian</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">First name *</label>
+          <input class="form-input" id="gf-first_name" placeholder="First name"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Last name *</label>
+          <input class="form-input" id="gf-last_name" placeholder="Last name"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Relationship</label>
+          <select class="form-select" id="gf-relationship">
+            <option value="Parent">Parent</option>
+            <option value="Mother">Mother</option>
+            <option value="Father">Father</option>
+            <option value="Stepparent">Stepparent</option>
+            <option value="Grandparent">Grandparent</option>
+            <option value="Guardian">Guardian</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Primary contact?</label>
+          <select class="form-select" id="gf-is_primary">
+            <option value="false">No</option>
+            <option value="true">Yes — primary contact</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email address</label>
+          <input class="form-input" id="gf-email" type="email" placeholder="email@example.com"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Receives email updates?</label>
+          <select class="form-select" id="gf-receives_emails">
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone (primary)</label>
+          <input class="form-input" id="gf-phone" type="tel" placeholder="(555) 555-5555"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone (alternate)</label>
+          <input class="form-input" id="gf-alt_phone" type="tel" placeholder="(555) 555-5555"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn btn-secondary" onclick="closeGuardianForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveGuardian()">Save guardian</button>
+      </div>
+    </div>`;
+}
+
+function openGuardianForm(guardianId) {
+  editingGuardianId = guardianId;
+  const container = document.getElementById('guardian-form-container');
+  const title     = document.getElementById('guardian-form-title');
+  const fields    = ['first_name','last_name','relationship','is_primary','email','receives_emails','phone','alt_phone'];
+
+  if (guardianId) {
+    const g = guardiansData.find(g => g.guardian_id === guardianId);
+    if (g) {
+      fields.forEach(f => {
+        const el = document.getElementById('gf-' + f);
+        if (el) el.value = g[f] || '';
+      });
+    }
+    title.textContent = 'Edit guardian';
+  } else {
+    fields.forEach(f => {
+      const el = document.getElementById('gf-' + f);
+      if (el) el.value = f === 'receives_emails' ? 'true' : f === 'is_primary' ? (guardiansData.length === 0 ? 'true' : 'false') : '';
+    });
+    title.textContent = 'Add guardian';
+  }
+  container.style.display = 'block';
+  container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeGuardianForm() {
+  document.getElementById('guardian-form-container').style.display = 'none';
+  editingGuardianId = null;
+}
+
+async function saveGuardian() {
+  const first = document.getElementById('gf-first_name').value.trim();
+  const last  = document.getElementById('gf-last_name').value.trim();
+  if (!first || !last) { toast('First and last name are required.', 'error'); return; }
+
+  const record = { guardian_id: editingGuardianId || '', student_id: guardianStudentId };
+  ['first_name','last_name','relationship','is_primary','email','receives_emails','phone','alt_phone'].forEach(f => {
+    record[f] = document.getElementById('gf-' + f).value;
+  });
+
+  try {
+    const result = await apiCall({ action: 'save_guardian', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingGuardianId ? 'Guardian updated!' : 'Guardian added!', 'success');
+      closeGuardianForm();
+      // Reload guardians
+      const data = await apiCall({ action: 'get_guardians' });
+      guardiansData = (data.data || []).filter(g => g.student_id === guardianStudentId);
+      renderGuardianList();
+    } else {
+      toast('Error: ' + (result.error || 'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Could not save guardian.', 'error');
+  }
+}
+
+async function setPrimaryGuardian(guardianId) {
+  // Set all others to false, this one to true
+  try {
+    for (const g of guardiansData) {
+      const isPrimary = g.guardian_id === guardianId ? 'true' : 'false';
+      await apiCall({ action: 'save_guardian', record: JSON.stringify({ ...g, is_primary: isPrimary }) });
+    }
+    toast('Primary contact updated!', 'success');
+    const data = await apiCall({ action: 'get_guardians' });
+    guardiansData = (data.data || []).filter(g => g.student_id === guardianStudentId);
+    renderGuardianList();
+  } catch(e) {
+    toast('Could not update primary contact.', 'error');
+  }
+}
+
+async function deleteGuardian(guardianId) {
+  if (!confirm('Remove this guardian? This cannot be undone.')) return;
+  try {
+    await apiCall({ action: 'save_guardian', record: JSON.stringify({
+      guardian_id: guardianId,
+      student_id: guardianStudentId,
+      status: 'deleted',
+      first_name: '_deleted_', last_name: '_deleted_',
+      email: '', phone: ''
+    })});
+    toast('Guardian removed.', 'info');
+    const data = await apiCall({ action: 'get_guardians' });
+    guardiansData = (data.data || []).filter(g => g.student_id === guardianStudentId);
+    renderGuardianList();
+  } catch(e) {
+    toast('Could not remove guardian.', 'error');
+  }
+}
+
+function closeGuardianModal() {
+  const backdrop = document.getElementById('guardian-modal-backdrop');
+  if (backdrop) backdrop.classList.remove('open');
+}
 
 // ════════════════════════════════════════════════════════════
 //  YEAR SELECTOR
