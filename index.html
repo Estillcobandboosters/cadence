@@ -591,7 +591,7 @@ function signOut() {
 }
 
 // ── Show App ───────────────────────────────────────────────
-function showApp() {
+async function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').classList.add('visible');
 
@@ -599,13 +599,14 @@ function showApp() {
   document.getElementById('user-name').textContent  = u.name || u.email;
   document.getElementById('user-role').textContent  = u.role;
   document.getElementById('user-avatar').textContent = (u.name || u.email).charAt(0).toUpperCase();
-  // Build year selector from all years in roster, default to CONFIG.SCHOOL_YEAR
-  state.selectedYear = CONFIG.SCHOOL_YEAR;
-  initYearSelector();
 
   if (u.role === 'admin') {
     document.getElementById('admin-nav').style.display = 'block';
   }
+
+  // Set default year then init selector (await so year is ready before navigating)
+  state.selectedYear = CONFIG.SCHOOL_YEAR;
+  await initYearSelector();
 
   navigate('dashboard');
 }
