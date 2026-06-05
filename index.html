@@ -994,7 +994,529 @@ async function deleteStudent() {
 }
 
 // Placeholder renderers for other modules
-function renderFees()        { placeholderPage('page-fees',        'Fees &amp; Dues',     'Finance module — Phase 2'); }
+// ════════════════════════════════════════════════════════════
+//  FEES & DUES — Full module
+// ════════════════════════════════════════════════════════════
+let feesData = { fees: [], students: [], payments: [] };
+let feesView = 'overview'; // overview | student
+
+async function renderFees() {
+  const el = document.getElementById('page-fees');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading fees...</div>';
+  try {
+    const [feesRes, studentsRes, paymentsRes] = await Promise.all([
+      apiCall({ action: 'get_fees' }),
+      apiCall({ action: 'get_students' }),
+      apiCall({ action: 'get_payments' })
+    ]);
+    feesData.fees     = feesRes.data || [];
+    feesData.students = (studentsRes.data || []).filter(s => s.school_year === state.selectedYear && s.status === 'active');
+    feesData.payments = paymentsRes.data || [];
+    renderFeesOverview();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load fees.</div></div>';
+  }
+}
+
+function renderFeesOverview() {
+  const el = document.getElementById('page-fees');
+  const yearFees = feesData.fees.filter(f => {
+    const s = feesData.students.find(st => st.student_id === f.student_id);
+    return s || feesData.students.length === 0;
+  });
+
+  // Build per-student summary
+  const studentSummary = feesData.students.map(s => {
+    const sFees = feesData.fees.filter(f => f.student_id === s.student_id);
+    const totalDue  = sFees.reduce((sum, f) => sum + parseFloat(f.amount_due  || 0), 0);
+    const totalPaid = sFees.reduce((sum, f) => sum + parseFloat(f.amount_paid || 0), 0);
+    const balance   = totalDue - totalPaid;
+    return { ...s, totalDue, totalPaid, balance, feeCount: sFees.length };
+  }).sort((a, b) => b.balance - a.balance);
+
+  const totalOwed  = studentSummary.reduce((s, x) => s + x.balance, 0);
+  const totalPaid  = studentSummary.reduce((s, x) => s + x.totalPaid, 0);
+  const unpaidCount = studentSummary.filter(s => s.balance > 0).length;
+
+  el.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div class="stat-card accent">
+        <div class="stat-label">Total collected</div>
+        <div class="stat-value">$${totalPaid.toFixed(2)}</div>
+        <div class="stat-sub">${CONFIG.SCHOOL_YEAR}</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-label">Outstanding</div>
+        <div class="stat-value">$${totalOwed.toFixed(2)}</div>
+        <div class="stat-sub">${unpaidCount} student${unpaidCount!==1?'s':''} with balance</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Fully paid</div>
+        <div class="stat-value">${studentSummary.filter(s=>s.balance<=0&&s.feeCount>0).length}</div>
+        <div class="stat-sub">students</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Total fees</div>
+        <div class="stat-value">${feesData.fees.length}</div>
+        <div class="stat-sub">fee records</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Student fee summary</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-secondary" onclick="openBulkFeeModal()">+ Bulk assign fee</button>
+          <button class="btn btn-sm btn-primary" onclick="openFeeModal()">+ Add fee</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        ${studentSummary.length === 0
+          ? `<div class="empty-state">
+               <div class="empty-state-icon">$</div>
+               <div class="empty-state-text">No students found for ${CONFIG.SCHOOL_YEAR}. Add students to the roster first.</div>
+             </div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr><th>Name</th><th>Grade</th><th>Section</th><th>Fees</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                ${studentSummary.map(s => `
+                  <tr>
+                    <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                    <td>${s.grade}</td>
+                    <td>${s.section||'—'}</td>
+                    <td>${s.feeCount}</td>
+                    <td>$${s.totalDue.toFixed(2)}</td>
+                    <td>$${s.totalPaid.toFixed(2)}</td>
+                    <td><strong>${s.balance > 0 ? '$'+s.balance.toFixed(2) : '—'}</strong></td>
+                    <td><span class="badge ${s.feeCount===0?'badge-gray':s.balance<=0?'badge-green':s.totalPaid>0?'badge-blue':'badge-red'}">
+                      ${s.feeCount===0?'no fees':s.balance<=0?'paid':s.totalPaid>0?'partial':'unpaid'}
+                    </span></td>
+                    <td style="text-align:right;display:flex;gap:6px;justify-content:flex-end;">
+                      <button class="btn btn-sm btn-secondary" onclick="openFeeModal(null,'${s.student_id}')">+ Fee</button>
+                      <button class="btn btn-sm btn-primary" onclick="openStudentFeeDetail('${s.student_id}')">View</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>
+
+    <!-- Add/Edit Fee Modal -->
+    <div class="modal-backdrop" id="fee-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="fee-modal-title">Add fee</div>
+          <button class="modal-close" onclick="closeFeeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Student</label>
+              <select class="form-select" id="ff-student_id">
+                <option value="">Select student</option>
+                ${feesData.students.map(s=>`<option value="${s.student_id}">${s.first_name} ${s.last_name} (${s.grade})</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fee type</label>
+              <select class="form-select" id="ff-fee_type" onchange="feeTypeChanged(this.value)">
+                <option value="">Select type</option>
+                <option value="Band Dues">Band Dues</option>
+                <option value="Uniform Deposit">Uniform Deposit</option>
+                <option value="Trip Fee">Trip Fee</option>
+                <option value="Equipment Fee">Equipment Fee</option>
+                <option value="Fundraiser">Fundraiser</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Amount due ($)</label>
+              <input class="form-input" id="ff-amount_due" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description</label>
+              <input class="form-input" id="ff-description" placeholder="e.g. 2026-2027 Band Dues"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Due date</label>
+              <input class="form-input" id="ff-due_date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="ff-status">
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="waived">Waived</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="ff-notes" placeholder="Optional notes..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeFeeModal()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-fee-btn" style="display:none;margin-right:auto;" onclick="deleteFee()">Delete fee</button>
+          <button class="btn btn-primary" onclick="saveFee()">Save fee</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk Fee Modal -->
+    <div class="modal-backdrop" id="bulk-fee-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Bulk assign fee to all students</div>
+          <button class="modal-close" onclick="closeBulkFeeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="background:var(--blue-pale);border:1px solid var(--blue-mid);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--blue-dark);margin-bottom:16px;">
+            This will create a fee record for every active student in ${CONFIG.SCHOOL_YEAR}.
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Fee type</label>
+              <select class="form-select" id="bf-fee_type" onchange="bulkFeeTypeChanged(this.value)">
+                <option value="">Select type</option>
+                <option value="Band Dues">Band Dues</option>
+                <option value="Uniform Deposit">Uniform Deposit</option>
+                <option value="Trip Fee">Trip Fee</option>
+                <option value="Equipment Fee">Equipment Fee</option>
+                <option value="Fundraiser">Fundraiser</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Amount due ($)</label>
+              <input class="form-input" id="bf-amount_due" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description</label>
+              <input class="form-input" id="bf-description" placeholder="e.g. 2026-2027 Band Dues"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Due date</label>
+              <input class="form-input" id="bf-due_date" type="date"/>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeBulkFeeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveBulkFee()">Assign to all ${feesData.students.length} students</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Student Fee Detail Modal -->
+    <div class="modal-backdrop" id="student-fee-modal">
+      <div class="modal" style="width:680px;">
+        <div class="modal-header">
+          <div class="modal-title" id="student-fee-title">Student fees</div>
+          <button class="modal-close" onclick="closeStudentFeeDetail()">&times;</button>
+        </div>
+        <div class="modal-body" id="student-fee-body"></div>
+      </div>
+    </div>
+
+    <!-- Record Payment Modal -->
+    <div class="modal-backdrop" id="payment-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Record payment</div>
+          <button class="modal-close" onclick="closePaymentModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="payment-fee-info" style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;margin-bottom:16px;font-size:13px;"></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Amount ($)</label>
+              <input class="form-input" id="pf-amount" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Payment date</label>
+              <input class="form-input" id="pf-payment_date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Method</label>
+              <select class="form-select" id="pf-method">
+                <option value="cash">Cash</option>
+                <option value="check">Check</option>
+                <option value="card">Card</option>
+                <option value="online">Online</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Check # (if applicable)</label>
+              <input class="form-input" id="pf-check_number" placeholder="Check number"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="pf-notes" placeholder="Optional notes..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closePaymentModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="savePaymentRecord()">Record payment</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Fee type default amounts
+const FEE_DEFAULTS = {
+  'Band Dues': { amount: '150.00', desc: `${CONFIG ? CONFIG.SCHOOL_YEAR : ''} Band Dues` },
+  'Uniform Deposit': { amount: '50.00', desc: 'Uniform deposit' },
+  'Trip Fee': { amount: '0.00', desc: 'Trip fee' },
+  'Equipment Fee': { amount: '25.00', desc: 'Equipment fee' },
+};
+
+function feeTypeChanged(val) {
+  const d = FEE_DEFAULTS[val];
+  if (d) {
+    document.getElementById('ff-amount_due').value = d.amount;
+    document.getElementById('ff-description').value = d.desc;
+  }
+}
+
+function bulkFeeTypeChanged(val) {
+  const d = FEE_DEFAULTS[val];
+  if (d) {
+    document.getElementById('bf-amount_due').value = d.amount;
+    document.getElementById('bf-description').value = d.desc;
+  }
+}
+
+let editingFeeId = null;
+let paymentFeeId = null;
+let paymentStudentId = null;
+
+function openFeeModal(fee, preselectedStudentId) {
+  editingFeeId = null;
+  const fields = ['student_id','fee_type','amount_due','description','due_date','status','notes'];
+  fields.forEach(f => {
+    const el = document.getElementById('ff-' + f);
+    if (el) el.value = fee ? (fee[f] || '') : (f === 'status' ? 'unpaid' : '');
+  });
+  if (preselectedStudentId) document.getElementById('ff-student_id').value = preselectedStudentId;
+  if (fee) {
+    editingFeeId = fee.fee_id;
+    document.getElementById('fee-modal-title').textContent = 'Edit fee';
+    document.getElementById('delete-fee-btn').style.display = 'inline-flex';
+  } else {
+    document.getElementById('fee-modal-title').textContent = 'Add fee';
+    document.getElementById('delete-fee-btn').style.display = 'none';
+  }
+  document.getElementById('fee-modal').classList.add('open');
+}
+
+function closeFeeModal() { document.getElementById('fee-modal').classList.remove('open'); }
+function closeBulkFeeModal() { document.getElementById('bulk-fee-modal').classList.remove('open'); }
+function closeStudentFeeDetail() { document.getElementById('student-fee-modal').classList.remove('open'); }
+function closePaymentModal() { document.getElementById('payment-modal').classList.remove('open'); }
+
+function openBulkFeeModal() {
+  ['fee_type','amount_due','description','due_date'].forEach(f => {
+    const el = document.getElementById('bf-' + f);
+    if (el) el.value = '';
+  });
+  document.getElementById('bulk-fee-modal').classList.add('open');
+}
+
+async function saveFee() {
+  const studentId = document.getElementById('ff-student_id').value;
+  const feeType   = document.getElementById('ff-fee_type').value;
+  const amount    = document.getElementById('ff-amount_due').value;
+  if (!studentId) { toast('Please select a student.', 'error'); return; }
+  if (!feeType)   { toast('Please select a fee type.', 'error'); return; }
+  if (!amount)    { toast('Please enter an amount.', 'error'); return; }
+  const record = { fee_id: editingFeeId || '' };
+  ['student_id','fee_type','amount_due','description','due_date','status','notes'].forEach(f => {
+    record[f] = document.getElementById('ff-' + f).value;
+  });
+  record.amount_paid = record.amount_paid || '0';
+  record.balance     = (parseFloat(record.amount_due) - parseFloat(record.amount_paid || 0)).toFixed(2);
+  try {
+    const result = await apiCall({ action: 'save_fee', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingFeeId ? 'Fee updated!' : 'Fee added!', 'success');
+      closeFeeModal();
+      await renderFees();
+    } else { toast('Error: ' + (result.error || 'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save fee.', 'error'); }
+}
+
+async function deleteFee() {
+  if (!editingFeeId) return;
+  if (!confirm('Delete this fee record? This cannot be undone.')) return;
+  try {
+    const result = await apiCall({ action: 'save_fee', record: JSON.stringify({ fee_id: editingFeeId, status: 'deleted' }) });
+    toast('Fee deleted.', 'info');
+    closeFeeModal();
+    await renderFees();
+  } catch(e) { toast('Could not delete fee.', 'error'); }
+}
+
+async function saveBulkFee() {
+  const feeType = document.getElementById('bf-fee_type').value;
+  const amount  = document.getElementById('bf-amount_due').value;
+  const desc    = document.getElementById('bf-description').value;
+  const dueDate = document.getElementById('bf-due_date').value;
+  if (!feeType || !amount) { toast('Fee type and amount are required.', 'error'); return; }
+  try {
+    let created = 0;
+    for (const s of feesData.students) {
+      const record = {
+        fee_id: '', student_id: s.student_id,
+        fee_type: feeType, description: desc,
+        amount_due: amount, amount_paid: '0',
+        balance: amount, due_date: dueDate,
+        status: 'unpaid', notes: ''
+      };
+      await apiCall({ action: 'save_fee', record: JSON.stringify(record) });
+      created++;
+    }
+    toast(`Fee assigned to ${created} students!`, 'success');
+    closeBulkFeeModal();
+    await renderFees();
+  } catch(e) { toast('Error assigning fees.', 'error'); }
+}
+
+function openStudentFeeDetail(studentId) {
+  const student  = feesData.students.find(s => s.student_id === studentId);
+  const sFees    = feesData.fees.filter(f => f.student_id === studentId);
+  const sPayments = feesData.payments.filter(p => p.student_id === studentId);
+  if (!student) return;
+
+  const totalDue  = sFees.reduce((s, f) => s + parseFloat(f.amount_due  || 0), 0);
+  const totalPaid = sFees.reduce((s, f) => s + parseFloat(f.amount_paid || 0), 0);
+  const balance   = totalDue - totalPaid;
+
+  document.getElementById('student-fee-title').textContent = student.first_name + ' ' + student.last_name + ' — Fees';
+  document.getElementById('student-fee-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;text-align:center;">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.06em;">Total due</div>
+        <div style="font-size:24px;font-weight:600;">$${totalDue.toFixed(2)}</div>
+      </div>
+      <div style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;text-align:center;">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.06em;">Paid</div>
+        <div style="font-size:24px;font-weight:600;color:var(--success);">$${totalPaid.toFixed(2)}</div>
+      </div>
+      <div style="background:${balance>0?'#FFEBEE':'#E8F5E9'};border:1px solid ${balance>0?'#FFCDD2':'#C8E6C9'};border-radius:var(--radius);padding:12px;text-align:center;">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.06em;">Balance</div>
+        <div style="font-size:24px;font-weight:600;color:${balance>0?'var(--danger)':'var(--success)'};">${balance>0?'$'+balance.toFixed(2):'Paid in full'}</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:500;">Fee records</div>
+        <button class="btn btn-sm btn-secondary" onclick="closeStudentFeeDetail();openFeeModal(null,'${studentId}')">+ Add fee</button>
+      </div>
+      ${sFees.length === 0
+        ? '<div style="color:var(--gray-500);font-size:13px;padding:12px 0;">No fees assigned yet.</div>'
+        : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="border-bottom:1px solid var(--gray-200);">
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Type</th>
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Description</th>
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Due</th>
+              <th style="text-align:right;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Amount</th>
+              <th style="text-align:right;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Paid</th>
+              <th style="text-align:right;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Balance</th>
+              <th style="padding:8px;"></th>
+            </tr></thead>
+            <tbody>
+              ${sFees.map(f => `
+                <tr style="border-bottom:1px solid var(--gray-100);">
+                  <td style="padding:8px;"><span class="badge badge-blue">${f.fee_type}</span></td>
+                  <td style="padding:8px;">${f.description||'—'}</td>
+                  <td style="padding:8px;">${f.due_date||'—'}</td>
+                  <td style="padding:8px;text-align:right;">$${parseFloat(f.amount_due||0).toFixed(2)}</td>
+                  <td style="padding:8px;text-align:right;">$${parseFloat(f.amount_paid||0).toFixed(2)}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600;color:${parseFloat(f.balance||0)>0?'var(--danger)':'var(--success)'};">
+                    ${parseFloat(f.balance||0)>0?'$'+parseFloat(f.balance).toFixed(2):'✓'}
+                  </td>
+                  <td style="padding:8px;text-align:right;display:flex;gap:4px;justify-content:flex-end;">
+                    ${parseFloat(f.balance||0)>0?`<button class="btn btn-sm btn-primary" onclick="openPaymentModal('${f.fee_id}','${studentId}',${parseFloat(f.balance||0).toFixed(2)},'${f.fee_type}')">Pay</button>`:''}
+                    <button class="btn btn-sm btn-secondary" onclick="closeStudentFeeDetail();openFeeModal(${JSON.stringify(f).replace(/"/g,"'")})">Edit</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`
+      }
+    </div>
+
+    <div>
+      <div style="font-size:14px;font-weight:500;margin-bottom:8px;">Payment history</div>
+      ${sPayments.length === 0
+        ? '<div style="color:var(--gray-500);font-size:13px;">No payments recorded yet.</div>'
+        : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="border-bottom:1px solid var(--gray-200);">
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Receipt</th>
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Date</th>
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Method</th>
+              <th style="text-align:left;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Check #</th>
+              <th style="text-align:right;padding:8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Amount</th>
+            </tr></thead>
+            <tbody>
+              ${sPayments.map(p=>`
+                <tr style="border-bottom:1px solid var(--gray-100);">
+                  <td style="padding:8px;font-family:monospace;font-size:12px;">${p.receipt_num||'—'}</td>
+                  <td style="padding:8px;">${p.payment_date||'—'}</td>
+                  <td style="padding:8px;text-transform:capitalize;">${p.method||'—'}</td>
+                  <td style="padding:8px;">${p.check_number||'—'}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600;color:var(--success);">$${parseFloat(p.amount||0).toFixed(2)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`
+      }
+    </div>`;
+  document.getElementById('student-fee-modal').classList.add('open');
+}
+
+function openPaymentModal(feeId, studentId, balance, feeType) {
+  paymentFeeId = feeId;
+  paymentStudentId = studentId;
+  document.getElementById('payment-fee-info').innerHTML =
+    `<strong>${feeType}</strong> &nbsp;·&nbsp; Balance remaining: <strong style="color:var(--danger)">$${parseFloat(balance).toFixed(2)}</strong>`;
+  document.getElementById('pf-amount').value = parseFloat(balance).toFixed(2);
+  document.getElementById('pf-payment_date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('pf-method').value = 'cash';
+  document.getElementById('pf-check_number').value = '';
+  document.getElementById('pf-notes').value = '';
+  document.getElementById('payment-modal').classList.add('open');
+}
+
+async function savePaymentRecord() {
+  const amount = document.getElementById('pf-amount').value;
+  const date   = document.getElementById('pf-payment_date').value;
+  if (!amount || parseFloat(amount) <= 0) { toast('Please enter a valid amount.', 'error'); return; }
+  if (!date) { toast('Please enter a payment date.', 'error'); return; }
+  const record = {
+    payment_id: '',
+    fee_id:     paymentFeeId,
+    student_id: paymentStudentId,
+    amount:     amount,
+    payment_date: date,
+    method:       document.getElementById('pf-method').value,
+    check_number: document.getElementById('pf-check_number').value,
+    notes:        document.getElementById('pf-notes').value,
+    recorded_by:  state.user ? state.user.email : ''
+  };
+  try {
+    const result = await apiCall({ action: 'save_payment', record: JSON.stringify(record) });
+    if (result.success) {
+      toast('Payment recorded! Receipt: ' + (result.receipt || ''), 'success');
+      closePaymentModal();
+      closeStudentFeeDetail();
+      await renderFees();
+    } else { toast('Error: ' + (result.error || 'Unknown'), 'error'); }
+  } catch(e) { toast('Could not record payment.', 'error'); }
+}
 function renderAttendance()  { placeholderPage('page-attendance',  'Attendance',          'Attendance module — Phase 2'); }
 function renderInventory(t) {
   const pageId = t === 'Uniform' ? 'page-uniforms' : 'page-instruments';
