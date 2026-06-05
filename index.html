@@ -1791,9 +1791,526 @@ async function saveAllAttendance() {
     status.style.color = 'var(--danger)';
   }
 }
-function renderInventory(t) {
-  const pageId = t === 'Uniform' ? 'page-uniforms' : 'page-instruments';
-  placeholderPage(pageId, t + ' inventory', 'Inventory module — coming soon!');
+// ════════════════════════════════════════════════════════════
+//  INVENTORY — Uniforms & Instruments
+// ════════════════════════════════════════════════════════════
+let inventoryData = { items: [], assignments: [], students: [] };
+let inventoryType = 'Uniform';
+let inventoryFilter = { search: '', status: '', size: '' };
+let editingItemId = null;
+let editingAssignId = null;
+
+async function renderInventory(type) {
+  inventoryType = type;
+  const pageId = type === 'Uniform' ? 'page-uniforms' : 'page-instruments';
+  const el = document.getElementById(pageId);
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading ' + type.toLowerCase() + ' inventory...</div>';
+  try {
+    const [itemsRes, assignRes, studentsRes] = await Promise.all([
+      apiCall({ action: 'get_inventory' }),
+      apiCall({ action: 'get_assignments' }),
+      apiCall({ action: 'get_students' })
+    ]);
+    inventoryData.items       = (itemsRes.data || []).filter(i => i.type === type);
+    inventoryData.assignments = assignRes.data || [];
+    inventoryData.students    = (studentsRes.data || []).filter(s => s.school_year === state.selectedYear && s.status === 'active');
+    renderInventoryTable(pageId);
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load inventory.</div></div>';
+  }
+}
+
+function renderInventoryTable(pageId) {
+  const el       = document.getElementById(pageId);
+  const items    = inventoryData.items;
+  const assigned = inventoryData.assignments;
+  const students = inventoryData.students;
+  const type     = inventoryType;
+
+  const sizes = [...new Set(items.map(i => i.size).filter(Boolean))].sort();
+
+  let filtered = items.filter(i => {
+    const q = inventoryFilter.search.toLowerCase();
+    const matchSearch = !q || (i.number||'').toLowerCase().includes(q) || (i.description||'').toLowerCase().includes(q) || (i.size||'').toLowerCase().includes(q);
+    const matchStatus = !inventoryFilter.status || i.status === inventoryFilter.status;
+    const matchSize   = !inventoryFilter.size   || i.size   === inventoryFilter.size;
+    return matchSearch && matchStatus && matchSize;
+  });
+
+  const totalItems    = items.length;
+  const availItems    = items.filter(i => i.status === 'available').length;
+  const assignedItems = items.filter(i => i.status === 'assigned').length;
+  const repairItems   = items.filter(i => i.status === 'repair').length;
+
+  el.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+      <div class="stat-card accent">
+        <div class="stat-label">Total ${type}s</div>
+        <div class="stat-value">${totalItems}</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Available</div>
+        <div class="stat-value">${availItems}</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-label">Checked out</div>
+        <div class="stat-value">${assignedItems}</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-label">In repair</div>
+        <div class="stat-value">${repairItems}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <input class="form-input" style="max-width:220px;" placeholder="Search number, size, description..."
+        value="${inventoryFilter.search}" oninput="inventoryFilter.search=this.value;renderInventoryTable('${pageId}')"/>
+      <select class="form-select" style="max-width:140px;" onchange="inventoryFilter.status=this.value;renderInventoryTable('${pageId}')">
+        <option value="">All statuses</option>
+        <option value="available" ${inventoryFilter.status==='available'?'selected':''}>Available</option>
+        <option value="assigned"  ${inventoryFilter.status==='assigned' ?'selected':''}>Assigned</option>
+        <option value="repair"    ${inventoryFilter.status==='repair'   ?'selected':''}>In repair</option>
+        <option value="retired"   ${inventoryFilter.status==='retired'  ?'selected':''}>Retired</option>
+      </select>
+      ${sizes.length > 0 ? `
+      <select class="form-select" style="max-width:120px;" onchange="inventoryFilter.size=this.value;renderInventoryTable('${pageId}')">
+        <option value="">All sizes</option>
+        ${sizes.map(s=>`<option value="${s}" ${inventoryFilter.size===s?'selected':''}>${s}</option>`).join('')}
+      </select>` : ''}
+      <span style="color:var(--gray-500);font-size:13px;margin-left:auto;">${filtered.length} item${filtered.length!==1?'s':''}</span>
+      <button class="btn btn-sm btn-secondary" onclick="openBulkAddModal()">+ Bulk add</button>
+      <button class="btn btn-sm btn-secondary" onclick="printInventoryLabels()">&#127991; Print labels</button>
+      <button class="btn btn-sm btn-primary" onclick="openItemForm()">+ Add item</button>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0;">
+        ${filtered.length === 0
+          ? `<div class="empty-state">
+               <div class="empty-state-icon">${type==='Uniform'?'&#9651;':'&#9834;'}</div>
+               <div class="empty-state-text">No ${type.toLowerCase()}s found. Add your inventory!</div>
+             </div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr>
+                <th>#</th>
+                <th>Description</th>
+                <th>Size</th>
+                <th>Condition</th>
+                <th>Status</th>
+                <th>Assigned to</th>
+                <th>Since</th>
+                <th></th>
+              </tr></thead>
+              <tbody>
+                ${filtered.map(item => {
+                  const activeAssign = assigned.find(a => a.item_id === item.item_id && !a.returned_date);
+                  const student = activeAssign ? students.find(s => s.student_id === activeAssign.student_id) : null;
+                  return `<tr>
+                    <td><strong>${item.number||'—'}</strong></td>
+                    <td>${item.description||'—'}${item.color?` <span style="font-size:11px;color:var(--gray-500);">${item.color}</span>`:''}</td>
+                    <td>${item.size||'—'}</td>
+                    <td><span class="badge ${item.condition==='good'||item.condition==='Good'?'badge-green':item.condition==='fair'||item.condition==='Fair'?'badge-blue':'badge-red'}">${item.condition||'—'}</span></td>
+                    <td><span class="badge ${item.status==='available'?'badge-green':item.status==='assigned'?'badge-blue':item.status==='repair'?'badge-red':'badge-gray'}">${item.status||'—'}</span></td>
+                    <td>${student ? `<strong>${student.first_name} ${student.last_name}</strong>` : '—'}</td>
+                    <td style="font-size:12px;">${activeAssign ? formatDate(activeAssign.assigned_date) : '—'}</td>
+                    <td style="text-align:right;white-space:nowrap;">
+                      ${item.status==='available'
+                        ? `<button class="btn btn-sm btn-primary" onclick="openCheckoutModal('${item.item_id}')">Check out</button>`
+                        : item.status==='assigned'
+                        ? `<button class="btn btn-sm btn-secondary" onclick="openCheckinModal('${item.item_id}','${activeAssign?activeAssign.assign_id:''}')">Check in</button>`
+                        : ''}
+                      <button class="btn btn-sm btn-secondary" onclick="openItemForm(${JSON.stringify(item).split('"').join('&quot;')})">Edit</button>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody></table></div>`
+        }
+      </div>
+    </div>
+
+    <!-- Add/Edit Item Modal -->
+    <div class="modal-backdrop" id="item-form-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="item-form-title">Add ${type}</div>
+          <button class="modal-close" onclick="closeItemForm()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">${type} number *</label>
+              <input class="form-input" id="if-number" placeholder="e.g. U-001, INS-042"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Size</label>
+              <input class="form-input" id="if-size" placeholder="${type==='Uniform'?'e.g. S, M, L, XL':'e.g. 4/4, 3/4'}"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description</label>
+              <input class="form-input" id="if-description" placeholder="${type==='Uniform'?'e.g. Marching uniform jacket':'e.g. Student trumpet, Bach Stradivarius'}"/>
+            </div>
+            ${type==='Uniform' ? `
+            <div class="form-group">
+              <label class="form-label">Color / style</label>
+              <input class="form-input" id="if-color" placeholder="e.g. Royal blue"/>
+            </div>` : `
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="if-category">
+                <option value="Brass">Brass</option>
+                <option value="Woodwind">Woodwind</option>
+                <option value="Percussion">Percussion</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>`}
+            <div class="form-group">
+              <label class="form-label">Condition</label>
+              <select class="form-select" id="if-condition">
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor</option>
+                <option value="New">New</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="if-status">
+                <option value="available">Available</option>
+                <option value="assigned">Assigned</option>
+                <option value="repair">In repair</option>
+                <option value="retired">Retired</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Storage location</label>
+              <input class="form-input" id="if-storage_location" placeholder="e.g. Band room closet, Rack A"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Purchase date</label>
+              <input class="form-input" id="if-purchase_date" type="date"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="if-notes" placeholder="Any additional notes..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeItemForm()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-item-btn" style="display:none;margin-right:auto;" onclick="deleteItem()">Delete</button>
+          <button class="btn btn-primary" onclick="saveItem()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checkout Modal -->
+    <div class="modal-backdrop" id="checkout-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Check out ${type}</div>
+          <button class="modal-close" onclick="document.getElementById('checkout-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="checkout-item-info" style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;margin-bottom:16px;font-size:13px;"></div>
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Assign to student *</label>
+              <select class="form-select" id="co-student_id">
+                <option value="">Select student</option>
+                ${students.map(s=>`<option value="${s.student_id}">${s.first_name} ${s.last_name} (${s.grade} - ${s.section||''})</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date assigned</label>
+              <input class="form-input" id="co-assigned_date" type="date" value="${new Date().toISOString().split('T')[0]}"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Expected return</label>
+              <input class="form-input" id="co-expected_return" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Condition at checkout</label>
+              <select class="form-select" id="co-condition_out">
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Deposit amount ($)</label>
+              <input class="form-input" id="co-deposit_amount" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="co-notes" placeholder="Any notes about condition, special instructions..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('checkout-modal').classList.remove('open')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveCheckout()">Check out</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Check-in Modal -->
+    <div class="modal-backdrop" id="checkin-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Check in ${type}</div>
+          <button class="modal-close" onclick="document.getElementById('checkin-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="checkin-item-info" style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;margin-bottom:16px;font-size:13px;"></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Return date</label>
+              <input class="form-input" id="ci-returned_date" type="date" value="${new Date().toISOString().split('T')[0]}"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Condition on return</label>
+              <select class="form-select" id="ci-condition_in">
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor — needs repair</option>
+                <option value="Damaged">Damaged</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Deposit returned ($)</label>
+              <input class="form-input" id="ci-deposit_returned" type="number" step="0.01" placeholder="0.00"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Notes</label>
+              <textarea class="form-textarea" id="ci-notes" placeholder="Damage notes, missing parts, etc."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('checkin-modal').classList.remove('open')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveCheckin()">Check in</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk Add Modal -->
+    <div class="modal-backdrop" id="bulk-add-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">Bulk add ${type}s</div>
+          <button class="modal-close" onclick="document.getElementById('bulk-add-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="background:var(--blue-pale);border:1px solid var(--blue-mid);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--blue-dark);margin-bottom:16px;">
+            Creates multiple numbered items at once. Numbers will be auto-generated as prefix + sequential number.
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Number prefix</label>
+              <input class="form-input" id="ba-prefix" placeholder="${type==='Uniform'?'U':'INS'}"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Start number</label>
+              <input class="form-input" id="ba-start" type="number" value="1"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">How many to add</label>
+              <input class="form-input" id="ba-count" type="number" value="10" min="1" max="100"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Size</label>
+              <input class="form-input" id="ba-size" placeholder="${type==='Uniform'?'e.g. M':'e.g. 4/4'}"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description</label>
+              <input class="form-input" id="ba-description" placeholder="${type==='Uniform'?'Marching uniform':'Student instrument'}"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Condition</label>
+              <select class="form-select" id="ba-condition">
+                <option value="Good">Good</option>
+                <option value="New">New</option>
+                <option value="Fair">Fair</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="document.getElementById('bulk-add-modal').classList.remove('open')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveBulkAdd()">Add items</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Item form helpers ───────────────────────────────────────
+function openItemForm(item) {
+  editingItemId = null;
+  const fields = ['number','size','description','color','category','condition','status','storage_location','purchase_date','notes'];
+  fields.forEach(f => {
+    const el = document.getElementById('if-' + f);
+    if (el) el.value = item ? (item[f]||'') : (f==='condition'?'Good':f==='status'?'available':'');
+  });
+  if (item) {
+    editingItemId = item.item_id;
+    document.getElementById('item-form-title').textContent = 'Edit ' + inventoryType;
+    document.getElementById('delete-item-btn').style.display = 'inline-flex';
+  } else {
+    document.getElementById('item-form-title').textContent = 'Add ' + inventoryType;
+    document.getElementById('delete-item-btn').style.display = 'none';
+  }
+  document.getElementById('item-form-modal').classList.add('open');
+}
+
+function closeItemForm() { document.getElementById('item-form-modal').classList.remove('open'); }
+
+async function saveItem() {
+  const number = document.getElementById('if-number').value.trim();
+  if (!number) { toast('Item number is required.', 'error'); return; }
+  const record = { item_id: editingItemId||'', type: inventoryType };
+  ['number','size','description','color','category','condition','status','storage_location','purchase_date','notes'].forEach(f => {
+    const el = document.getElementById('if-' + f);
+    if (el) record[f] = el.value;
+  });
+  try {
+    const result = await apiCall({ action: 'save_inventory_item', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingItemId ? 'Item updated!' : 'Item added!', 'success');
+      closeItemForm();
+      await renderInventory(inventoryType);
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save item.', 'error'); }
+}
+
+async function deleteItem() {
+  if (!editingItemId || !confirm('Delete this item?')) return;
+  try {
+    await apiCall({ action: 'save_inventory_item', record: JSON.stringify({ item_id: editingItemId, type: inventoryType, number: '_deleted_', status: 'retired', description: '' }) });
+    toast('Item deleted.', 'info');
+    closeItemForm();
+    await renderInventory(inventoryType);
+  } catch(e) { toast('Could not delete item.', 'error'); }
+}
+
+// ── Checkout ────────────────────────────────────────────────
+let checkoutItemId = null;
+let checkinItemId  = null;
+let checkinAssignId = null;
+
+function openCheckoutModal(itemId) {
+  checkoutItemId = itemId;
+  const item = inventoryData.items.find(i => i.item_id === itemId);
+  if (!item) return;
+  document.getElementById('checkout-item-info').innerHTML =
+    `<strong>${item.type} #${item.number}</strong> &nbsp;·&nbsp; ${item.description||''} &nbsp;·&nbsp; Size: ${item.size||'—'} &nbsp;·&nbsp; Condition: ${item.condition||'—'}`;
+  document.getElementById('co-student_id').value = '';
+  document.getElementById('co-assigned_date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('co-condition_out').value = item.condition||'Good';
+  document.getElementById('co-deposit_amount').value = '';
+  document.getElementById('co-notes').value = '';
+  document.getElementById('checkout-modal').classList.add('open');
+}
+
+async function saveCheckout() {
+  const studentId = document.getElementById('co-student_id').value;
+  if (!studentId) { toast('Please select a student.', 'error'); return; }
+  const record = {
+    assign_id:      '',
+    item_id:        checkoutItemId,
+    student_id:     studentId,
+    assigned_date:  document.getElementById('co-assigned_date').value,
+    expected_return:document.getElementById('co-expected_return').value,
+    condition_out:  document.getElementById('co-condition_out').value,
+    deposit_amount: document.getElementById('co-deposit_amount').value,
+    notes:          document.getElementById('co-notes').value,
+    assigned_by:    state.user ? state.user.email : ''
+  };
+  try {
+    const [assignResult] = await Promise.all([
+      apiCall({ action: 'save_assignment', record: JSON.stringify(record) }),
+      apiCall({ action: 'save_inventory_item', record: JSON.stringify({
+        item_id: checkoutItemId, type: inventoryType,
+        number: inventoryData.items.find(i=>i.item_id===checkoutItemId)?.number||'',
+        status: 'assigned'
+      })})
+    ]);
+    if (assignResult.success) {
+      toast('Checked out successfully!', 'success');
+      document.getElementById('checkout-modal').classList.remove('open');
+      await renderInventory(inventoryType);
+    } else { toast('Error: ' + (assignResult.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not check out item.', 'error'); }
+}
+
+function openCheckinModal(itemId, assignId) {
+  checkinItemId  = itemId;
+  checkinAssignId = assignId;
+  const item    = inventoryData.items.find(i => i.item_id === itemId);
+  const assign  = inventoryData.assignments.find(a => a.assign_id === assignId);
+  const student = assign ? inventoryData.students.find(s => s.student_id === assign.student_id) : null;
+  if (!item) return;
+  document.getElementById('checkin-item-info').innerHTML =
+    `<strong>${item.type} #${item.number}</strong> &nbsp;·&nbsp; ${item.description||''}`
+    + (student ? ` &nbsp;·&nbsp; Checked out to: <strong>${student.first_name} ${student.last_name}</strong>` : '');
+  document.getElementById('ci-returned_date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('ci-condition_in').value = 'Good';
+  document.getElementById('ci-deposit_returned').value = assign ? (assign.deposit_amount||'') : '';
+  document.getElementById('ci-notes').value = '';
+  document.getElementById('checkin-modal').classList.add('open');
+}
+
+async function saveCheckin() {
+  const condIn = document.getElementById('ci-condition_in').value;
+  const retDate = document.getElementById('ci-returned_date').value;
+  const assign = inventoryData.assignments.find(a => a.assign_id === checkinAssignId);
+  if (!assign) { toast('Assignment not found.', 'error'); return; }
+  const updatedAssign = {
+    ...assign,
+    returned_date:    retDate,
+    condition_in:     condIn,
+    deposit_returned: document.getElementById('ci-deposit_returned').value,
+    notes:            (assign.notes||'') + (document.getElementById('ci-notes').value ? ' | Return: ' + document.getElementById('ci-notes').value : '')
+  };
+  const newStatus = condIn === 'Poor' || condIn === 'Damaged' ? 'repair' : 'available';
+  const item = inventoryData.items.find(i => i.item_id === checkinItemId);
+  try {
+    await Promise.all([
+      apiCall({ action: 'save_assignment', record: JSON.stringify(updatedAssign) }),
+      apiCall({ action: 'save_inventory_item', record: JSON.stringify({
+        ...item, status: newStatus, condition: condIn === 'Damaged' ? 'Poor' : item.condition
+      })})
+    ]);
+    toast(newStatus === 'repair' ? 'Checked in — marked for repair.' : 'Checked in successfully!', 'success');
+    document.getElementById('checkin-modal').classList.remove('open');
+    await renderInventory(inventoryType);
+  } catch(e) { toast('Could not check in item.', 'error'); }
+}
+
+// ── Bulk add ────────────────────────────────────────────────
+function openBulkAddModal() { document.getElementById('bulk-add-modal').classList.add('open'); }
+
+async function saveBulkAdd() {
+  const prefix = document.getElementById('ba-prefix').value.trim() || (inventoryType==='Uniform'?'U':'INS');
+  const start  = parseInt(document.getElementById('ba-start').value) || 1;
+  const count  = Math.min(parseInt(document.getElementById('ba-count').value) || 10, 100);
+  const size   = document.getElementById('ba-size').value;
+  const desc   = document.getElementById('ba-description').value;
+  const cond   = document.getElementById('ba-condition').value;
+  try {
+    let created = 0;
+    for (let i = 0; i < count; i++) {
+      const num = String(start + i).padStart(3, '0');
+      await apiCall({ action: 'save_inventory_item', record: JSON.stringify({
+        item_id: '', type: inventoryType,
+        number: `${prefix}-${num}`, size, description: desc,
+        condition: cond, status: 'available', category: ''
+      })});
+      created++;
+    }
+    toast(`Added ${created} ${inventoryType.toLowerCase()}s!`, 'success');
+    document.getElementById('bulk-add-modal').classList.remove('open');
+    await renderInventory(inventoryType);
+  } catch(e) { toast('Error adding items.', 'error'); }
 }
 // ════════════════════════════════════════════════════════════
 //  EVENTS — Full module
@@ -2293,6 +2810,203 @@ async function deleteGuardian(guardianId) {
 function closeGuardianModal() {
   const backdrop = document.getElementById('guardian-modal-backdrop');
   if (backdrop) backdrop.classList.remove('open');
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  INVENTORY LABELS
+// ════════════════════════════════════════════════════════════
+function printInventoryLabels() {
+  const items = inventoryData.items;
+  if (items.length === 0) { toast('No items to print labels for.', 'error'); return; }
+
+  // Show label options modal
+  let backdrop = document.getElementById('label-options-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'label-options-modal';
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Print labels</div>
+        <button class="modal-close" onclick="document.getElementById('label-options-modal').classList.remove('open')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Which items to print</label>
+            <select class="form-select" id="label-filter">
+              <option value="all">All ${items.length} items</option>
+              <option value="available">Available only (${items.filter(i=>i.status==='available').length})</option>
+              <option value="assigned">Assigned only (${items.filter(i=>i.status==='assigned').length})</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Label format</label>
+            <select class="form-select" id="label-format">
+              <option value="avery5160">Avery 5160 (30/sheet)</option>
+              <option value="avery5163">Avery 5163 (10/sheet, larger)</option>
+              <option value="single">Single large label</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Show logo?</label>
+            <select class="form-select" id="label-logo">
+              <option value="yes">Yes</option>
+              <option value="no">No — text only</option>
+            </select>
+          </div>
+        </div>
+        <div style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;margin-top:8px;">
+          <div style="font-size:12px;font-weight:500;margin-bottom:6px;">Label preview</div>
+          <div style="display:inline-block;border:1px solid #ccc;border-radius:4px;padding:6px 10px;font-size:11px;width:160px;background:white;">
+            <div style="font-size:8px;color:#666;margin-bottom:2px;">ESTILL COUNTY BAND</div>
+            <div style="font-size:18px;font-weight:800;letter-spacing:1px;line-height:1;">${inventoryType.toUpperCase()} #001</div>
+            <div style="font-size:9px;color:#333;margin-top:2px;">Marching uniform · Size M</div>
+            <div style="font-family:monospace;font-size:7px;color:#999;margin-top:3px;letter-spacing:2px;">||| || ||| | || |||</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('label-options-modal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" onclick="generateLabels()">Generate &amp; print</button>
+      </div>
+    </div>`;
+  backdrop.classList.add('open');
+}
+
+function generateLabels() {
+  const filterVal  = document.getElementById('label-filter').value;
+  const format     = document.getElementById('label-format').value;
+  const showLogo   = document.getElementById('label-logo').value === 'yes';
+
+  let items = inventoryData.items;
+  if (filterVal !== 'all') items = items.filter(i => i.status === filterVal);
+  if (items.length === 0) { toast('No items match the selected filter.', 'error'); return; }
+
+  document.getElementById('label-options-modal').classList.remove('open');
+
+  // Label dimensions
+  const formats = {
+    avery5160: { cols: 3, rows: 10, w: '2.625in', h: '1in',    pageW: '8.5in', pageH: '11in',  marginT: '0.5in',  marginL: '0.1875in', gap: '0.125in' },
+    avery5163: { cols: 2, rows: 5,  w: '4in',     h: '2in',    pageW: '8.5in', pageH: '11in',  marginT: '0.5in',  marginL: '0.15in',   gap: '0.19in'  },
+    single:    { cols: 1, rows: 1,  w: '4in',     h: '2.5in',  pageW: '8.5in', pageH: '11in',  marginT: '1in',    marginL: '2in',      gap: '0'       }
+  };
+  const fmt = formats[format];
+
+  const labelHTML = items.map(item => {
+    const assigned = inventoryData.assignments.find(a => a.item_id === item.item_id && !a.returned_date);
+    const student  = assigned ? inventoryData.students.find(s => s.student_id === assigned.student_id) : null;
+    // Simple barcode visual
+    const barcode  = Array.from(item.number||'').map(() => Math.random()>0.5?'▐':'▏').join('') + '  ' + (item.number||'');
+
+    return `<div class="label">
+      ${showLogo ? `<img src="${LOGO_DATA_URL}" class="label-logo" alt="ECBB"/>` : ''}
+      <div class="label-number">${item.type.toUpperCase()} #${item.number||'?'}</div>
+      <div class="label-desc">${item.description||''} ${item.size ? '· Size '+item.size : ''}</div>
+      ${student ? `<div class="label-student">&#10003; ${student.first_name} ${student.last_name}</div>` : ''}
+      <div class="label-barcode">${barcode}</div>
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Labels — ${inventoryType}s</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: white;
+    }
+    .label-sheet {
+      width: ${fmt.pageW};
+      margin: 0 auto;
+      padding: ${fmt.marginT} ${fmt.marginL};
+      display: grid;
+      grid-template-columns: repeat(${fmt.cols}, ${fmt.w});
+      grid-auto-rows: ${fmt.h};
+      gap: 0 ${fmt.gap};
+    }
+    .label {
+      width: ${fmt.w};
+      height: ${fmt.h};
+      border: 0.5px dashed #ccc;
+      padding: 5px 7px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+    .label-logo {
+      height: ${format==='avery5160'?'14px':'20px'};
+      width: auto;
+      margin-bottom: 2px;
+      object-fit: contain;
+      object-position: left;
+    }
+    .label-number {
+      font-size: ${format==='avery5160'?'14px':format==='avery5163'?'22px':'28px'};
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      line-height: 1.1;
+      color: #000;
+    }
+    .label-desc {
+      font-size: ${format==='avery5160'?'8px':'10px'};
+      color: #333;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .label-student {
+      font-size: ${format==='avery5160'?'8px':'10px'};
+      color: #1565C0;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+    .label-barcode {
+      font-family: monospace;
+      font-size: ${format==='avery5160'?'6px':'8px'};
+      color: #999;
+      margin-top: 2px;
+      letter-spacing: 0;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    @media print {
+      body { margin: 0; }
+      .label { border-color: transparent; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="padding:16px;background:#f3f4f6;text-align:center;font-family:Arial;font-size:13px;">
+    <strong>${items.length} label${items.length!==1?'s':''}</strong> · Format: ${format} · 
+    <button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">
+      &#128424; Print labels
+    </button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-left:8px;">
+      Close
+    </button>
+  </div>
+  <div class="label-sheet">
+    ${labelHTML}
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
 }
 
 // ════════════════════════════════════════════════════════════
