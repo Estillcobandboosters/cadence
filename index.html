@@ -521,8 +521,8 @@
 <script>
 // ── Config ─────────────────────────────────────────────────
 const CONFIG = {
-  SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec',  // Replace after deploying Apps Script
-  GOOGLE_CLIENT: '559712921969-q245u83327e3v53qkurfe3b0rttkiudc.apps.googleusercontent.com', // Replace with your OAuth client ID
+  SCRIPT_URL:    'YOUR_APPS_SCRIPT_URL_HERE',  // Replace after deploying Apps Script
+  GOOGLE_CLIENT: 'YOUR_GOOGLE_CLIENT_ID_HERE', // Replace with your OAuth client ID
   SCHOOL_YEAR:   '2026-2027'
 };
 
@@ -627,14 +627,16 @@ const PAGE_TITLES = {
 
 function navigate(page) {
   // Hide all pages
-  document.querySelectorAll('[id^="page-"]').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('[id^="page-"]').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
   // Update nav
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const navEl = document.querySelector(`.nav-item[onclick="navigate('${page}')"]`);
   if (navEl) navEl.classList.add('active');
 
   document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
-  document.getElementById('page-' + page).style.display = 'block';
+  const pageEl = document.getElementById('page-' + page);
+  pageEl.style.display = 'block';
+  pageEl.style.minHeight = '200px';
   state.currentPage = page;
 
   // Render
