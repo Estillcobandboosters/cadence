@@ -702,13 +702,46 @@ function setLoading(containerId, msg = 'Loading…') {
 // ════════════════════════════════════════════════════════════
 async function renderDashboard() {
   const el = document.getElementById('page-dashboard');
-  setLoading('page-dashboard', 'Loading dashboard…');
+  setLoading('page-dashboard', 'Loading dashboard...');
   try {
-    const data = await apiCall({ action: 'get_dashboard' }) || {};
-    const _s = data.stats;
-    const s = data.stats || {};
+    const [dashRes, eventsRes, feesRes, volRes] = await Promise.allSettled([
+      apiCall({ action: 'get_dashboard' }),
+      apiCall({ action: 'get_events' }),
+      apiCall({ action: 'get_fees' }),
+      apiCall({ action: 'get_volunteers' })
+    ]);
+
+    const data      = dashRes.status==='fulfilled'   ? (dashRes.value   || {}) : {};
+    const allEvents = eventsRes.status==='fulfilled' ? (eventsRes.value.data || []) : [];
+    const allFees   = feesRes.status==='fulfilled'   ? (feesRes.value.data   || []) : [];
+    const allVols   = volRes.status==='fulfilled'    ? (volRes.value.data    || []) : [];
+
+    const s = data.stats || {
+      active_students: 0, students_with_balance: 0,
+      total_outstanding: '0.00', items_checked_out: 0,
+      missing_forms: 0, upcoming_events: 0
+    };
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const in14  = new Date(today); in14.setDate(today.getDate()+14);
+
+    const upcoming14 = allEvents
+      .filter(e => { const d=new Date(e.date); return d>=today && d<=in14; })
+      .sort((a,b) => new Date(a.date)-new Date(b.date));
+
+    const recentUnpaid = allFees
+      .filter(f => parseFloat(f.balance||0) > 0)
+      .sort((a,b) => parseFloat(b.balance)-parseFloat(a.balance))
+      .slice(0,8);
+
+    const totalFees  = allFees.reduce((s,f)=>s+parseFloat(f.amount_due||0),0);
+    const totalPaid  = allFees.reduce((s,f)=>s+parseFloat(f.amount_paid||0),0);
+    const feesPct    = totalFees>0 ? Math.min(100,Math.round((totalPaid/totalFees)*100)) : 0;
+    const totalVolHours = allVols.reduce((s,v)=>s+parseFloat(v.hours||0),0);
+    const nextEvent  = allEvents.filter(e=>new Date(e.date)>=today).sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+    const daysToNext = nextEvent ? Math.ceil((new Date(nextEvent.date)-today)/(1000*60*60*24)) : null;
+
     el.innerHTML = `
-      <!-- Next event hero banner -->
       ${nextEvent ? `
       <div style="background:var(--blue);border-radius:var(--radius);padding:18px 22px;color:white;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
         <div>
@@ -717,12 +750,11 @@ async function renderDashboard() {
           <div style="font-size:13px;opacity:0.85;margin-top:2px;">${formatDate(nextEvent.date)} ${nextEvent.start_time?'· '+formatTime(nextEvent.start_time):''} ${nextEvent.location?'· '+nextEvent.location:''}</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;" onclick="openAttendanceForEvent('${nextEvent.event_id}')">Take attendance</button>
+          <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;" onclick="navigate('attendance')">Attendance</button>
           <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;" onclick="navigate('events')">All events</button>
         </div>
       </div>` : ''}
 
-      <!-- Key stats -->
       <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
         <div class="stat-card accent" style="cursor:pointer;" onclick="navigate('roster')">
           <div class="stat-label">Active students</div>
@@ -751,23 +783,20 @@ async function renderDashboard() {
         </div>
       </div>
 
-      <!-- Fee collection progress bar -->
       ${totalFees > 0 ? `
       <div class="card">
         <div class="card-body" style="padding:16px 20px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div style="font-size:14px;font-weight:500;">Fee collection progress</div>
-            <div style="font-size:13px;color:var(--gray-500);">$${totalPaid.toFixed(2)} of $${totalFees.toFixed(2)} · <strong style="color:var(--blue);">${feesPct}%</strong></div>
+            <div style="font-size:13px;color:var(--gray-500);">$${totalPaid.toFixed(2)} of $${totalFees.toFixed(2)} &nbsp;·&nbsp; <strong style="color:var(--blue);">${feesPct}%</strong></div>
           </div>
           <div style="height:12px;background:var(--gray-200);border-radius:6px;overflow:hidden;">
-            <div style="height:12px;border-radius:6px;background:${feesPct>=100?'var(--success)':feesPct>=75?'var(--blue)':'var(--warning)'};width:${feesPct}%;transition:width 0.5s;"></div>
+            <div style="height:12px;border-radius:6px;background:${feesPct>=100?'var(--success)':feesPct>=75?'var(--blue)':'var(--warning)'};width:${feesPct}%;"></div>
           </div>
         </div>
       </div>` : ''}
 
-      <!-- Two-column layout -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-        <!-- Upcoming 14 days -->
         <div class="card">
           <div class="card-header">
             <div class="card-title">Next 14 days</div>
@@ -780,23 +809,22 @@ async function renderDashboard() {
                   const d = new Date(e.date);
                   const isToday = d.toDateString()===today.toDateString();
                   const daysAway = Math.ceil((d-today)/(1000*60*60*24));
-                  return '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--gray-100);">'+
-                    '<div style="min-width:42px;text-align:center;background:'+(isToday?'var(--blue)':'var(--gray-100)')+';border-radius:6px;padding:4px 6px;">'+
-                      '<div style="font-size:10px;color:'+(isToday?'rgba(255,255,255,0.8)':'var(--gray-500)')+';text-transform:uppercase;">'+d.toLocaleDateString('en-US',{month:'short'})+'</div>'+
-                      '<div style="font-size:16px;font-weight:700;color:'+(isToday?'white':'var(--gray-900)')+';">'+d.getDate()+'</div>'+
-                    '</div>'+
-                    '<div style="flex:1;">'+
-                      '<div style="font-size:13px;font-weight:500;">'+ e.title+'</div>'+
-                      '<div style="font-size:11px;color:var(--gray-500);">'+(e.start_time?formatTime(e.start_time)+' ':'')+( e.location||'')+'</div>'+
-                    '</div>'+
-                    '<span class="badge badge-blue" style="font-size:10px;">'+(e.event_type||'Event')+'</span>'+
+                  return '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--gray-100);">' +
+                    '<div style="min-width:42px;text-align:center;background:'+(isToday?'var(--blue)':'var(--gray-100)')+';border-radius:6px;padding:4px 6px;">' +
+                      '<div style="font-size:10px;color:'+(isToday?'rgba(255,255,255,0.8)':'var(--gray-500)')+';text-transform:uppercase;">'+d.toLocaleDateString('en-US',{month:'short'})+'</div>' +
+                      '<div style="font-size:16px;font-weight:700;color:'+(isToday?'white':'var(--gray-900)')+';">'+d.getDate()+'</div>' +
+                    '</div>' +
+                    '<div style="flex:1;">' +
+                      '<div style="font-size:13px;font-weight:500;">'+e.title+'</div>' +
+                      '<div style="font-size:11px;color:var(--gray-500);">'+(e.start_time?formatTime(e.start_time)+' ':'')+( e.location||'')+'</div>' +
+                    '</div>' +
+                    '<span class="badge badge-blue" style="font-size:10px;">'+(e.event_type||'Event')+'</span>' +
                   '</div>';
                 }).join('')
             }
           </div>
         </div>
 
-        <!-- Outstanding balances -->
         <div class="card">
           <div class="card-header">
             <div class="card-title">Top outstanding balances</div>
@@ -807,20 +835,22 @@ async function renderDashboard() {
               ? '<div class="empty-state" style="padding:24px;"><div class="empty-state-icon" style="font-size:24px;">&#9745;</div><div class="empty-state-text">All caught up!</div></div>'
               : recentUnpaid.map(f => {
                   const bal = parseFloat(f.balance||0);
-                  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--gray-100);">'+
-                    '<div style="flex:1;">'+
-                      '<div style="font-size:13px;font-weight:500;">'+(f.student_id||'—')+'</div>'+
-                      '<div style="font-size:11px;color:var(--gray-500);">'+(f.fee_type||'')+(f.description?' · '+f.description:'')+'</div>'+
-                    '</div>'+
-                    '<span class="badge badge-red">$'+bal.toFixed(2)+'</span>'+
+                  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--gray-100);">' +
+                    '<div style="flex:1;">' +
+                      '<div style="font-size:13px;font-weight:500;">'+(f.student_id||'—')+'</div>' +
+                      '<div style="font-size:11px;color:var(--gray-500);">'+(f.fee_type||'')+(f.description?' · '+f.description:'')+'</div>' +
+                    '</div>' +
+                    '<span class="badge badge-red">$'+bal.toFixed(2)+'</span>' +
                   '</div>';
                 }).join('')
             }
           </div>
         </div>
       </div>`;
+
   } catch(e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error loading dashboard. Check your Apps Script URL in config.</div></div>`;
+    console.error('Dashboard error:', e);
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Error loading dashboard: ' + e.message + '</div></div>';
   }
 }
 
