@@ -5688,9 +5688,10 @@ function buildTxnTable(txns, accounts, balances) {
     var isIncome = t.type==='income'||t.type==='deposit';
     var amt = parseFloat(t.amount||0);
     var bal = balMap[t.transaction_id];
-    html += '<tr>';
+    var isVoided = t.voided === 'true';
+    html += '<tr style="opacity:' + (isVoided?'0.5':'1') + ';">';
     html += '<td style="white-space:nowrap;">' + formatDate(t.date) + '</td>';
-    html += '<td><div style="font-weight:500;">' + (t.description||'&mdash;') + '</div>';
+    html += '<td><div style="font-weight:500;' + (isVoided?'text-decoration:line-through;':'') + '">' + (t.description||'&mdash;') + '</div>';
     if (t.notes) html += '<div style="font-size:11px;color:var(--gray-500);">' + t.notes + '</div>';
     html += '</td>';
     html += '<td style="font-size:12px;">' + (acct ? acct.name : '&mdash;') + '</td>';
@@ -5699,7 +5700,17 @@ function buildTxnTable(txns, accounts, balances) {
     html += '<td style="text-align:right;color:var(--success);font-weight:500;">' + (isIncome ? '$'+amt.toFixed(2) : '') + '</td>';
     html += '<td style="text-align:right;color:var(--danger);font-weight:500;">' + (!isIncome ? '$'+amt.toFixed(2) : '') + '</td>';
     html += '<td style="text-align:right;font-weight:600;color:' + (bal>=0?'var(--success)':'var(--danger)') + ';">' + (bal !== undefined ? '$'+bal.toFixed(2) : '&mdash;') + '</td>';
-    html += '<td><button class="btn btn-sm btn-secondary" onclick="openTxnForm(\'' + t.transaction_id + '\')">Edit</button></td>';
+    html += '<td style="white-space:nowrap;">';
+    if (t.check_number && t.check_number.trim() && t.check_number !== '&mdash;' && (t.type === 'expense' || t.type === 'transfer')) {
+      html += '<button class="btn btn-sm btn-secondary" onclick="reprintCheck(\'' + t.transaction_id + '\'" style="margin-right:3px;">&#128424;</button>';
+      if (t.voided !== 'true') {
+        html += '<button class="btn btn-sm btn-danger" onclick="voidCheck(\'' + t.transaction_id + '\'" style="margin-right:3px;">Void</button>';
+      } else {
+        html += '<span class="badge badge-red" style="margin-right:3px;">VOID</span>';
+      }
+    }
+    html += '<button class="btn btn-sm btn-secondary" onclick="openTxnForm(\'' + t.transaction_id + '\')">Edit</button>';
+    html += '</td>';
     html += '</tr>';
   });
   html += '</tbody></table></div>';
@@ -6834,6 +6845,59 @@ function reprintCheck(txnId) {
   var win = window.open('', '_blank', 'width=900,height=500');
   win.document.write(html);
   win.document.close();
+}
+
+async function voidCheck(txnId) {
+  var t = treasurerData.transactions.find(function(x){ return x.transaction_id===txnId; });
+  if (!t) return;
+
+  var chkNum = t.check_number || 'unknown';
+  var payee  = t.description || '';
+  var dashIdx = payee.indexOf(' - ');
+  if (dashIdx > 0) payee = payee.substring(dashIdx + 3);
+
+  if (!confirm('Void check #' + chkNum + ' payable to ' + payee + ' for $' + parseFloat(t.amount||0).toFixed(2) + '?\n\nThis will:\n• Mark the transaction as voided\n• Zero out the amount\n• Add a VOID notation to the description\n\nThis cannot be undone.')) return;
+
+  var voidedRecord = {
+    transaction_id:  t.transaction_id,
+    date:            t.date,
+    type:            t.type,
+    description:     'VOID - ' + t.description,
+    account_id:      t.account_id,
+    amount:          '0.00',
+    category:        t.category,
+    check_number:    t.check_number,
+    notes:           'VOIDED on ' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' | Original amount: $' + parseFloat(t.amount||0).toFixed(2) + (t.notes ? ' | ' + t.notes : ''),
+    voided:          'true',
+    reconciled:      t.reconciled
+  };
+
+  try {
+    var result = await apiCall({ action: 'save_transaction', record: JSON.stringify(voidedRecord) });
+    if (result.success) {
+      // Also record a reversing entry to cancel the original amount
+      var reversingRecord = {
+        transaction_id: '',
+        date:           new Date().toISOString().split('T')[0],
+        type:           'income',
+        description:    'VOID reversal - Check #' + chkNum + ' (' + payee + ')',
+        account_id:     t.account_id,
+        amount:         t.amount,
+        category:       'Void/Reversal',
+        check_number:   t.check_number,
+        notes:          'Automatic reversal for voided check #' + chkNum,
+        voided:         'false'
+      };
+      await apiCall({ action: 'save_transaction', record: JSON.stringify(reversingRecord) });
+      toast('Check #' + chkNum + ' voided and reversed.', 'success');
+      await renderTreasurer();
+      switchTrTab('transactions');
+    } else {
+      toast('Error voiding check: ' + (result.error||'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Could not void check: ' + e.message, 'error');
+  }
 }
 
 async function printCheck() {
