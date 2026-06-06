@@ -527,13 +527,17 @@
       </a>
     </div>
 
+    <div class="nav-section" id="treasurer-nav" style="display:none;">
+      <div class="nav-section-label">Accounting</div>
+      <a class="nav-item" onclick="navigate('treasurer')" href="#">
+        <span class="nav-icon">&#9798;</span> Treasurer
+      </a>
+    </div>
+
     <div class="nav-section" id="admin-nav" style="display:none;">
       <div class="nav-section-label">Admin</div>
-      <a class="nav-item" onclick="navigate('treasurer')" href="#">
-        <span class="nav-icon">&#9993;</span> Treasurer
-      </a>
       <a class="nav-item" onclick="navigate('users')" href="#">
-        <span class="nav-icon">&#9632;</span> Users
+        <span class="nav-icon">&#9675;</span> Users
       </a>
     </div>
 
@@ -690,6 +694,9 @@ async function showApp() {
   document.getElementById('user-role').textContent   = u.role;
   document.getElementById('user-avatar').textContent = (u.name || u.email).charAt(0).toUpperCase();
 
+  if (u.role === 'admin' || u.role === 'staff') {
+    document.getElementById('treasurer-nav').style.display = 'block';
+  }
   if (u.role === 'admin') {
     document.getElementById('admin-nav').style.display = 'block';
   }
@@ -6732,12 +6739,100 @@ function previewCheck() {
   if (!payee)  { toast('Please enter payee name.', 'error'); return; }
   if (!amount) { toast('Please enter an amount.', 'error'); return; }
 
-  var html = buildCheckHTML(true);
+  var html = buildCheckHTML(false);
   if (!html) { toast('Please fill in all required fields.', 'error'); return; }
 
-  // Show inline preview
-  var previewArea = document.getElementById('check-preview-area');
-  previewArea.innerHTML = '<div style="transform:scale(0.85);transform-origin:top left;width:118%;">' + html.replace(/<\/?html>|<\/?body>|<\/?head>|<!DOCTYPE html>|<meta[^>]*>|<title>[^<]*<\/title>|<style>[^<]*<\/style>/gs,'') + '</div>';
+  var win = window.open('', '_blank', 'width=900,height=500');
+  win.document.write(html);
+  win.document.close();
+}
+
+function reprintCheck(txnId) {
+  var t = treasurerData.transactions.find(function(x){ return x.transaction_id===txnId; });
+  if (!t) return;
+
+  var acct = treasurerData.accounts.find(function(a){ return a.account_id===t.account_id; });
+  if (!acct) { toast('Account not found.', 'error'); return; }
+
+  var routing  = acct.routing_number  || 'XXXXXXXXX';
+  var acctNum  = acct.account_number  || ('XXXXX' + (acct.last_four||'XXXX'));
+  var checkNo  = t.check_number || '0000';
+  var orgName  = acct.organization || 'Estill County Band Boosters';
+  var bankName = acct.bank_name    || 'Your Bank';
+
+  // Parse payee from description e.g. "Check #1042 - John Smith"
+  var payee = t.description || '';
+  var dashIdx = payee.indexOf(' - ');
+  if (dashIdx > 0) payee = payee.substring(dashIdx + 3);
+
+  var amount = parseFloat(t.amount||0);
+  var words  = amountToWords(amount);
+  var dateStr = t.date ? new Date(t.date+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}) : '';
+  var memo   = t.notes ? t.notes.replace('Memo: ','') : '';
+  var micrLine = '⑆' + routing + '⑆' + ' ⑈' + acctNum + '⑈' + ' ' + checkNo;
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
+    '<title>REPRINT Check #' + checkNo + '</title>' +
+    '<style>' +
+    '* { box-sizing:border-box; margin:0; padding:0; }' +
+    'body { font-family:Arial,sans-serif; background:white; }' +
+    '.check-page { width:8.5in; padding:0.25in; }' +
+    '.check { width:8in; height:3.5in; border:1px solid #999; border-radius:4px; padding:0.2in 0.25in; position:relative; background:white; font-family:Arial,sans-serif; }' +
+    '.check-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.15in; }' +
+    '.check-org { font-size:14px; font-weight:700; color:#1565C0; }' +
+    '.check-org-sub { font-size:10px; color:#666; margin-top:2px; }' +
+    '.check-number { font-size:13px; font-weight:600; color:#333; }' +
+    '.check-date-row { display:flex; justify-content:flex-end; margin-bottom:0.12in; font-size:12px; }' +
+    '.check-date-label { color:#666; margin-right:8px; }' +
+    '.check-date-value { border-bottom:1px solid #333; min-width:1.5in; text-align:center; }' +
+    '.check-payee-row { display:flex; align-items:flex-end; gap:8px; margin-bottom:0.1in; }' +
+    '.check-payee-label { font-size:11px; color:#666; white-space:nowrap; }' +
+    '.check-payee-value { border-bottom:1px solid #333; flex:1; font-size:14px; font-weight:500; padding-bottom:2px; }' +
+    '.check-amount-box { border:2px solid #333; border-radius:4px; padding:3px 8px; font-size:16px; font-weight:700; white-space:nowrap; min-width:1.2in; text-align:center; }' +
+    '.check-words-row { display:flex; align-items:flex-end; gap:8px; margin-bottom:0.15in; }' +
+    '.check-words-label { font-size:11px; color:#666; white-space:nowrap; }' +
+    '.check-words-value { border-bottom:1px solid #333; flex:1; font-size:11px; padding-bottom:2px; }' +
+    '.check-bottom { display:flex; justify-content:space-between; align-items:flex-end; margin-top:0.1in; }' +
+    '.check-bank { font-size:10px; color:#666; }' +
+    '.check-memo { font-size:11px; }' +
+    '.check-memo-label { color:#666; font-size:10px; }' +
+    '.check-memo-value { border-bottom:1px solid #333; min-width:2in; display:inline-block; }' +
+    '.check-signatures { display:flex; gap:0.5in; }' +
+    '.check-sig { text-align:center; }' +
+    '.check-sig-line { border-top:1px solid #333; width:2in; margin-bottom:4px; }' +
+    '.check-sig-label { font-size:9px; color:#666; }' +
+    '.reprint-stamp { position:absolute; top:0.3in; right:0.4in; color:rgba(200,0,0,0.15); font-size:48px; font-weight:900; transform:rotate(-15deg); letter-spacing:4px; border:6px solid rgba(200,0,0,0.15); padding:4px 12px; border-radius:4px; }' +
+    '.micr { font-family:"MICR E13B","Courier New",monospace; font-size:14px; letter-spacing:2px; color:#000; position:absolute; bottom:0.15in; left:0.25in; right:0.25in; text-align:center; }' +
+    '.no-print { display:block; padding:12px; background:#fff8e1; text-align:center; margin-bottom:12px; border-radius:6px; border:1px solid #ffe082; }' +
+    '@media print { .no-print { display:none !important; } .check { border:1px solid transparent; } }' +
+    '</style></head><body>' +
+    '<div class="no-print"><strong>&#9888; REPRINT</strong> &mdash; Check #' + checkNo + ' &mdash; Original date: ' + dateStr + '<br/>' +
+    '<button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;margin-top:8px;margin-right:8px;">&#128424; Print reprint</button>' +
+    '<button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;margin-top:8px;">Close</button>' +
+    '<div style="font-size:11px;color:#666;margin-top:6px;">This is a reprint. The original check transaction remains in your records.</div></div>' +
+    '<div class="check-page"><div class="check">' +
+    '<div class="reprint-stamp">REPRINT</div>' +
+    '<div class="check-header">' +
+    '<div><div class="check-org">' + orgName + '</div>' +
+    '<div class="check-org-sub">' + bankName + '</div></div>' +
+    '<div class="check-number">No. ' + checkNo + '</div>' +
+    '</div>' +
+    '<div class="check-date-row"><span class="check-date-label">Date</span><span class="check-date-value">' + dateStr + '</span></div>' +
+    '<div class="check-payee-row"><span class="check-payee-label">Pay to the order of</span><span class="check-payee-value">' + payee + '</span><span class="check-amount-box">$ ' + amount.toFixed(2) + '</span></div>' +
+    '<div class="check-words-row"><span class="check-words-label">&nbsp;</span><span class="check-words-value">' + words + '</span></div>' +
+    '<div class="check-bottom">' +
+    '<div><div class="check-bank">' + bankName + '</div>' +
+    '<div class="check-memo"><span class="check-memo-label">For: </span><span class="check-memo-value">' + memo + '</span></div></div>' +
+    '<div class="check-signatures">' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
+    '</div></div>' +
+    '<div class="micr">' + micrLine + '</div>' +
+    '</div></div></body></html>';
+
+  var win = window.open('', '_blank', 'width=900,height=500');
+  win.document.write(html);
+  win.document.close();
 }
 
 async function printCheck() {
