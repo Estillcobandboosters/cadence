@@ -708,71 +708,113 @@ async function renderDashboard() {
     const _s = data.stats;
     const s = data.stats || {};
     el.innerHTML = `
-      <div class="stat-grid">
-        <div class="stat-card accent">
+      <!-- Next event hero banner -->
+      ${nextEvent ? `
+      <div style="background:var(--blue);border-radius:var(--radius);padding:18px 22px;color:white;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-size:12px;opacity:0.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">${daysToNext===0?'TODAY':daysToNext===1?'TOMORROW':'IN '+daysToNext+' DAYS'}</div>
+          <div style="font-size:20px;font-weight:700;">${nextEvent.title}</div>
+          <div style="font-size:13px;opacity:0.85;margin-top:2px;">${formatDate(nextEvent.date)} ${nextEvent.start_time?'· '+formatTime(nextEvent.start_time):''} ${nextEvent.location?'· '+nextEvent.location:''}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;" onclick="openAttendanceForEvent('${nextEvent.event_id}')">Take attendance</button>
+          <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;" onclick="navigate('events')">All events</button>
+        </div>
+      </div>` : ''}
+
+      <!-- Key stats -->
+      <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+        <div class="stat-card accent" style="cursor:pointer;" onclick="navigate('roster')">
           <div class="stat-label">Active students</div>
           <div class="stat-value">${s.active_students || 0}</div>
           <div class="stat-sub">${CONFIG.SCHOOL_YEAR}</div>
         </div>
-        <div class="stat-card danger">
+        <div class="stat-card ${s.students_with_balance>0?'danger':'success'}" style="cursor:pointer;" onclick="navigate('fees')">
           <div class="stat-label">Outstanding balances</div>
           <div class="stat-value">${s.students_with_balance || 0}</div>
-          <div class="stat-sub">$${s.total_outstanding || '0.00'} total owed</div>
+          <div class="stat-sub">$${s.total_outstanding || '0.00'} owed</div>
         </div>
-        <div class="stat-card warning">
+        <div class="stat-card warning" style="cursor:pointer;" onclick="navigate('uniforms')">
           <div class="stat-label">Items checked out</div>
           <div class="stat-value">${s.items_checked_out || 0}</div>
           <div class="stat-sub">uniforms &amp; instruments</div>
         </div>
-        <div class="stat-card accent">
-          <div class="stat-label">Upcoming events</div>
-          <div class="stat-value">${s.upcoming_events || 0}</div>
-          <div class="stat-sub">next 30 days</div>
-        </div>
-        <div class="stat-card ${s.missing_forms > 0 ? 'danger' : 'success'}">
+        <div class="stat-card ${s.missing_forms>0?'danger':'success'}" style="cursor:pointer;" onclick="navigate('forms')">
           <div class="stat-label">Missing forms</div>
           <div class="stat-value">${s.missing_forms || 0}</div>
-          <div class="stat-sub">incomplete submissions</div>
+          <div class="stat-sub">required forms</div>
+        </div>
+        <div class="stat-card success" style="cursor:pointer;" onclick="navigate('volunteers')">
+          <div class="stat-label">Volunteer hours</div>
+          <div class="stat-value">${totalVolHours.toFixed(0)}</div>
+          <div class="stat-sub">this season</div>
         </div>
       </div>
 
+      <!-- Fee collection progress bar -->
+      ${totalFees > 0 ? `
+      <div class="card">
+        <div class="card-body" style="padding:16px 20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:14px;font-weight:500;">Fee collection progress</div>
+            <div style="font-size:13px;color:var(--gray-500);">$${totalPaid.toFixed(2)} of $${totalFees.toFixed(2)} · <strong style="color:var(--blue);">${feesPct}%</strong></div>
+          </div>
+          <div style="height:12px;background:var(--gray-200);border-radius:6px;overflow:hidden;">
+            <div style="height:12px;border-radius:6px;background:${feesPct>=100?'var(--success)':feesPct>=75?'var(--blue)':'var(--warning)'};width:${feesPct}%;transition:width 0.5s;"></div>
+          </div>
+        </div>
+      </div>` : ''}
+
+      <!-- Two-column layout -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <!-- Upcoming 14 days -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Upcoming events</div>
-            <button class="btn btn-sm btn-secondary" onclick="navigate('events')">View all</button>
+            <div class="card-title">Next 14 days</div>
+            <button class="btn btn-sm btn-secondary" onclick="navigate('events')">All events</button>
           </div>
           <div class="card-body" style="padding:0;">
-            ${(data.upcoming_events||[]).length === 0
-              ? '<div class="empty-state"><div class="empty-state-icon">◷</div><div class="empty-state-text">No upcoming events</div></div>'
-              : `<table><thead><tr><th>Event</th><th>Date</th><th>Type</th></tr></thead><tbody>
-                  ${(data.upcoming_events||[]).map(e=>`
-                    <tr>
-                      <td><strong>${e.title}</strong></td>
-                      <td>${formatDate(e.date)}</td>
-                      <td><span class="badge badge-blue">${e.event_type||'event'}</span></td>
-                    </tr>`).join('')}
-                </tbody></table>`
+            ${upcoming14.length === 0
+              ? '<div class="empty-state" style="padding:24px;"><div class="empty-state-text">No events in the next 14 days</div></div>'
+              : upcoming14.map(e => {
+                  const d = new Date(e.date);
+                  const isToday = d.toDateString()===today.toDateString();
+                  const daysAway = Math.ceil((d-today)/(1000*60*60*24));
+                  return '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--gray-100);">'+
+                    '<div style="min-width:42px;text-align:center;background:'+(isToday?'var(--blue)':'var(--gray-100)')+';border-radius:6px;padding:4px 6px;">'+
+                      '<div style="font-size:10px;color:'+(isToday?'rgba(255,255,255,0.8)':'var(--gray-500)')+';text-transform:uppercase;">'+d.toLocaleDateString('en-US',{month:'short'})+'</div>'+
+                      '<div style="font-size:16px;font-weight:700;color:'+(isToday?'white':'var(--gray-900)')+';">'+d.getDate()+'</div>'+
+                    '</div>'+
+                    '<div style="flex:1;">'+
+                      '<div style="font-size:13px;font-weight:500;">'+ e.title+'</div>'+
+                      '<div style="font-size:11px;color:var(--gray-500);">'+(e.start_time?formatTime(e.start_time)+' ':'')+( e.location||'')+'</div>'+
+                    '</div>'+
+                    '<span class="badge badge-blue" style="font-size:10px;">'+(e.event_type||'Event')+'</span>'+
+                  '</div>';
+                }).join('')
             }
           </div>
         </div>
 
+        <!-- Outstanding balances -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Outstanding balances</div>
-            <button class="btn btn-sm btn-secondary" onclick="navigate('fees')">View all</button>
+            <div class="card-title">Top outstanding balances</div>
+            <button class="btn btn-sm btn-secondary" onclick="navigate('fees')">All fees</button>
           </div>
           <div class="card-body" style="padding:0;">
-            ${(data.recent_unpaid||[]).length === 0
-              ? '<div class="empty-state"><div class="empty-state-icon">$</div><div class="empty-state-text">All caught up!</div></div>'
-              : `<table><thead><tr><th>Student</th><th>Type</th><th>Balance</th></tr></thead><tbody>
-                  ${(data.recent_unpaid||[]).slice(0,8).map(f=>`
-                    <tr>
-                      <td>${f.student_id}</td>
-                      <td>${f.fee_type||''}</td>
-                      <td><span class="badge badge-red">$${parseFloat(f.balance||0).toFixed(2)}</span></td>
-                    </tr>`).join('')}
-                </tbody></table>`
+            ${recentUnpaid.length === 0
+              ? '<div class="empty-state" style="padding:24px;"><div class="empty-state-icon" style="font-size:24px;">&#9745;</div><div class="empty-state-text">All caught up!</div></div>'
+              : recentUnpaid.map(f => {
+                  const bal = parseFloat(f.balance||0);
+                  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--gray-100);">'+
+                    '<div style="flex:1;">'+
+                      '<div style="font-size:13px;font-weight:500;">'+(f.student_id||'—')+'</div>'+
+                      '<div style="font-size:11px;color:var(--gray-500);">'+(f.fee_type||'')+(f.description?' · '+f.description:'')+'</div>'+
+                    '</div>'+
+                    '<span class="badge badge-red">$'+bal.toFixed(2)+'</span>'+
+                  '</div>';
+                }).join('')
             }
           </div>
         </div>
@@ -3363,7 +3405,461 @@ function openVolDetail(guardianId) {
   backdrop.classList.add('open');
 }
 function renderFundraising() { placeholderPage('page-fundraising', 'Fundraising',         'Fundraising module — Phase 2'); }
-function renderForms()       { placeholderPage('page-forms',       'Forms &amp; Documents','Forms module — Phase 2'); }
+// ════════════════════════════════════════════════════════════
+//  FORMS & DOCUMENTS — Full module
+// ════════════════════════════════════════════════════════════
+let formsData = { forms: [], submissions: [], students: [] };
+let editingFormId = null;
+let editingSubId  = null;
+
+async function renderForms() {
+  const el = document.getElementById('page-forms');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading forms...</div>';
+  try {
+    const [formsRes, subsRes, studentsRes] = await Promise.all([
+      apiCall({ action: 'get_forms' }),
+      apiCall({ action: 'get_form_submissions' }),
+      apiCall({ action: 'get_students' })
+    ]);
+    formsData.forms       = formsRes.data   || [];
+    formsData.submissions = subsRes.data    || [];
+    formsData.students    = (studentsRes.data||[]).filter(s => s.school_year === state.selectedYear && s.status === 'active');
+    renderFormsOverview();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load forms.</div></div>';
+  }
+}
+
+function renderFormsOverview() {
+  const el          = document.getElementById('page-forms');
+  const forms       = formsData.forms.filter(f => f.active !== 'false');
+  const submissions = formsData.submissions;
+  const students    = formsData.students;
+
+  const totalForms   = forms.length;
+  const totalExpected = forms.filter(f=>f.required==='true'||f.required==='TRUE').length * students.length;
+  const totalReceived = submissions.filter(s=>s.status==='received'||s.status==='complete').length;
+  const missingCount  = Math.max(0, totalExpected - totalReceived);
+
+  el.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="stat-card accent">
+        <div class="stat-label">Active forms</div>
+        <div class="stat-value">${totalForms}</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Received</div>
+        <div class="stat-value">${totalReceived}</div>
+      </div>
+      <div class="stat-card ${missingCount>0?'danger':'success'}">
+        <div class="stat-label">Missing</div>
+        <div class="stat-value">${missingCount}</div>
+        <div class="stat-sub">required forms</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Students</div>
+        <div class="stat-value">${students.length}</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);">
+      <button id="form-tab-forms"   onclick="switchFormTab('forms')"   style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;cursor:pointer;">Forms library</button>
+      <button id="form-tab-tracker" onclick="switchFormTab('tracker')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">Completion tracker</button>
+      <button id="form-tab-missing" onclick="switchFormTab('missing')" style="padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;">&#9888; Missing forms ${missingCount>0?'<span class="badge badge-red" style="margin-left:4px;">'+ missingCount +'</span>':''}</button>
+    </div>
+
+    <!-- Forms Library Tab -->
+    <div id="form-panel-forms">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Forms library</div>
+          <button class="btn btn-primary btn-sm" onclick="openFormEditor()">+ Add form</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${forms.length === 0
+            ? `<div class="empty-state"><div class="empty-state-icon">&#9633;</div><div class="empty-state-text">No forms yet. Add your first form!</div></div>`
+            : `<div class="table-wrap"><table>
+                <thead><tr><th>Form name</th><th>Type</th><th>Due date</th><th>Required</th><th>Received</th><th>Missing</th><th>Year</th><th></th></tr></thead>
+                <tbody>
+                  ${forms.map(f => {
+                    const fSubs     = submissions.filter(s => s.form_id === f.form_id && (s.status==='received'||s.status==='complete'));
+                    const isRequired = f.required==='true'||f.required==='TRUE';
+                    const missing   = isRequired ? Math.max(0, students.length - fSubs.length) : 0;
+                    return `<tr>
+                      <td>
+                        <strong>${f.title}</strong>
+                        ${f.description?'<div style="font-size:11px;color:var(--gray-500);">'+f.description+'</div>':''} 
+                      </td>
+                      <td><span class="badge badge-blue">${f.form_type||'General'}</span></td>
+                      <td>${f.due_date?formatDate(f.due_date):'—'}</td>
+                      <td>${isRequired?'<span class="badge badge-red">Required</span>':'<span class="badge badge-gray">Optional</span>'}</td>
+                      <td><span class="badge badge-green">${fSubs.length}</span></td>
+                      <td><span class="badge ${missing>0?'badge-red':'badge-green'}">${missing}</span></td>
+                      <td style="font-size:12px;">${f.academic_year||'—'}</td>
+                      <td style="text-align:right;white-space:nowrap;">
+                        <button class="btn btn-sm btn-secondary" onclick="openFormSubmissions('${f.form_id}')">Track</button>
+                        <button class="btn btn-sm btn-secondary" onclick="openFormEditor(${JSON.stringify(f).split('"').join('&quot;')})">Edit</button>
+                      </td>
+                    </tr>`;
+                  }).join('')}
+                </tbody></table></div>`
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Completion Tracker Tab -->
+    <div id="form-panel-tracker" style="display:none;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Form completion by student</div></div>
+        <div class="card-body" style="padding:0;">
+          ${students.length === 0 || forms.length === 0
+            ? '<div class="empty-state"><div class="empty-state-text">Add students and forms to track completion.</div></div>'
+            : `<div class="table-wrap"><table>
+                <thead><tr>
+                  <th>Student</th><th>Grade</th>
+                  ${forms.map(f=>'<th style="text-align:center;font-size:10px;max-width:80px;word-wrap:break-word;">'+f.title+'</th>').join('')}
+                  <th style="text-align:center;">Complete</th>
+                </tr></thead>
+                <tbody>
+                  ${students.map(s => {
+                    const sSubs = submissions.filter(sub => sub.student_id === s.student_id);
+                    const reqForms = forms.filter(f => f.required==='true'||f.required==='TRUE');
+                    const completedReq = reqForms.filter(f => sSubs.find(sub=>sub.form_id===f.form_id&&(sub.status==='received'||sub.status==='complete'))).length;
+                    const allComplete = completedReq === reqForms.length;
+                    return '<tr>'+
+                      '<td><strong>'+s.first_name+' '+s.last_name+'</strong></td>'+
+                      '<td>'+s.grade+'</td>'+
+                      forms.map(f => {
+                        const sub = sSubs.find(sub => sub.form_id === f.form_id);
+                        const received = sub && (sub.status==='received'||sub.status==='complete');
+                        const isReq = f.required==='true'||f.required==='TRUE';
+                        return '<td style="text-align:center;">'+
+                          (received
+                            ? '<span style="color:var(--success);font-size:16px;" title="'+( sub.submitted_date||'')+'">&#10003;</span>'
+                            : isReq
+                            ? '<button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 6px;" onclick="markFormReceived(\''+ s.student_id+'\',\''+f.form_id+'\')" title="Mark received">+ Log</button>'
+                            : '<span style="color:var(--gray-300);">—</span>')+
+                          '</td>';
+                      }).join('')+
+                      '<td style="text-align:center;">'+
+                        '<span class="badge '+( allComplete||reqForms.length===0?'badge-green':'badge-red')+'">'+
+                          (reqForms.length===0?'N/A':completedReq+'/'+reqForms.length)+
+                        '</span></td>'+
+                    '</tr>';
+                  }).join('')}
+                </tbody></table></div>`
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Missing Forms Tab -->
+    <div id="form-panel-missing" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Missing required forms</div>
+          <button class="btn btn-sm btn-secondary" onclick="printMissingForms()">&#128424; Print list</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          ${(() => {
+            const reqForms = forms.filter(f => f.required==='true'||f.required==='TRUE');
+            const missing = [];
+            students.forEach(s => {
+              reqForms.forEach(f => {
+                const sub = submissions.find(sub => sub.student_id===s.student_id && sub.form_id===f.form_id && (sub.status==='received'||sub.status==='complete'));
+                if (!sub) missing.push({ student: s, form: f });
+              });
+            });
+            if (missing.length === 0) return '<div class="empty-state"><div class="empty-state-icon">&#10003;</div><div class="empty-state-text" style="color:var(--success);">All required forms received!</div></div>';
+            return '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Grade</th><th>Section</th><th>Missing form</th><th>Due date</th><th></th></tr></thead><tbody>'+
+              missing.map(m => '<tr>'+
+                '<td><strong>'+m.student.first_name+' '+m.student.last_name+'</strong></td>'+
+                '<td>'+m.student.grade+'</td>'+
+                '<td>'+(m.student.section||'—')+'</td>'+
+                '<td><span class="badge badge-red">'+ m.form.title+'</span></td>'+
+                '<td>'+(m.form.due_date?formatDate(m.form.due_date):'—')+'</td>'+
+                '<td><button class="btn btn-sm btn-primary" onclick="markFormReceived(\''+ m.student.student_id+'\',\''+m.form.form_id+'\')" style="font-size:11px;">Mark received</button></td>'+
+              '</tr>').join('')+
+              '</tbody></table></div>';
+          })()}
+        </div>
+      </div>
+    </div>
+
+    <!-- Form Editor Modal -->
+    <div class="modal-backdrop" id="form-editor-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title" id="form-editor-title">Add form</div>
+          <button class="modal-close" onclick="closeFormEditor()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Form name *</label>
+              <input class="form-input" id="fe-title" placeholder="e.g. Medical Information Form, Trip Permission Slip"/>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Description</label>
+              <input class="form-input" id="fe-description" placeholder="Brief description of what this form is for"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Form type</label>
+              <select class="form-select" id="fe-form_type">
+                <option value="Medical">Medical</option>
+                <option value="Permission Slip">Permission Slip</option>
+                <option value="Financial">Financial</option>
+                <option value="Trip">Trip</option>
+                <option value="Enrollment">Enrollment</option>
+                <option value="Waiver">Waiver</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Required?</label>
+              <select class="form-select" id="fe-required">
+                <option value="true">Yes — required</option>
+                <option value="false">No — optional</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Due date</label>
+              <input class="form-input" id="fe-due_date" type="date"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Academic year</label>
+              <input class="form-input" id="fe-academic_year" value="${CONFIG.SCHOOL_YEAR}"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Active?</label>
+              <select class="form-select" id="fe-active">
+                <option value="true">Yes — active</option>
+                <option value="false">No — archived</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Google Form / document URL</label>
+              <input class="form-input" id="fe-file_url" placeholder="https://docs.google.com/forms/..."/>
+              <div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Optional — link to the actual form document in Google Drive</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeFormEditor()">Cancel</button>
+          <button class="btn btn-danger btn-sm" id="delete-form-btn" style="display:none;margin-right:auto;" onclick="deleteForm()">Delete</button>
+          <button class="btn btn-primary" onclick="saveForm()">Save form</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form Submissions Modal -->
+    <div class="modal-backdrop" id="form-submissions-modal">
+      <div class="modal" style="width:680px;max-width:96vw;">
+        <div class="modal-header">
+          <div class="modal-title" id="form-subs-title">Form submissions</div>
+          <button class="modal-close" onclick="document.getElementById('form-submissions-modal').classList.remove('open')">&times;</button>
+        </div>
+        <div class="modal-body" id="form-subs-body"></div>
+      </div>
+    </div>`;
+}
+
+function switchFormTab(tab) {
+  ['forms','tracker','missing'].forEach(t => {
+    const panel = document.getElementById('form-panel-'+t);
+    const btn   = document.getElementById('form-tab-'+t);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--blue)' : 'var(--gray-500)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--blue)' : 'none';
+      btn.style.marginBottom = t === tab ? '-2px' : '0';
+    }
+  });
+}
+
+function openFormEditor(form) {
+  editingFormId = null;
+  const fields = ['title','description','form_type','required','due_date','academic_year','active','file_url'];
+  fields.forEach(f => {
+    const el = document.getElementById('fe-'+f);
+    if (el) el.value = form ? (form[f]||'') : (f==='required'?'true':f==='active'?'true':f==='academic_year'?CONFIG.SCHOOL_YEAR:'');
+  });
+  if (form) {
+    editingFormId = form.form_id;
+    document.getElementById('form-editor-title').textContent = 'Edit form';
+    document.getElementById('delete-form-btn').style.display = 'inline-flex';
+  } else {
+    document.getElementById('form-editor-title').textContent = 'Add form';
+    document.getElementById('delete-form-btn').style.display = 'none';
+  }
+  document.getElementById('form-editor-modal').classList.add('open');
+}
+
+function closeFormEditor() { document.getElementById('form-editor-modal').classList.remove('open'); }
+
+async function saveForm() {
+  const title = document.getElementById('fe-title').value.trim();
+  if (!title) { toast('Form name is required.', 'error'); return; }
+  const record = { form_id: editingFormId || '' };
+  ['title','description','form_type','required','due_date','academic_year','active','file_url'].forEach(f => {
+    record[f] = document.getElementById('fe-'+f).value;
+  });
+  try {
+    const result = await apiCall({ action: 'save_form', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(editingFormId ? 'Form updated!' : 'Form added!', 'success');
+      closeFormEditor();
+      await renderForms();
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save form.', 'error'); }
+}
+
+async function deleteForm() {
+  if (!editingFormId || !confirm('Delete this form?')) return;
+  try {
+    await apiCall({ action: 'save_form', record: JSON.stringify({ form_id: editingFormId, title: '_deleted_', active: 'false', form_type: '', required: 'false', academic_year: '' }) });
+    toast('Form deleted.', 'info');
+    closeFormEditor();
+    await renderForms();
+  } catch(e) { toast('Could not delete form.', 'error'); }
+}
+
+async function markFormReceived(studentId, formId) {
+  const student = formsData.students.find(s => s.student_id === studentId);
+  const form    = formsData.forms.find(f => f.form_id === formId);
+  const existing = formsData.submissions.find(s => s.student_id===studentId && s.form_id===formId);
+  const record = {
+    sub_id:         existing ? existing.sub_id : '',
+    form_id:        formId,
+    student_id:     studentId,
+    submitted_date: new Date().toISOString().split('T')[0],
+    submitted_by:   state.user ? state.user.email : '',
+    status:         'received',
+    notes:          ''
+  };
+  try {
+    const result = await apiCall({ action: 'save_form_submission', record: JSON.stringify(record) });
+    if (result.success) {
+      toast('Marked received for '+(student?student.first_name+' '+student.last_name:'student')+'!', 'success');
+      await renderForms();
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save.', 'error'); }
+}
+
+function openFormSubmissions(formId) {
+  const form     = formsData.forms.find(f => f.form_id === formId);
+  const subs     = formsData.submissions.filter(s => s.form_id === formId);
+  const students = formsData.students;
+  if (!form) return;
+
+  document.getElementById('form-subs-title').textContent = form.title + ' — Submissions';
+  const received = subs.filter(s=>s.status==='received'||s.status==='complete');
+  const missing  = students.filter(s => !subs.find(sub=>sub.student_id===s.student_id&&(sub.status==='received'||sub.status==='complete')));
+
+  document.getElementById('form-subs-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:12px;text-align:center;">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Expected</div>
+        <div style="font-size:24px;font-weight:700;">${students.length}</div>
+      </div>
+      <div style="background:#E8F5E9;border:1px solid #C8E6C9;border-radius:var(--radius);padding:12px;text-align:center;">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Received</div>
+        <div style="font-size:24px;font-weight:700;color:var(--success);">${received.length}</div>
+      </div>
+      <div style="background:${missing.length>0?'#FFEBEE':'#E8F5E9'};border:1px solid ${missing.length>0?'#FFCDD2':'#C8E6C9'};border-radius:var(--radius);padding:12px;text-align:center;">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Missing</div>
+        <div style="font-size:24px;font-weight:700;color:${missing.length>0?'var(--danger)':'var(--success)'};">${missing.length}</div>
+      </div>
+    </div>
+    ${form.file_url ? `<div style="margin-bottom:16px;"><a href="${form.file_url}" target="_blank" class="btn btn-secondary btn-sm">&#128196; Open form document</a></div>` : ''}
+    ${missing.length > 0 ? `
+      <div style="font-size:14px;font-weight:500;margin-bottom:8px;color:var(--danger);">Missing (${missing.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+        ${missing.map(s => `<div style="display:flex;align-items:center;gap:6px;background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;padding:5px 10px;font-size:13px;">
+          ${s.first_name} ${s.last_name}
+          <button onclick="markFormReceived('${s.student_id}','${formId}')" style="background:var(--success);color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px;">&#10003;</button>
+        </div>`).join('')}
+      </div>` : ''}
+    <div style="font-size:14px;font-weight:500;margin-bottom:8px;color:var(--success);">Received (${received.length})</div>
+    ${received.length === 0
+      ? '<div style="color:var(--gray-500);font-size:13px;">None received yet.</div>'
+      : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="border-bottom:1px solid var(--gray-200);">
+            <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Student</th>
+            <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Date received</th>
+            <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Logged by</th>
+          </tr></thead>
+          <tbody>
+            ${received.map(sub => {
+              const st = students.find(s=>s.student_id===sub.student_id);
+              return '<tr style="border-bottom:1px solid var(--gray-100);">'+
+                '<td style="padding:6px 8px;"><strong>'+(st?st.first_name+' '+st.last_name:sub.student_id)+'</strong></td>'+
+                '<td style="padding:6px 8px;">'+(sub.submitted_date?formatDate(sub.submitted_date):'—')+'</td>'+
+                '<td style="padding:6px 8px;font-size:11px;color:var(--gray-500);">'+(sub.submitted_by||'—')+'</td>'+
+              '</tr>';
+            }).join('')}
+          </tbody></table>`
+    }`;
+  document.getElementById('form-submissions-modal').classList.add('open');
+}
+
+function printMissingForms() {
+  const reqForms = formsData.forms.filter(f => f.required==='true'||f.required==='TRUE');
+  const students = formsData.students;
+  const submissions = formsData.submissions;
+  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  const missing = [];
+  students.forEach(s => {
+    reqForms.forEach(f => {
+      const sub = submissions.find(sub=>sub.student_id===s.student_id&&sub.form_id===f.form_id&&(sub.status==='received'||sub.status==='complete'));
+      if (!sub) missing.push({ student:s, form:f });
+    });
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Missing Forms</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:Arial,sans-serif; font-size:12px; padding:24px; }
+  .header { display:flex; justify-content:space-between; margin-bottom:20px; padding-bottom:12px; border-bottom:2px solid #1565C0; }
+  table { width:100%; border-collapse:collapse; }
+  th { background:#1565C0; color:white; padding:6px 8px; text-align:left; font-size:10px; text-transform:uppercase; }
+  td { padding:7px 8px; border-bottom:1px solid #f0f0f0; }
+  .footer { margin-top:20px; padding-top:10px; border-top:1px solid #e5e7eb; font-size:10px; color:#999; text-align:center; }
+  @media print { .no-print { display:none; } }
+</style></head><body>
+  <div class="no-print" style="padding:12px;background:#f3f4f6;text-align:center;margin-bottom:16px;border-radius:6px;">
+    <button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;">Print</button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;margin-left:8px;">Close</button>
+  </div>
+  <div class="header">
+    <div><img src="${LOGO_DATA_URL}" style="height:44px;margin-bottom:4px;display:block;"/>
+      <div style="font-size:10px;color:#666;">Estill County Band Boosters</div></div>
+    <div style="text-align:right;">
+      <div style="font-size:20px;font-weight:700;">Missing Forms</div>
+      <div style="color:#666;">${CONFIG.SCHOOL_YEAR}</div>
+      <div style="font-size:10px;color:#999;">Printed: ${today}</div>
+    </div>
+  </div>
+  <div style="background:#FFEBEE;border:1px solid #FFCDD2;padding:8px 14px;border-radius:6px;margin-bottom:14px;font-size:12px;color:#C62828;">
+    <strong>${missing.length} missing form${missing.length!==1?'s':''}</strong> from ${[...new Set(missing.map(m=>m.student.student_id))].length} students
+  </div>
+  <table>
+    <thead><tr><th>Student</th><th>Grade</th><th>Section</th><th>Missing form</th><th>Due date</th></tr></thead>
+    <tbody>
+      ${missing.map(m=>'<tr><td><strong>'+m.student.first_name+' '+m.student.last_name+'</strong></td><td>'+m.student.grade+'</td><td>'+(m.student.section||'—')+'</td><td>'+m.form.title+'</td><td>'+(m.form.due_date?formatDate(m.form.due_date):'—')+'</td></tr>').join('')}
+    </tbody>
+  </table>
+  <div class="footer">Estill County Band Boosters · Cadence · ${today}</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
+}
 // ════════════════════════════════════════════════════════════
 //  USERS & ACCESS — Full module
 // ════════════════════════════════════════════════════════════
