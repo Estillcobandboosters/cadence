@@ -427,10 +427,37 @@
 
     <div id="login-error"></div>
 
-    <p class="login-note">
-      Access is restricted to authorized band booster members.<br>
-      Contact your booster admin if you need access.
-    </p>
+    <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.1);padding-top:20px;">
+      <p class="login-note" style="margin-bottom:12px;">
+        Band booster staff? Sign in above.<br>
+        Band families can request parent portal access below.
+      </p>
+      <button onclick="showParentRequestForm()" 
+        style="width:100%;padding:11px;background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:var(--radius);color:var(--gray-300);font-family:var(--font);font-size:14px;cursor:pointer;transition:background 0.15s;"
+        onmouseover="this.style.background='rgba(255,255,255,0.05)'"
+        onmouseout="this.style.background='transparent'">
+        &#127968; Parent / Guardian portal access
+      </button>
+    </div>
+
+    <!-- Parent request form (hidden by default) -->
+    <div id="parent-request-form" style="display:none;margin-top:16px;background:rgba(255,255,255,0.05);border-radius:var(--radius);padding:16px;">
+      <div style="font-size:14px;font-weight:500;color:var(--white);margin-bottom:12px;">Request parent portal access</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input id="pr-name" class="form-input" placeholder="Your full name" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:white;"/>
+        <input id="pr-email" class="form-input" type="email" placeholder="Your Gmail address" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:white;"/>
+        <input id="pr-student" class="form-input" placeholder="Your student's full name" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:white;"/>
+        <button onclick="submitParentRequest()"
+          style="padding:10px;background:var(--blue);border:none;border-radius:8px;color:white;font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;">
+          Submit request
+        </button>
+        <button onclick="hideParentRequestForm()"
+          style="padding:8px;background:transparent;border:none;color:var(--gray-500);font-family:var(--font);font-size:13px;cursor:pointer;">
+          Cancel
+        </button>
+      </div>
+      <div id="pr-status" style="margin-top:10px;font-size:13px;"></div>
+    </div>
   </div>
 </div>
 
@@ -640,22 +667,28 @@ function signOut() {
 
 // ── Show App ───────────────────────────────────────────────
 async function showApp() {
+  const u = state.user;
+
+  // Route parents to the parent portal
+  if (u.role === 'parent') {
+    document.getElementById('login-screen').style.display = 'none';
+    await showParentPortal();
+    return;
+  }
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-shell').classList.add('visible');
 
-  const u = state.user;
-  document.getElementById('user-name').textContent  = u.name || u.email;
-  document.getElementById('user-role').textContent  = u.role;
+  document.getElementById('user-name').textContent   = u.name || u.email;
+  document.getElementById('user-role').textContent   = u.role;
   document.getElementById('user-avatar').textContent = (u.name || u.email).charAt(0).toUpperCase();
 
   if (u.role === 'admin') {
     document.getElementById('admin-nav').style.display = 'block';
   }
 
-  // Set default year then init selector (await so year is ready before navigating)
   state.selectedYear = CONFIG.SCHOOL_YEAR;
   await initYearSelector();
-
   navigate('dashboard');
 }
 
@@ -4180,6 +4213,32 @@ async function saveUser() {
   } catch(e) { toast('Could not save user.', 'error'); }
 }
 
+async function approveParentRequest(userId, email, name) {
+  if (!confirm('Approve parent portal access for ' + name + ' (' + email + ')?\n\nRemember to also add their email as a test user in Google Cloud Console.')) return;
+  const user = usersData.find(u => u.user_id === userId);
+  if (!user) return;
+  try {
+    const result = await apiCall({ action: 'save_user', record: JSON.stringify({ ...user, role: 'parent', active: 'true' }) });
+    if (result.success) {
+      toast('Access approved for ' + name + '!', 'success');
+      await renderUsers();
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not approve.', 'error'); }
+}
+
+async function denyParentRequest(userId) {
+  if (!confirm('Deny and remove this access request?')) return;
+  try {
+    const result = await apiCall({ action: 'save_user', record: JSON.stringify({
+      user_id: userId, email: '_denied_', name: 'Denied', role: 'denied', active: 'false', notes: 'Denied request'
+    })});
+    if (result.success) {
+      toast('Request denied and removed.', 'info');
+      await renderUsers();
+    }
+  } catch(e) { toast('Could not deny request.', 'error'); }
+}
+
 async function toggleUserActive() {
   const user = usersData.find(u => u.user_id === editingUserId);
   if (!user) return;
@@ -4921,6 +4980,411 @@ function showMedicalAlert(studentId) {
       </div>
     </div>`;
   backdrop.classList.add('open');
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  PARENT PORTAL
+// ════════════════════════════════════════════════════════════
+
+function showParentRequestForm() {
+  document.getElementById('parent-request-form').style.display = 'block';
+}
+function hideParentRequestForm() {
+  document.getElementById('parent-request-form').style.display = 'none';
+}
+
+async function submitParentRequest() {
+  const name    = document.getElementById('pr-name').value.trim();
+  const email   = document.getElementById('pr-email').value.trim().toLowerCase();
+  const student = document.getElementById('pr-student').value.trim();
+  const status  = document.getElementById('pr-status');
+
+  if (!name || !email || !student) {
+    status.innerHTML = '<span style="color:#EF9A9A;">Please fill in all fields.</span>';
+    return;
+  }
+  if (!email.includes('@')) {
+    status.innerHTML = '<span style="color:#EF9A9A;">Please enter a valid email address.</span>';
+    return;
+  }
+
+  status.innerHTML = '<span style="color:#90CAF9;">Submitting...</span>';
+
+  try {
+    const record = {
+      user_id:    '',
+      email:      email,
+      name:       name,
+      role:       'pending',
+      active:     'false',
+      last_login: '',
+      notes:      'Parent request — student: ' + student
+    };
+    const result = await apiCall({ action: 'save_user', record: JSON.stringify(record), token: 'parent_request' });
+    status.innerHTML = '<span style="color:#A5D6A7;">&#10003; Request submitted! An admin will review and approve your access. You'll be able to sign in once approved.</span>';
+    setTimeout(() => hideParentRequestForm(), 4000);
+  } catch(e) {
+    status.innerHTML = '<span style="color:#EF9A9A;">Could not submit request. Please try again.</span>';
+  }
+}
+
+async function showParentPortal() {
+  // Create or show the parent portal container
+  let portal = document.getElementById('parent-portal');
+  if (!portal) {
+    portal = document.createElement('div');
+    portal.id = 'parent-portal';
+    document.body.appendChild(portal);
+  }
+  portal.style.display = 'block';
+
+  const u = state.user;
+  portal.innerHTML = `
+    <style>
+      #parent-portal {
+        min-height: 100vh;
+        background: var(--gray-50);
+        font-family: var(--font);
+      }
+      .portal-header {
+        background: var(--black);
+        padding: 0 24px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .portal-header-logo {
+        font-family: var(--font-serif);
+        font-size: 22px;
+        color: var(--white);
+      }
+      .portal-header-logo span { color: var(--blue-mid); }
+      .portal-body { max-width: 800px; margin: 0 auto; padding: 24px 16px; }
+      .portal-welcome { margin-bottom: 24px; }
+      .portal-section { background: white; border: 1px solid var(--gray-300); border-radius: var(--radius); margin-bottom: 20px; box-shadow: var(--shadow); overflow: hidden; }
+      .portal-section-header { background: var(--blue); color: white; padding: 12px 18px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+      .portal-section-body { padding: 16px 18px; }
+      .portal-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 14px; }
+      .portal-row:last-child { border-bottom: none; }
+      .portal-label { color: var(--gray-500); font-size: 13px; }
+      .portal-value { font-weight: 500; }
+    </style>
+
+    <div class="portal-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <img id="portal-logo" src="${LOGO_DATA_URL}" style="height:36px;background:white;border-radius:4px;padding:2px;"/>
+        <div class="portal-header-logo">Cadence<span>.</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:13px;color:var(--gray-400);">${u.name||u.email}</span>
+        <button onclick="parentSignOut()" style="background:rgba(255,255,255,0.1);border:none;color:var(--gray-300);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;">Sign out</button>
+      </div>
+    </div>
+
+    <div class="portal-body">
+      <div class="portal-welcome">
+        <div style="font-size:22px;font-weight:600;margin-bottom:4px;">Welcome, ${u.name||''}!</div>
+        <div style="font-size:14px;color:var(--gray-500);">Estill County Band Boosters · ${CONFIG.SCHOOL_YEAR}</div>
+      </div>
+      <div id="portal-content">
+        <div style="display:flex;align-items:center;gap:10px;color:var(--gray-500);padding:40px 0;">
+          <div class="spinner"></div> Loading your account...
+        </div>
+      </div>
+    </div>`;
+
+  // Load parent's data
+  await loadParentData();
+}
+
+async function loadParentData() {
+  const u = state.user;
+  try {
+    const [guardiansRes, studentsRes, feesRes, paymentsRes, attendRes, eventsRes, formsRes, subsRes] = await Promise.allSettled([
+      apiCall({ action: 'get_guardians' }),
+      apiCall({ action: 'get_students' }),
+      apiCall({ action: 'get_fees' }),
+      apiCall({ action: 'get_payments' }),
+      apiCall({ action: 'get_attendance' }),
+      apiCall({ action: 'get_events' }),
+      apiCall({ action: 'get_forms' }),
+      apiCall({ action: 'get_form_submissions' })
+    ]);
+
+    const allGuardians = guardiansRes.status==='fulfilled' ? (guardiansRes.value.data||[]) : [];
+    const allStudents  = studentsRes.status==='fulfilled'  ? (studentsRes.value.data||[])  : [];
+    const allFees      = feesRes.status==='fulfilled'      ? (feesRes.value.data||[])       : [];
+    const allPayments  = paymentsRes.status==='fulfilled'  ? (paymentsRes.value.data||[])   : [];
+    const allAttend    = attendRes.status==='fulfilled'    ? (attendRes.value.data||[])      : [];
+    const allEvents    = eventsRes.status==='fulfilled'    ? (eventsRes.value.data||[])      : [];
+    const allForms     = formsRes.status==='fulfilled'     ? (formsRes.value.data||[])       : [];
+    const allSubs      = subsRes.status==='fulfilled'      ? (subsRes.value.data||[])        : [];
+
+    const myGuardian = allGuardians.find(g => g.email && g.email.toLowerCase() === u.email.toLowerCase());
+
+    if (!myGuardian) {
+      document.getElementById('portal-content').innerHTML =
+        '<div class="portal-section">' +
+          '<div class="portal-section-header">Account not linked</div>' +
+          '<div class="portal-section-body">' +
+            '<p style="font-size:14px;color:var(--gray-700);line-height:1.6;">Your account has not been linked to a student yet. ' +
+            'Please contact your band booster admin and ask them to add your email address (' +
+            '<strong>' + u.email + '</strong>) to your guardian record.</p>' +
+          '</div>' +
+        '</div>';
+      return;
+    }
+
+    window._portalGuardian = myGuardian;
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const upcoming = allEvents.filter(e => new Date(e.date) >= today)
+      .sort((a,b) => new Date(a.date)-new Date(b.date)).slice(0,5);
+
+    const myStudents = allStudents.filter(s => s.student_id === myGuardian.student_id);
+    let html = '';
+
+    myStudents.forEach(function(student) {
+      const sFees     = allFees.filter(f => f.student_id === student.student_id);
+      const sPayments = allPayments.filter(p => p.student_id === student.student_id);
+      const sAttend   = allAttend.filter(a => a.student_id === student.student_id);
+      const reqForms  = allForms.filter(f => f.required==='true' || f.required==='TRUE');
+      const sSubs     = allSubs.filter(s => s.student_id === student.student_id);
+
+      const totalDue  = sFees.reduce(function(s,f){ return s+parseFloat(f.amount_due||0); }, 0);
+      const totalPaid = sFees.reduce(function(s,f){ return s+parseFloat(f.amount_paid||0); }, 0);
+      const balance   = totalDue - totalPaid;
+      const present   = sAttend.filter(a => a.status==='present').length;
+      const absent    = sAttend.filter(a => a.status==='absent').length;
+      const excused   = sAttend.filter(a => a.status==='excused').length;
+      const reqEvents = allEvents.filter(e => e.required==='true'||e.required==='TRUE').length;
+      const attPct    = reqEvents > 0 ? Math.round((present/reqEvents)*100) : 100;
+      const missingForms = reqForms.filter(function(f) {
+        return !sSubs.find(function(s) { return s.form_id===f.form_id && (s.status==='received'||s.status==='complete'); });
+      });
+
+      // Student header
+      html += '<div style="background:var(--blue);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;color:white;">';
+      html += '<div style="font-size:20px;font-weight:700;">' + student.first_name + ' ' + student.last_name + '</div>';
+      html += '<div style="font-size:13px;opacity:0.85;margin-top:2px;">Grade ' + student.grade + ' &middot; ' + (student.section||'') + ' &middot; ' + (student.instrument||'') + '</div>';
+      html += '</div>';
+
+      // Fee summary
+      html += '<div class="portal-section">';
+      html += '<div class="portal-section-header"><span>Fees &amp; Balance</span>';
+      html += '<span style="font-size:18px;font-weight:700;">' + (balance>0 ? '$'+balance.toFixed(2)+' due' : 'Paid in full &#10003;') + '</span></div>';
+      html += '<div class="portal-section-body">';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;text-align:center;">';
+      html += '<div style="background:var(--gray-50);border-radius:8px;padding:12px;"><div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Total due</div><div style="font-size:22px;font-weight:700;">$' + totalDue.toFixed(2) + '</div></div>';
+      html += '<div style="background:#E8F5E9;border-radius:8px;padding:12px;"><div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Paid</div><div style="font-size:22px;font-weight:700;color:var(--success);">$' + totalPaid.toFixed(2) + '</div></div>';
+      html += '<div style="background:' + (balance>0?'#FFEBEE':'#E8F5E9') + ';border-radius:8px;padding:12px;"><div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Balance</div><div style="font-size:22px;font-weight:700;color:' + (balance>0?'var(--danger)':'var(--success)') + ';">' + (balance>0?'$'+balance.toFixed(2):'&#10003;') + '</div></div>';
+      html += '</div>';
+
+      if (sFees.length > 0) {
+        html += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">';
+        html += '<thead><tr style="border-bottom:1px solid var(--gray-200);">';
+        html += '<th style="text-align:left;padding:6px 4px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Fee</th>';
+        html += '<th style="text-align:right;padding:6px 4px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Due</th>';
+        html += '<th style="text-align:right;padding:6px 4px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Paid</th>';
+        html += '<th style="text-align:right;padding:6px 4px;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Balance</th>';
+        html += '</tr></thead><tbody>';
+        sFees.forEach(function(f) {
+          html += '<tr style="border-bottom:1px solid var(--gray-100);">';
+          html += '<td style="padding:7px 4px;">' + f.fee_type + (f.description?' &mdash; '+f.description:'') + '</td>';
+          html += '<td style="text-align:right;padding:7px 4px;">$' + parseFloat(f.amount_due||0).toFixed(2) + '</td>';
+          html += '<td style="text-align:right;padding:7px 4px;color:var(--success);">$' + parseFloat(f.amount_paid||0).toFixed(2) + '</td>';
+          var bal = parseFloat(f.balance||0);
+          html += '<td style="text-align:right;padding:7px 4px;font-weight:600;color:' + (bal>0?'var(--danger)':'var(--success)') + ';">' + (bal>0?'$'+bal.toFixed(2):'&#10003;') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      if (sPayments.length > 0) {
+        html += '<div style="font-size:13px;font-weight:500;margin-bottom:8px;">Payment history</div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        html += '<thead><tr style="border-bottom:1px solid var(--gray-200);">';
+        html += '<th style="text-align:left;padding:5px 4px;font-size:10px;color:var(--gray-500);text-transform:uppercase;">Receipt</th>';
+        html += '<th style="text-align:left;padding:5px 4px;font-size:10px;color:var(--gray-500);text-transform:uppercase;">Date</th>';
+        html += '<th style="text-align:left;padding:5px 4px;font-size:10px;color:var(--gray-500);text-transform:uppercase;">Method</th>';
+        html += '<th style="text-align:right;padding:5px 4px;font-size:10px;color:var(--gray-500);text-transform:uppercase;">Amount</th>';
+        html += '</tr></thead><tbody>';
+        sPayments.forEach(function(p) {
+          html += '<tr style="border-bottom:1px solid var(--gray-100);">';
+          html += '<td style="padding:5px 4px;font-family:monospace;font-size:11px;">' + (p.receipt_num||'&mdash;') + '</td>';
+          html += '<td style="padding:5px 4px;">' + (p.payment_date ? formatDate(p.payment_date) : '&mdash;') + '</td>';
+          html += '<td style="padding:5px 4px;text-transform:capitalize;">' + (p.method||'&mdash;') + '</td>';
+          html += '<td style="padding:5px 4px;text-align:right;color:var(--success);font-weight:600;">$' + parseFloat(p.amount||0).toFixed(2) + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+      html += '</div></div>'; // close portal-section-body and portal-section
+
+      // Attendance
+      html += '<div class="portal-section">';
+      html += '<div class="portal-section-header">Attendance</div>';
+      html += '<div class="portal-section-body">';
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;text-align:center;">';
+      html += '<div style="background:#E8F5E9;border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;">Present</div><div style="font-size:20px;font-weight:700;color:var(--success);">' + present + '</div></div>';
+      html += '<div style="background:#FFEBEE;border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;">Absent</div><div style="font-size:20px;font-weight:700;color:var(--danger);">' + absent + '</div></div>';
+      html += '<div style="background:#FFFBEB;border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;">Excused</div><div style="font-size:20px;font-weight:700;color:#F59E0B;">' + excused + '</div></div>';
+      html += '<div style="background:' + (attPct>=90?'#E8F5E9':attPct>=75?'#FFF8E1':'#FFEBEE') + ';border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;">Rate</div><div style="font-size:20px;font-weight:700;color:' + (attPct>=90?'var(--success)':attPct>=75?'#F59E0B':'var(--danger)') + ';">' + attPct + '%</div></div>';
+      html += '</div>';
+
+      if (sAttend.length > 0) {
+        sAttend.slice(-8).reverse().forEach(function(a) {
+          var ev = allEvents.find(function(e){ return e.event_id===a.event_id; });
+          var badgeClass = a.status==='present' ? 'badge-green' : a.status==='excused' ? 'badge-blue' : 'badge-red';
+          html += '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--gray-100);">';
+          html += '<span class="badge ' + badgeClass + '">' + a.status + '</span>';
+          html += '<span>' + (ev ? ev.title : 'Event') + '</span>';
+          html += '<span style="margin-left:auto;color:var(--gray-500);font-size:12px;">' + (ev ? formatDate(ev.date) : '') + '</span>';
+          if (a.notes) html += '<span style="font-size:11px;color:var(--gray-400);">' + a.notes + '</span>';
+          html += '</div>';
+        });
+      } else {
+        html += '<div style="color:var(--gray-500);font-size:13px;">No attendance records yet.</div>';
+      }
+      html += '</div></div>'; // close portal-section
+
+      // Missing forms
+      if (missingForms.length > 0) {
+        html += '<div class="portal-section" style="border-color:#FFCDD2;">';
+        html += '<div class="portal-section-header" style="background:var(--danger);">&#9888; Action required &mdash; Missing forms (' + missingForms.length + ')</div>';
+        html += '<div class="portal-section-body">';
+        missingForms.forEach(function(f) {
+          html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--gray-100);">';
+          html += '<span class="badge badge-red">' + (f.form_type||'Form') + '</span>';
+          html += '<span style="font-size:14px;">' + f.title + '</span>';
+          if (f.due_date) html += '<span style="margin-left:auto;font-size:12px;color:var(--danger);">Due: ' + formatDate(f.due_date) + '</span>';
+          if (f.file_url) html += '<a href="' + f.file_url + '" target="_blank" class="btn btn-sm btn-primary" style="font-size:11px;">Open form</a>';
+          html += '</div>';
+        });
+        html += '<div style="font-size:12px;color:var(--gray-500);margin-top:10px;">Please return these forms to the band director as soon as possible.</div>';
+        html += '</div></div>';
+      }
+    });
+
+    // Upcoming events
+    html += '<div class="portal-section"><div class="portal-section-header">Upcoming events</div>';
+    if (upcoming.length === 0) {
+      html += '<div class="portal-section-body"><div style="color:var(--gray-500);font-size:13px;">No upcoming events scheduled.</div></div>';
+    } else {
+      html += '<div class="card-body" style="padding:0;">';
+      upcoming.forEach(function(e) {
+        var d = new Date(e.date);
+        var isReq = e.required==='true' || e.required==='TRUE';
+        html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--gray-100);">';
+        html += '<div style="min-width:40px;text-align:center;background:var(--blue);border-radius:6px;padding:4px 6px;">';
+        html += '<div style="font-size:9px;color:rgba(255,255,255,0.8);text-transform:uppercase;">' + d.toLocaleDateString('en-US',{month:'short'}) + '</div>';
+        html += '<div style="font-size:15px;font-weight:700;color:white;">' + d.getDate() + '</div></div>';
+        html += '<div style="flex:1;"><div style="font-size:14px;font-weight:500;">' + e.title + '</div>';
+        html += '<div style="font-size:12px;color:var(--gray-500);">' + (e.start_time?formatTime(e.start_time)+' ':'') + (e.location||'') + '</div></div>';
+        html += '<span class="badge ' + (isReq?'badge-red':'badge-gray') + '" style="font-size:10px;">' + (isReq?'Required':'Optional') + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Contact info
+    html += '<div class="portal-section">';
+    html += '<div class="portal-section-header" style="justify-content:space-between;">';
+    html += '<span>Your contact info</span>';
+    html += '<button onclick="openParentContactEdit()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Edit</button>';
+    html += '</div><div class="portal-section-body">';
+    html += '<div class="portal-row"><span class="portal-label">Name</span><span class="portal-value">' + myGuardian.first_name + ' ' + myGuardian.last_name + '</span></div>';
+    html += '<div class="portal-row"><span class="portal-label">Email</span><span class="portal-value">' + (myGuardian.email||'&mdash;') + '</span></div>';
+    html += '<div class="portal-row"><span class="portal-label">Phone</span><span class="portal-value">' + (myGuardian.phone||'&mdash;') + '</span></div>';
+    html += '<div class="portal-row"><span class="portal-label">Alt phone</span><span class="portal-value">' + (myGuardian.alt_phone||'&mdash;') + '</span></div>';
+    html += '<div class="portal-row"><span class="portal-label">Email updates</span><span class="portal-value">' + (String(myGuardian.receives_emails).toUpperCase()==='TRUE'?'Yes':'No') + '</span></div>';
+    html += '</div></div>';
+
+    document.getElementById('portal-content').innerHTML = html;
+
+  } catch(e) {
+    console.error('Portal error:', e);
+    document.getElementById('portal-content').innerHTML =
+      '<div style="color:var(--danger);padding:20px;">Error loading your account: ' + e.message + '</div>';
+  }
+}
+
+function openParentContactEdit() {
+  const g = window._portalGuardian;
+  if (!g) return;
+
+  let modal = document.getElementById('parent-contact-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'parent-contact-modal';
+    modal.className = 'modal-backdrop';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Update contact info</div>
+        <button class="modal-close" onclick="document.getElementById('parent-contact-modal').classList.remove('open')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Phone (primary)</label>
+            <input class="form-input" id="pc-phone" type="tel" value="${g.phone||''}" placeholder="(555) 555-5555"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone (alternate)</label>
+            <input class="form-input" id="pc-alt_phone" type="tel" value="${g.alt_phone||''}" placeholder="(555) 555-5555"/>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">Receive email updates?</label>
+            <select class="form-select" id="pc-receives_emails">
+              <option value="true" ${String(g.receives_emails).toUpperCase()==='TRUE'?'selected':''}>Yes</option>
+              <option value="false" ${String(g.receives_emails).toUpperCase()!=='TRUE'?'selected':''}>No</option>
+            </select>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:8px;">To update your name or email, please contact the band booster admin.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('parent-contact-modal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveParentContact()">Save</button>
+      </div>
+    </div>`;
+  modal.classList.add('open');
+}
+
+async function saveParentContact() {
+  const g = window._portalGuardian;
+  if (!g) return;
+  const updated = {
+    ...g,
+    phone:           document.getElementById('pc-phone').value,
+    alt_phone:       document.getElementById('pc-alt_phone').value,
+    receives_emails: document.getElementById('pc-receives_emails').value
+  };
+  try {
+    const result = await apiCall({ action: 'save_guardian', record: JSON.stringify(updated) });
+    if (result.success) {
+      toast('Contact info updated!', 'success');
+      document.getElementById('parent-contact-modal').classList.remove('open');
+      await loadParentData();
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save.', 'error'); }
+}
+
+function parentSignOut() {
+  localStorage.removeItem('cadence_token');
+  localStorage.removeItem('cadence_user');
+  state.user = null; state.token = null;
+  const portal = document.getElementById('parent-portal');
+  if (portal) portal.style.display = 'none';
+  document.getElementById('app-shell').classList.remove('visible');
+  document.getElementById('login-screen').style.display = 'flex';
 }
 
 // ════════════════════════════════════════════════════════════
