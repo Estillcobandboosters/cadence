@@ -5566,6 +5566,12 @@ function renderTreasurerView() {
   html += '<input class="form-input" id="af-bank_name" placeholder="e.g. First National Bank"/></div>';
   html += '<div class="form-group"><label class="form-label">Active?</label>';
   html += '<select class="form-select" id="af-active"><option value="true">Active</option><option value="false">Inactive</option></select></div>';
+  html += '<div class="form-group"><label class="form-label">Routing number</label>';
+  html += '<input class="form-input" id="af-routing_number" placeholder="9-digit routing number" maxlength="9"/>';
+  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Required for check printing</div></div>';
+  html += '<div class="form-group"><label class="form-label">Full account number</label>';
+  html += '<input class="form-input" id="af-account_number" placeholder="Full account number"/>';
+  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Stored in your private Google Sheet only</div></div>';
   html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Notes</label>';
   html += '<textarea class="form-textarea" id="af-notes" placeholder="Any notes about this account..."></textarea></div>';
   html += '</div></div>';
@@ -5741,7 +5747,7 @@ function filterTransactions() {
 function openAccountForm(accountId) {
   editingAccountId = accountId || null;
   var a = accountId ? treasurerData.accounts.find(function(x){ return x.account_id===accountId; }) : null;
-  var fields = ['name','account_type','organization','opening_balance','last_four','bank_name','active','notes'];
+  var fields = ['name','account_type','organization','opening_balance','last_four','bank_name','routing_number','account_number','active','notes'];
   fields.forEach(function(f) {
     var el = document.getElementById('af-' + f);
     if (el) el.value = a ? (a[f]||'') : (f==='active'?'true':f==='account_type'?'Checking':f==='organization'?'HS Band Boosters':'');
@@ -5757,7 +5763,7 @@ async function saveAccount() {
   var name = document.getElementById('af-name').value.trim();
   if (!name) { toast('Account name is required.', 'error'); return; }
   var record = { account_id: editingAccountId || '' };
-  ['name','account_type','organization','opening_balance','last_four','bank_name','active','notes'].forEach(function(f) {
+  ['name','account_type','organization','opening_balance','last_four','bank_name','routing_number','account_number','active','notes'].forEach(function(f) {
     record[f] = document.getElementById('af-' + f).value;
   });
   try {
@@ -6317,6 +6323,466 @@ function printTreasurerReport() {
   var win = window.open('', '_blank', 'width=900,height=700');
   win.document.write(html);
   win.document.close();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  TREASURER — Piece 3: Bank Reconciliation & Check Printing
+// ════════════════════════════════════════════════════════════
+
+// Extend tab bar and switchTrTab to include reconcile and checks
+var _origRenderTreasurerView2 = renderTreasurerView;
+renderTreasurerView = function() {
+  _origRenderTreasurerView2();
+  var tabBar = document.querySelector('#page-treasurer div[style*="border-bottom:2px solid var(--gray-200)"]');
+  if (tabBar && !document.getElementById('tr-tab-reconcile')) {
+    ['reconcile','checks'].forEach(function(t) {
+      var btn = document.createElement('button');
+      btn.id = 'tr-tab-' + t;
+      btn.setAttribute('onclick', "switchTrTab('" + t + "')");
+      btn.style.cssText = 'padding:10px 20px;border:none;background:none;font-size:14px;font-weight:500;color:var(--gray-500);cursor:pointer;';
+      btn.textContent = t === 'reconcile' ? 'Reconcile' : '&#9998; Print checks';
+      btn.innerHTML   = t === 'reconcile' ? 'Reconcile' : '&#9998; Print checks';
+      tabBar.appendChild(btn);
+    });
+  }
+  var el = document.getElementById('page-treasurer');
+  ['reconcile','checks'].forEach(function(t) {
+    if (!document.getElementById('tr-panel-' + t)) {
+      var div = document.createElement('div');
+      div.id = 'tr-panel-' + t;
+      div.style.display = 'none';
+      el.appendChild(div);
+    }
+  });
+};
+
+var _origSwitchTrTab2 = switchTrTab;
+switchTrTab = function(tab) {
+  ['accounts','transactions','budget','reports','reconcile','checks'].forEach(function(t) {
+    var panel = document.getElementById('tr-panel-' + t);
+    var btn   = document.getElementById('tr-tab-' + t);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--blue)' : 'var(--gray-500)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--blue)' : 'none';
+      btn.style.marginBottom = t === tab ? '-2px' : '0';
+    }
+  });
+  if (tab === 'reconcile') renderReconcilePanel();
+  if (tab === 'checks')    renderChecksPanel();
+};
+
+// ── Bank Reconciliation ─────────────────────────────────────
+var reconcileState = { accountId: '', statementBalance: 0, statementDate: '' };
+
+function renderReconcilePanel() {
+  var panel = document.getElementById('tr-panel-reconcile');
+  if (!panel) return;
+  var accounts = treasurerData.accounts;
+
+  var html = '';
+  html += '<div class="card" style="margin-bottom:16px;">';
+  html += '<div class="card-header"><div class="card-title">Bank reconciliation</div></div>';
+  html += '<div class="card-body">';
+  html += '<div style="background:var(--blue-pale);border:1px solid var(--blue-mid);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--blue-dark);margin-bottom:16px;">';
+  html += 'Match your bank statement to Cadence transactions. Check off cleared items, enter your statement balance, and see if they match.</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-group"><label class="form-label">Account *</label>';
+  html += '<select class="form-select" id="rec-account" onchange="loadReconcileTransactions()">';
+  html += '<option value="">Select account</option>';
+  accounts.forEach(function(a) {
+    html += '<option value="' + a.account_id + '">' + a.name + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">Statement date</label>';
+  html += '<input class="form-input" type="date" id="rec-statement-date"/></div>';
+  html += '<div class="form-group"><label class="form-label">Statement ending balance ($)</label>';
+  html += '<input class="form-input" type="number" step="0.01" id="rec-statement-bal" placeholder="0.00" oninput="updateReconcileSummary()"/></div>';
+  html += '</div></div></div>';
+  html += '<div id="rec-transactions-panel"></div>';
+  panel.innerHTML = html;
+}
+
+function loadReconcileTransactions() {
+  var acctId = document.getElementById('rec-account').value;
+  if (!acctId) return;
+  var panel  = document.getElementById('rec-transactions-panel');
+  var txns   = treasurerData.transactions.filter(function(t){ return t.account_id === acctId; })
+    .sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+  var acct   = treasurerData.accounts.find(function(a){ return a.account_id===acctId; });
+
+  var html = '<div class="card"><div class="card-header">';
+  html += '<div class="card-title">Transactions &mdash; ' + (acct?acct.name:'') + '</div>';
+  html += '<button class="btn btn-sm btn-primary" onclick="saveReconciliation()">Save reconciliation</button></div>';
+  html += '<div class="card-body" style="padding:0;">';
+
+  if (txns.length === 0) {
+    html += '<div class="empty-state"><div class="empty-state-text">No transactions for this account.</div></div>';
+  } else {
+    html += '<div class="table-wrap"><table>';
+    html += '<thead><tr>';
+    html += '<th style="width:40px;text-align:center;">&#9744;</th>';
+    html += '<th>Date</th><th>Description</th><th>Check #</th>';
+    html += '<th style="text-align:right;">Income</th>';
+    html += '<th style="text-align:right;">Expense</th>';
+    html += '<th style="text-align:center;">Status</th>';
+    html += '</tr></thead><tbody>';
+    txns.forEach(function(t) {
+      var isInc = t.type==='income'||t.type==='deposit';
+      var amt   = parseFloat(t.amount||0);
+      var isRec = t.reconciled==='true'||t.reconciled==='TRUE';
+      html += '<tr id="rec-row-' + t.transaction_id + '" style="background:' + (isRec?'#E8F5E9':'') + ';">';
+      html += '<td style="text-align:center;"><input type="checkbox" id="rec-chk-' + t.transaction_id + '" ' + (isRec?'checked':'') + ' onchange="toggleReconciled(\'' + t.transaction_id + '\')" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer;"/></td>';
+      html += '<td style="white-space:nowrap;">' + formatDate(t.date) + '</td>';
+      html += '<td>' + (t.description||'&mdash;') + '</td>';
+      html += '<td style="font-family:monospace;font-size:12px;">' + (t.check_number||'&mdash;') + '</td>';
+      html += '<td style="text-align:right;color:var(--success);">' + (isInc?'$'+amt.toFixed(2):'') + '</td>';
+      html += '<td style="text-align:right;color:var(--danger);">' + (!isInc?'$'+amt.toFixed(2):'') + '</td>';
+      html += '<td style="text-align:center;"><span class="badge ' + (isRec?'badge-green':'badge-gray') + '">' + (isRec?'Cleared':'Pending') + '</span></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Reconciliation summary
+  html += '<div id="rec-summary" style="padding:16px;background:var(--gray-50);border-top:1px solid var(--gray-200);">';
+  html += '<div style="font-size:14px;font-weight:500;margin-bottom:10px;">Reconciliation summary</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">';
+  html += '<div><div style="font-size:11px;color:var(--gray-500);">Cleared balance</div><div style="font-size:18px;font-weight:600;" id="rec-cleared-bal">$0.00</div></div>';
+  html += '<div><div style="font-size:11px;color:var(--gray-500);">Statement balance</div><div style="font-size:18px;font-weight:600;" id="rec-stmt-bal-display">$0.00</div></div>';
+  html += '<div><div style="font-size:11px;color:var(--gray-500);">Difference</div><div style="font-size:18px;font-weight:600;" id="rec-difference" style="color:var(--success);">$0.00</div></div>';
+  html += '<div><div style="font-size:11px;color:var(--gray-500);">Status</div><div id="rec-status" style="font-size:14px;font-weight:600;margin-top:4px;">Enter statement balance</div></div>';
+  html += '</div></div>';
+  html += '</div></div>';
+
+  panel.innerHTML = html;
+  updateReconcileSummary();
+}
+
+function toggleReconciled(txnId) {
+  var chk = document.getElementById('rec-chk-' + txnId);
+  var row = document.getElementById('rec-row-' + txnId);
+  var t   = treasurerData.transactions.find(function(x){ return x.transaction_id===txnId; });
+  if (t) {
+    t.reconciled = chk.checked ? 'true' : 'false';
+    if (row) row.style.background = chk.checked ? '#E8F5E9' : '';
+    var badge = row ? row.querySelector('.badge') : null;
+    if (badge) {
+      badge.className = 'badge ' + (chk.checked?'badge-green':'badge-gray');
+      badge.textContent = chk.checked ? 'Cleared' : 'Pending';
+    }
+  }
+  updateReconcileSummary();
+}
+
+function updateReconcileSummary() {
+  var acctId  = document.getElementById('rec-account') ? document.getElementById('rec-account').value : '';
+  var stmtBal = parseFloat(document.getElementById('rec-statement-bal') ? document.getElementById('rec-statement-bal').value : 0) || 0;
+  var acct    = treasurerData.accounts.find(function(a){ return a.account_id===acctId; });
+  if (!acct) return;
+
+  var openingBal = parseFloat(acct.opening_balance||0);
+  var txns = treasurerData.transactions.filter(function(t){ return t.account_id===acctId; });
+  var clearedBal = openingBal;
+  txns.forEach(function(t) {
+    if (t.reconciled==='true'||t.reconciled==='TRUE') {
+      var amt = parseFloat(t.amount||0);
+      if (t.type==='income'||t.type==='deposit') clearedBal += amt;
+      else clearedBal -= amt;
+    }
+  });
+
+  var diff = stmtBal - clearedBal;
+  var isBalanced = Math.abs(diff) < 0.01;
+
+  var clearedEl = document.getElementById('rec-cleared-bal');
+  var stmtEl    = document.getElementById('rec-stmt-bal-display');
+  var diffEl    = document.getElementById('rec-difference');
+  var statusEl  = document.getElementById('rec-status');
+
+  if (clearedEl) clearedEl.textContent = '$' + clearedBal.toFixed(2);
+  if (stmtEl)    stmtEl.textContent    = '$' + stmtBal.toFixed(2);
+  if (diffEl) {
+    diffEl.textContent = (diff >= 0 ? '+' : '') + '$' + diff.toFixed(2);
+    diffEl.style.color = isBalanced ? 'var(--success)' : 'var(--danger)';
+  }
+  if (statusEl) {
+    statusEl.textContent = stmtBal === 0 ? 'Enter statement balance' : isBalanced ? '✅ Balanced!' : '❌ Difference of $' + Math.abs(diff).toFixed(2);
+    statusEl.style.color = isBalanced ? 'var(--success)' : stmtBal===0 ? 'var(--gray-500)' : 'var(--danger)';
+  }
+}
+
+async function saveReconciliation() {
+  var acctId = document.getElementById('rec-account').value;
+  var txns = treasurerData.transactions.filter(function(t){ return t.account_id===acctId; });
+  var saved = 0;
+  for (var i = 0; i < txns.length; i++) {
+    var t = txns[i];
+    try {
+      await apiCall({ action: 'save_transaction', record: JSON.stringify(t) });
+      saved++;
+    } catch(e) {}
+  }
+  toast('Reconciliation saved! ' + saved + ' transactions updated.', 'success');
+}
+
+// ── Check Printing ──────────────────────────────────────────
+function renderChecksPanel() {
+  var panel = document.getElementById('tr-panel-checks');
+  if (!panel) return;
+  var accounts = treasurerData.accounts.filter(function(a){ return a.account_type==='Checking' || a.account_type==='Savings'; });
+
+  var html = '';
+
+  // Account setup warning
+  var acctsMissingInfo = accounts.filter(function(a){ return !a.routing_number || !a.last_four; });
+  if (acctsMissingInfo.length > 0) {
+    html += '<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:var(--radius);padding:12px 14px;font-size:13px;color:#5D4037;margin-bottom:16px;">';
+    html += '<strong>&#9888; Account setup needed:</strong> To print checks, add routing and account numbers to your accounts. ';
+    html += 'Go to the <strong>Accounts</strong> tab, edit each checking account, and fill in the routing number and full account number. ';
+    html += 'These are stored securely in your private Google Sheet.</div>';
+  }
+
+  html += '<div class="card"><div class="card-header"><div class="card-title">&#9998; Write a check</div></div>';
+  html += '<div class="card-body"><div class="form-grid">';
+
+  html += '<div class="form-group"><label class="form-label">Pay from account *</label>';
+  html += '<select class="form-select" id="chk-account">';
+  html += '<option value="">Select account</option>';
+  accounts.forEach(function(a) {
+    html += '<option value="' + a.account_id + '">' + a.name + (a.last_four?' (****'+a.last_four+')':'') + '</option>';
+  });
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label class="form-label">Check number</label>';
+  html += '<input class="form-input" id="chk-number" placeholder="e.g. 1042"/></div>';
+
+  html += '<div class="form-group"><label class="form-label">Date</label>';
+  html += '<input class="form-input" type="date" id="chk-date" value="' + new Date().toISOString().split('T')[0] + '"/></div>';
+
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Pay to the order of *</label>';
+  html += '<input class="form-input" id="chk-payee" placeholder="Full name or company name"/></div>';
+
+  html += '<div class="form-group"><label class="form-label">Amount ($) *</label>';
+  html += '<input class="form-input" type="number" step="0.01" id="chk-amount" placeholder="0.00" oninput="updateAmountWords()"/></div>';
+
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Amount in words</label>';
+  html += '<input class="form-input" id="chk-amount-words" placeholder="Will auto-fill when you enter amount" readonly style="background:var(--gray-50);"/></div>';
+
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Memo / For</label>';
+  html += '<input class="form-input" id="chk-memo" placeholder="e.g. Uniform deposit refund, Band trip expense..."/></div>';
+
+  html += '<div class="form-group"><label class="form-label">Also record as transaction?</label>';
+  html += '<select class="form-select" id="chk-record-txn"><option value="yes">Yes &mdash; record as expense</option><option value="no">No &mdash; print only</option></select></div>';
+
+  html += '<div class="form-group"><label class="form-label">Expense category</label>';
+  html += '<select class="form-select" id="chk-category">';
+  var cats = ['Uniform Purchase','Equipment Purchase','Trip Expense','Food/Concessions','Printing/Supplies','Refund','Other'];
+  cats.forEach(function(c){ html += '<option value="' + c + '">' + c + '</option>'; });
+  html += '</select></div>';
+
+  html += '</div>';
+  html += '<div style="margin-top:20px;display:flex;gap:10px;">';
+  html += '<button class="btn btn-secondary" onclick="previewCheck()">&#128065; Preview check</button>';
+  html += '<button class="btn btn-primary" onclick="printCheck()">&#128424; Print check</button>';
+  html += '</div></div></div>';
+
+  // Check preview area
+  html += '<div id="check-preview-area" style="margin-top:20px;"></div>';
+
+  panel.innerHTML = html;
+}
+
+function updateAmountWords() {
+  var amt = parseFloat(document.getElementById('chk-amount').value) || 0;
+  document.getElementById('chk-amount-words').value = amountToWords(amt);
+}
+
+function amountToWords(amount) {
+  if (isNaN(amount) || amount <= 0) return '';
+  var ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine',
+              'Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen',
+              'Seventeen','Eighteen','Nineteen'];
+  var tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+
+  function convertHundreds(n) {
+    var result = '';
+    if (n >= 100) {
+      result += ones[Math.floor(n/100)] + ' Hundred ';
+      n = n % 100;
+    }
+    if (n >= 20) {
+      result += tens[Math.floor(n/10)];
+      if (n % 10 > 0) result += '-' + ones[n%10];
+    } else if (n > 0) {
+      result += ones[n];
+    }
+    return result.trim();
+  }
+
+  var dollars = Math.floor(amount);
+  var cents   = Math.round((amount - dollars) * 100);
+  var result  = '';
+
+  if (dollars >= 1000000) {
+    result += convertHundreds(Math.floor(dollars/1000000)) + ' Million ';
+    dollars = dollars % 1000000;
+  }
+  if (dollars >= 1000) {
+    result += convertHundreds(Math.floor(dollars/1000)) + ' Thousand ';
+    dollars = dollars % 1000;
+  }
+  if (dollars > 0) {
+    result += convertHundreds(dollars);
+  }
+  result = result.trim();
+  if (!result) result = 'Zero';
+  result += ' and ' + (cents < 10 ? '0'+cents : cents) + '/100';
+  return result + ' Dollars';
+}
+
+function buildCheckHTML(forPrint) {
+  var acctId  = document.getElementById('chk-account').value;
+  var payee   = document.getElementById('chk-payee').value.trim();
+  var amount  = parseFloat(document.getElementById('chk-amount').value) || 0;
+  var words   = document.getElementById('chk-amount-words').value;
+  var date    = document.getElementById('chk-date').value;
+  var memo    = document.getElementById('chk-memo').value;
+  var chkNum  = document.getElementById('chk-number').value;
+
+  if (!payee || !amount || !acctId) return null;
+
+  var acct   = treasurerData.accounts.find(function(a){ return a.account_id===acctId; });
+  if (!acct) return null;
+
+  var routing = acct.routing_number || 'XXXXXXXXX';
+  var acctNum = acct.account_number || ('XXXXX' + (acct.last_four||'XXXX'));
+  var checkNo = chkNum || '0000';
+
+  // Format date
+  var dateStr = date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}) : '';
+
+  // MICR line encoding
+  var micrLine = '\u2446' + routing + '\u2446' + ' \u2448' + acctNum + '\u2448' + ' ' + checkNo;
+
+  var orgName  = acct.organization || 'Estill County Band Boosters';
+  var bankName = acct.bank_name || 'Your Bank';
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
+    '<title>Check #' + checkNo + '</title>' +
+    '<style>' +
+    '* { box-sizing:border-box; margin:0; padding:0; }' +
+    'body { font-family:Arial,sans-serif; background:white; }' +
+    '.check-page { width:8.5in; padding:0.25in; }' +
+    '.check { width:8in; height:3.5in; border:1px solid #999; border-radius:4px; padding:0.2in 0.25in; position:relative; background:white; font-family:Arial,sans-serif; }' +
+    '.check-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.15in; }' +
+    '.check-org { font-size:14px; font-weight:700; color:#1565C0; }' +
+    '.check-org-sub { font-size:10px; color:#666; margin-top:2px; }' +
+    '.check-number { font-size:13px; font-weight:600; color:#333; }' +
+    '.check-date-row { display:flex; justify-content:flex-end; margin-bottom:0.12in; font-size:12px; }' +
+    '.check-date-label { color:#666; margin-right:8px; }' +
+    '.check-date-value { border-bottom:1px solid #333; min-width:1.5in; text-align:center; }' +
+    '.check-payee-row { display:flex; align-items:flex-end; gap:8px; margin-bottom:0.1in; }' +
+    '.check-payee-label { font-size:11px; color:#666; white-space:nowrap; }' +
+    '.check-payee-value { border-bottom:1px solid #333; flex:1; font-size:14px; font-weight:500; padding-bottom:2px; }' +
+    '.check-amount-box { border:2px solid #333; border-radius:4px; padding:3px 8px; font-size:16px; font-weight:700; white-space:nowrap; min-width:1.2in; text-align:center; }' +
+    '.check-words-row { display:flex; align-items:flex-end; gap:8px; margin-bottom:0.15in; }' +
+    '.check-words-label { font-size:11px; color:#666; white-space:nowrap; }' +
+    '.check-words-value { border-bottom:1px solid #333; flex:1; font-size:11px; padding-bottom:2px; }' +
+    '.check-bottom { display:flex; justify-content:space-between; align-items:flex-end; margin-top:0.1in; }' +
+    '.check-bank { font-size:10px; color:#666; }' +
+    '.check-memo { font-size:11px; }' +
+    '.check-memo-label { color:#666; font-size:10px; }' +
+    '.check-memo-value { border-bottom:1px solid #333; min-width:2in; display:inline-block; }' +
+    '.check-signatures { display:flex; gap:0.5in; }' +
+    '.check-sig { text-align:center; }' +
+    '.check-sig-line { border-top:1px solid #333; width:2in; margin-bottom:4px; }' +
+    '.check-sig-label { font-size:9px; color:#666; }' +
+    '.micr { font-family:"MICR E13B","Courier New",monospace; font-size:14px; letter-spacing:2px; color:#000; position:absolute; bottom:0.15in; left:0.25in; right:0.25in; text-align:center; }' +
+    '.no-print { display:block; padding:12px; background:#f3f4f6; text-align:center; margin-bottom:12px; border-radius:6px; }' +
+    '@media print { .no-print { display:none !important; } .check { border:1px solid transparent; } }' +
+    '</style></head><body>' +
+    (forPrint ? '' : '<div class="no-print"><button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;margin-right:8px;">&#128424; Print</button><button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;">Close</button><div style="font-size:11px;color:#666;margin-top:6px;">Print on blank check stock with MICR toner. Use 8.5\u201d \u00d7 3.5\u201d check format.</div></div>') +
+    '<div class="check-page"><div class="check">' +
+    '<div class="check-header">' +
+    '<div><div class="check-org">' + orgName + '</div>' +
+    '<div class="check-org-sub">' + bankName + '</div></div>' +
+    '<div class="check-number">No. ' + checkNo + '</div>' +
+    '</div>' +
+    '<div class="check-date-row"><span class="check-date-label">Date</span><span class="check-date-value">' + dateStr + '</span></div>' +
+    '<div class="check-payee-row"><span class="check-payee-label">Pay to the order of</span><span class="check-payee-value">' + payee + '</span><span class="check-amount-box">$ ' + amount.toFixed(2) + '</span></div>' +
+    '<div class="check-words-row"><span class="check-words-label">&nbsp;</span><span class="check-words-value">' + words + '</span></div>' +
+    '<div class="check-bottom">' +
+    '<div><div class="check-bank">' + bankName + '</div>' +
+    '<div class="check-memo"><span class="check-memo-label">For: </span><span class="check-memo-value">' + (memo||'') + '</span></div></div>' +
+    '<div class="check-signatures">' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
+    '</div></div>' +
+    '<div class="micr">' + micrLine + '</div>' +
+    '</div></div></body></html>';
+}
+
+function previewCheck() {
+  var acctId = document.getElementById('chk-account').value;
+  var payee  = document.getElementById('chk-payee').value.trim();
+  var amount = parseFloat(document.getElementById('chk-amount').value) || 0;
+  if (!acctId) { toast('Please select an account.', 'error'); return; }
+  if (!payee)  { toast('Please enter payee name.', 'error'); return; }
+  if (!amount) { toast('Please enter an amount.', 'error'); return; }
+
+  var html = buildCheckHTML(true);
+  if (!html) { toast('Please fill in all required fields.', 'error'); return; }
+
+  // Show inline preview
+  var previewArea = document.getElementById('check-preview-area');
+  previewArea.innerHTML = '<div style="transform:scale(0.85);transform-origin:top left;width:118%;">' + html.replace(/<\/?html>|<\/?body>|<\/?head>|<!DOCTYPE html>|<meta[^>]*>|<title>[^<]*<\/title>|<style>[^<]*<\/style>/gs,'') + '</div>';
+}
+
+async function printCheck() {
+  var acctId   = document.getElementById('chk-account').value;
+  var payee    = document.getElementById('chk-payee').value.trim();
+  var amount   = parseFloat(document.getElementById('chk-amount').value) || 0;
+  var chkNum   = document.getElementById('chk-number').value;
+  var date     = document.getElementById('chk-date').value;
+  var memo     = document.getElementById('chk-memo').value;
+  var recordTxn = document.getElementById('chk-record-txn').value;
+  var category = document.getElementById('chk-category').value;
+
+  if (!acctId) { toast('Please select an account.', 'error'); return; }
+  if (!payee)  { toast('Please enter payee name.', 'error'); return; }
+  if (!amount) { toast('Please enter an amount.', 'error'); return; }
+
+  var html = buildCheckHTML(false);
+  if (!html) { toast('Please fill in all required fields.', 'error'); return; }
+
+  // Record as transaction if requested
+  if (recordTxn === 'yes') {
+    var record = {
+      transaction_id: '',
+      date:        date,
+      type:        'expense',
+      description: 'Check #' + chkNum + ' - ' + payee,
+      account_id:  acctId,
+      amount:      amount.toString(),
+      category:    category,
+      check_number: chkNum,
+      notes:       'Memo: ' + memo
+    };
+    try {
+      var result = await apiCall({ action: 'save_transaction', record: JSON.stringify(record) });
+      if (result.success) {
+        toast('Transaction recorded for check #' + chkNum, 'success');
+        await renderTreasurer();
+      }
+    } catch(e) { toast('Could not record transaction.', 'error'); }
+  }
+
+  var win = window.open('', '_blank', 'width=900,height=600');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){ win.print(); }, 800);
 }
 
 // ════════════════════════════════════════════════════════════
