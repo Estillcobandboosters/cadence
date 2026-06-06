@@ -5022,7 +5022,7 @@ async function submitParentRequest() {
       notes:      'Parent request — student: ' + student
     };
     const result = await apiCall({ action: 'save_user', record: JSON.stringify(record), token: 'parent_request' });
-    status.innerHTML = '<span style="color:#A5D6A7;">&#10003; Request submitted! An admin will review and approve your access. You'll be able to sign in once approved.</span>';
+    status.innerHTML = '<span style="color:#A5D6A7;">&#10003; Request submitted! An admin will review and approve your access. You will be able to sign in once approved.</span>';
     setTimeout(() => hideParentRequestForm(), 4000);
   } catch(e) {
     status.innerHTML = '<span style="color:#EF9A9A;">Could not submit request. Please try again.</span>';
