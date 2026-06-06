@@ -553,6 +553,9 @@
         </div>
         <button class="signout-btn" onclick="signOut()" title="Sign out">↩</button>
       </div>
+      <button id="parent-view-btn" onclick="switchToParentView()" style="display:none;width:100%;margin-top:8px;padding:7px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--gray-400);font-family:var(--font);font-size:12px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.14)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">
+        &#127968; Switch to parent view
+      </button>
     </div>
   </nav>
 
@@ -608,6 +611,7 @@
       <div id="page-fundraising" style="display:none"></div>
       <div id="page-forms"       style="display:none"></div>
       <div id="page-treasurer"   style="display:none"></div>
+      <div id="page-communications" style="display:none"></div>
       <div id="page-reimbursements" style="display:none"></div>
       <div id="page-users"       style="display:none"></div>
     </div>
@@ -719,6 +723,11 @@ async function showApp() {
   if (u.role === 'admin') {
     document.getElementById('admin-nav').style.display = 'block';
   }
+  // Show parent view button for all non-parent roles
+  if (u.role !== 'parent') {
+    var pvBtn = document.getElementById('parent-view-btn');
+    if (pvBtn) pvBtn.style.display = 'block';
+  }
 
   state.selectedYear = CONFIG.SCHOOL_YEAR;
   await initYearSelector();
@@ -737,12 +746,13 @@ const PAGE_TITLES = {
   volunteers:  'Volunteers',
   fundraising: 'Fundraising',
   forms:       'Forms & Documents',
+  communications: 'Communications',
   treasurer:      'Treasurer',
   reimbursements: 'Reimbursements',
   users:       'Users & Access'
 };
 
-const ALL_PAGES = ['dashboard','roster','fees','attendance','uniforms','instruments','events','volunteers','fundraising','forms','treasurer','reimbursements','users'];
+const ALL_PAGES = ['dashboard','roster','fees','attendance','uniforms','instruments','events','volunteers','fundraising','forms','communications','treasurer','reimbursements','users'];
 
 function navigate(page) {
   // Close mobile menu if open
@@ -775,6 +785,7 @@ function navigate(page) {
     volunteers:  renderVolunteers,
     fundraising: renderFundraising,
     forms:       renderForms,
+    communications:   renderCommunications,
     treasurer:        renderTreasurer,
     reimbursements:   renderReimbursements,
     users:        renderUsers
@@ -5308,6 +5319,56 @@ async function loadParentData() {
       }
     });
 
+    // Announcements & communications
+    try {
+      var postsRes = await apiCall({ action: 'get_posts' });
+      var allPosts = postsRes.data || [];
+      var today2   = new Date(); today2.setHours(0,0,0,0);
+      var visiblePosts = allPosts.filter(function(p) {
+        if (p.status !== 'published') return false;
+        if (p.expiry_date && new Date(p.expiry_date) < today2) return false;
+        return true;
+      }).sort(function(a,b) {
+        // Pinned first, then urgent, then by date
+        if ((a.pinned==='true') !== (b.pinned==='true')) return a.pinned==='true' ? -1 : 1;
+        if ((a.priority==='urgent') !== (b.priority==='urgent')) return a.priority==='urgent' ? -1 : 1;
+        return new Date(b.publish_date) - new Date(a.publish_date);
+      });
+
+      if (visiblePosts.length > 0) {
+        html += '<div class="portal-section">';
+        html += '<div class="portal-section-header">Announcements &amp; updates</div>';
+        html += '<div class="portal-section-body" style="padding:0;">';
+        visiblePosts.forEach(function(p) {
+          var typeIcons = { announcement: '&#128226;', itinerary: '&#128506;', fundraiser: '&#9670;' };
+          var isPinned  = p.pinned === 'true';
+          var isUrgent  = p.priority === 'urgent';
+          var reqAck    = p.require_ack === 'true';
+          html += '<div style="padding:14px 18px;border-bottom:1px solid var(--gray-100);border-left:4px solid ' + (isUrgent?'var(--danger)':isPinned?'#F59E0B':'var(--blue)') + ';">';
+          html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">';
+          html += '<div style="flex:1;">';
+          html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">';
+          html += '<span>' + (typeIcons[p.post_type]||'&#128226;') + '</span>';
+          html += '<span style="font-size:14px;font-weight:600;">' + p.title + '</span>';
+          if (isUrgent) html += '<span class="badge badge-red" style="font-size:10px;">&#128680; Urgent</span>';
+          if (isPinned) html += '<span class="badge badge-blue" style="font-size:10px;">&#128204; Pinned</span>';
+          html += '</div>';
+          html += '<div style="font-size:12px;color:var(--gray-500);margin-bottom:6px;">' + formatDate(p.publish_date) + (p.author?' &mdash; '+p.author:'') + '</div>';
+          html += '<div style="font-size:13px;color:var(--gray-700);white-space:pre-line;line-height:1.5;">' + p.content + '</div>';
+          if (p.attachment_url) {
+            html += '<div style="margin-top:8px;"><a href="' + p.attachment_url + '" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;">&#128196; View attachment</a></div>';
+          }
+          if (reqAck) {
+            html += '<div style="margin-top:10px;">';
+            html += '<button onclick="acknowledgePost(\'' + p.post_id + '\')" style="background:var(--success);color:white;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-family:var(--font);">&#10003; I have read and acknowledged this</button>';
+            html += '</div>';
+          }
+          html += '</div></div></div>';
+        });
+        html += '</div></div>';
+      }
+    } catch(e) { /* posts not critical */ }
+
     // Upcoming events
     html += '<div class="portal-section"><div class="portal-section-header">Upcoming events</div>';
     if (upcoming.length === 0) {
@@ -5350,6 +5411,23 @@ async function loadParentData() {
     document.getElementById('portal-content').innerHTML =
       '<div style="color:var(--danger);padding:20px;">Error loading your account: ' + e.message + '</div>';
   }
+}
+
+async function acknowledgePost(postId) {
+  try {
+    var record = {
+      ack_id:     '',
+      post_id:    postId,
+      user_email: state.user ? state.user.email : '',
+      ack_date:   new Date().toISOString().split('T')[0]
+    };
+    await apiCall({ action: 'save_acknowledgment', record: JSON.stringify(record) });
+    toast('Acknowledged! Thank you.', 'success');
+    // Disable the button
+    event.target.disabled = true;
+    event.target.textContent = '&#10003; Acknowledged';
+    event.target.style.background = 'var(--gray-300)';
+  } catch(e) { toast('Could not save acknowledgment.', 'error'); }
 }
 
 function openParentContactEdit() {
@@ -7795,6 +7873,341 @@ showApp = async function() {
     setInterval(refreshNotifications, 5 * 60 * 1000);
   }, 2000);
 };
+
+
+// ════════════════════════════════════════════════════════════
+//  SWITCH TO PARENT VIEW
+// ════════════════════════════════════════════════════════════
+async function switchToParentView() {
+  // Show parent portal overlay
+  var portal = document.getElementById('parent-portal');
+  if (!portal) {
+    portal = document.createElement('div');
+    portal.id = 'parent-portal';
+    document.body.appendChild(portal);
+  }
+
+  // Add "Back to admin" button to portal header later
+  document.getElementById('app-shell').style.display = 'none';
+  portal.style.display = 'block';
+
+  // Inject back button override into showParentPortal
+  var u = state.user;
+  portal.innerHTML = '<div style="background:var(--black);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;">' +
+    '<div style="display:flex;align-items:center;gap:12px;">' +
+    '<img src="' + LOGO_DATA_URL + '" style="height:36px;background:white;border-radius:4px;padding:2px;"/>' +
+    '<div style="font-family:var(--font-serif);font-size:22px;color:white;">Cadence<span style="color:var(--blue-mid);">.</span></div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:12px;">' +
+    '<span style="font-size:12px;color:var(--gray-400);">Parent view &mdash; ' + (u.name||u.email) + '</span>' +
+    '<button onclick="switchBackToAdmin()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:white;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-family:var(--font);">&#8592; Back to admin</button>' +
+    '<button onclick="parentSignOut()" style="background:rgba(255,255,255,0.08);border:none;color:var(--gray-400);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;">Sign out</button>' +
+    '</div></div>' +
+    '<div style="max-width:800px;margin:0 auto;padding:24px 16px;">' +
+    '<div class="portal-welcome"><div style="font-size:22px;font-weight:600;margin-bottom:4px;">Parent view</div>' +
+    '<div style="font-size:14px;color:var(--gray-500);">Viewing as parent &mdash; ' + CONFIG.SCHOOL_YEAR + '</div></div>' +
+    '<div id="portal-content"><div style="display:flex;align-items:center;gap:10px;color:var(--gray-500);padding:40px 0;"><div class="spinner"></div> Loading...</div></div>' +
+    '</div>';
+
+  // Add portal styles if not present
+  if (!document.getElementById('portal-styles')) {
+    var style = document.createElement('style');
+    style.id = 'portal-styles';
+    style.textContent = '#parent-portal { min-height:100vh; background:var(--gray-50); font-family:var(--font); }' +
+      '.portal-section { background:white; border:1px solid var(--gray-300); border-radius:var(--radius); margin-bottom:20px; box-shadow:var(--shadow); overflow:hidden; }' +
+      '.portal-section-header { background:var(--blue); color:white; padding:12px 18px; font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }' +
+      '.portal-section-body { padding:16px 18px; }' +
+      '.portal-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--gray-100); font-size:14px; }' +
+      '.portal-row:last-child { border-bottom:none; }' +
+      '.portal-label { color:var(--gray-500); font-size:13px; }' +
+      '.portal-value { font-weight:500; }';
+    document.head.appendChild(style);
+  }
+
+  await loadParentData();
+}
+
+function switchBackToAdmin() {
+  var portal = document.getElementById('parent-portal');
+  if (portal) portal.style.display = 'none';
+  document.getElementById('app-shell').style.display = 'flex';
+  navigate(state.currentPage || 'dashboard');
+}
+
+// ════════════════════════════════════════════════════════════
+//  COMMUNICATIONS MODULE
+// ════════════════════════════════════════════════════════════
+let commsData = { posts: [], events: [] };
+let editingPostId = null;
+
+async function renderCommunications() {
+  const el = document.getElementById('page-communications');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading communications...</div>';
+  try {
+    const [postsRes, eventsRes] = await Promise.allSettled([
+      apiCall({ action: 'get_posts' }),
+      apiCall({ action: 'get_events' })
+    ]);
+    commsData.posts  = postsRes.status==='fulfilled'  ? (postsRes.value.data||[])  : [];
+    commsData.events = eventsRes.status==='fulfilled' ? (eventsRes.value.data||[]) : [];
+    renderCommsView();
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load communications.</div></div>';
+  }
+}
+
+function renderCommsView() {
+  const el     = document.getElementById('page-communications');
+  const posts  = commsData.posts;
+  const events = commsData.events;
+  const today  = new Date(); today.setHours(0,0,0,0);
+
+  const announcements = posts.filter(function(p){ return p.post_type==='announcement'; })
+    .sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+  const itineraries = posts.filter(function(p){ return p.post_type==='itinerary'; })
+    .sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+  const fundDetails = posts.filter(function(p){ return p.post_type==='fundraiser'; })
+    .sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+
+  var html = '';
+
+  // Stats
+  html += '<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">';
+  html += '<div class="stat-card accent"><div class="stat-label">Announcements</div><div class="stat-value">' + announcements.length + '</div></div>';
+  html += '<div class="stat-card accent"><div class="stat-label">Itineraries</div><div class="stat-value">' + itineraries.length + '</div></div>';
+  html += '<div class="stat-card accent"><div class="stat-label">Fundraiser details</div><div class="stat-value">' + fundDetails.length + '</div></div>';
+  html += '<div class="stat-card ' + (posts.filter(function(p){ return p.pinned==='true'; }).length>0?'warning':'accent') + '">';
+  html += '<div class="stat-label">Pinned</div><div class="stat-value">' + posts.filter(function(p){ return p.pinned==='true'; }).length + '</div></div>';
+  html += '</div>';
+
+  // Tabs
+  html += '<div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);">';
+  [
+    { id: 'announcements', label: '&#128226; Announcements' },
+    { id: 'itineraries',   label: '&#128506; Trip itineraries' },
+    { id: 'fundraiser',    label: '&#9670; Fundraiser details' },
+    { id: 'all',           label: 'All posts' }
+  ].forEach(function(t, i) {
+    html += '<button id="comms-tab-' + t.id + '" onclick="switchCommsTab(\'' + t.id + '\')" style="padding:10px 16px;border:none;background:none;font-size:13px;font-weight:500;color:' + (i===0?'var(--blue)':'var(--gray-500)') + ';border-bottom:' + (i===0?'2px solid var(--blue)':'none') + ';margin-bottom:' + (i===0?'-2px':'0') + ';cursor:pointer;">' + t.label + '</button>';
+  });
+  html += '</div>';
+
+  html += '<div id="comms-panel-announcements">' + buildPostsList(announcements, events, 'announcement') + '</div>';
+  html += '<div id="comms-panel-itineraries" style="display:none;">' + buildPostsList(itineraries, events, 'itinerary') + '</div>';
+  html += '<div id="comms-panel-fundraiser" style="display:none;">' + buildPostsList(fundDetails, events, 'fundraiser') + '</div>';
+  html += '<div id="comms-panel-all" style="display:none;">' + buildPostsList(posts, events, 'all') + '</div>';
+
+  // Post form modal
+  html += '<div class="modal-backdrop" id="post-form-modal">';
+  html += '<div class="modal" style="width:660px;max-width:96vw;">';
+  html += '<div class="modal-header"><div class="modal-title" id="post-form-title">New post</div>';
+  html += '<button class="modal-close" onclick="closePostForm()">&times;</button></div>';
+  html += '<div class="modal-body"><div class="form-grid">';
+
+  html += '<div class="form-group"><label class="form-label">Post type</label>';
+  html += '<select class="form-select" id="pf-post_type" onchange="postTypeChanged(this.value)">';
+  html += '<option value="announcement">&#128226; Announcement</option>';
+  html += '<option value="itinerary">&#128506; Trip itinerary</option>';
+  html += '<option value="fundraiser">&#9670; Fundraiser details</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label class="form-label">Audience</label>';
+  html += '<select class="form-select" id="pf-audience">';
+  html += '<option value="all">All families</option>';
+  html += '<option value="marching">Marching band families</option>';
+  html += '<option value="pep">Pep band families</option>';
+  html += '<option value="staff">Staff only</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Title *</label>';
+  html += '<input class="form-input" id="pf-title" placeholder="e.g. Friday Night Game Details, Fall Trip Itinerary..."/></div>';
+
+  // Linked event (for itineraries)
+  html += '<div class="form-group" id="pf-event-group"><label class="form-label">Linked event</label>';
+  html += '<select class="form-select" id="pf-event_id">';
+  html += '<option value="">None</option>';
+  events.sort(function(a,b){ return new Date(b.date)-new Date(a.date); }).forEach(function(e) {
+    html += '<option value="' + e.event_id + '">' + e.title + ' &mdash; ' + formatDate(e.date) + '</option>';
+  });
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label class="form-label">Priority</label>';
+  html += '<select class="form-select" id="pf-priority">';
+  html += '<option value="normal">Normal</option>';
+  html += '<option value="urgent">&#128680; Urgent</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label class="form-label">Pin to top?</label>';
+  html += '<select class="form-select" id="pf-pinned">';
+  html += '<option value="false">No</option>';
+  html += '<option value="true">Yes &mdash; pin to top of portal</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label class="form-label">Publish date</label>';
+  html += '<input class="form-input" type="date" id="pf-publish_date" value="' + new Date().toISOString().split('T')[0] + '"/></div>';
+
+  html += '<div class="form-group"><label class="form-label">Expiry date (optional)</label>';
+  html += '<input class="form-input" type="date" id="pf-expiry_date"/>';
+  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Post hides from portal after this date</div></div>';
+
+  html += '<div class="form-group" id="pf-require-ack-group"><label class="form-label">Require acknowledgment?</label>';
+  html += '<select class="form-select" id="pf-require_ack">';
+  html += '<option value="false">No</option>';
+  html += '<option value="true">Yes &mdash; parents must confirm they read this</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Content *</label>';
+  html += '<textarea class="form-textarea" id="pf-content" style="min-height:200px;" placeholder="Write your announcement, itinerary details, fundraiser instructions..."></textarea></div>';
+
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Attachment URL (optional)</label>';
+  html += '<input class="form-input" id="pf-attachment_url" placeholder="https://drive.google.com/... (Google Drive link to PDF, form, etc.)"/></div>';
+
+  html += '</div></div>';
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-secondary" onclick="closePostForm()">Cancel</button>';
+  html += '<button class="btn btn-danger btn-sm" id="delete-post-btn" style="display:none;margin-right:auto;" onclick="deletePost()">Delete</button>';
+  html += '<button class="btn btn-secondary" onclick="savePost(\'draft\')">Save as draft</button>';
+  html += '<button class="btn btn-primary" onclick="savePost(\'published\')">Publish</button>';
+  html += '</div></div></div>';
+
+  el.innerHTML = html;
+}
+
+function buildPostsList(posts, events, type) {
+  var addLabel = type==='announcement' ? 'Announcement' : type==='itinerary' ? 'Trip itinerary' : type==='fundraiser' ? 'Fundraiser details' : 'Post';
+  var published = posts.filter(function(p){ return p.status!=='deleted'; });
+
+  var html = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="openPostForm(\'' + (type==='all'?'announcement':type) + '\')">+ New ' + addLabel + '</button>';
+  html += '</div>';
+
+  if (published.length === 0) {
+    return html + '<div class="empty-state"><div class="empty-state-icon">&#128226;</div><div class="empty-state-text">No ' + addLabel.toLowerCase() + 's yet.</div></div>';
+  }
+
+  published.forEach(function(p) {
+    var ev = p.event_id ? events.find(function(e){ return e.event_id===p.event_id; }) : null;
+    var isPinned  = p.pinned==='true';
+    var isUrgent  = p.priority==='urgent';
+    var isDraft   = p.status==='draft';
+    var reqAck    = p.require_ack==='true';
+    var typeColors = { announcement: 'var(--blue)', itinerary: '#2E7D32', fundraiser: '#E65100' };
+    var typeIcons  = { announcement: '&#128226;', itinerary: '&#128506;', fundraiser: '&#9670;' };
+    var color = typeColors[p.post_type] || 'var(--blue)';
+
+    html += '<div style="background:white;border:1px solid var(--gray-300);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;' + (isDraft?'opacity:0.7;':'') + '">';
+    // Color stripe
+    html += '<div style="height:4px;background:' + (isUrgent?'var(--danger)':isPinned?'#F59E0B':color) + ';"></div>';
+    html += '<div style="padding:16px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+    html += '<span style="font-size:16px;">' + (typeIcons[p.post_type]||'&#128226;') + '</span>';
+    html += '<span style="font-size:16px;font-weight:600;">' + p.title + '</span>';
+    if (isPinned)  html += '<span class="badge badge-blue" style="font-size:10px;">&#128204; Pinned</span>';
+    if (isUrgent)  html += '<span class="badge badge-red" style="font-size:10px;">&#128680; Urgent</span>';
+    if (isDraft)   html += '<span class="badge badge-gray" style="font-size:10px;">Draft</span>';
+    if (reqAck)    html += '<span class="badge badge-green" style="font-size:10px;">Ack required</span>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+    html += '<button class="btn btn-sm btn-secondary" onclick="openPostForm(null,\'' + p.post_id + '\')">Edit</button>';
+    if (isDraft) html += '<button class="btn btn-sm btn-primary" onclick="publishPost(\'' + p.post_id + '\')">Publish</button>';
+    html += '</div></div>';
+
+    // Meta row
+    html += '<div style="display:flex;gap:16px;font-size:12px;color:var(--gray-500);margin-bottom:8px;flex-wrap:wrap;">';
+    html += '<span>&#128197; ' + formatDate(p.publish_date) + '</span>';
+    if (ev) html += '<span>&#9711; Linked: ' + ev.title + '</span>';
+    html += '<span>&#128100; ' + (p.audience==='all'?'All families':p.audience) + '</span>';
+    if (p.expiry_date) html += '<span>Expires: ' + formatDate(p.expiry_date) + '</span>';
+    html += '</div>';
+
+    // Content preview
+    var preview = (p.content||'').substring(0, 200);
+    if ((p.content||'').length > 200) preview += '...';
+    html += '<div style="font-size:13px;color:var(--gray-700);white-space:pre-line;line-height:1.5;">' + preview + '</div>';
+    if (p.attachment_url) {
+      html += '<div style="margin-top:10px;"><a href="' + p.attachment_url + '" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;">&#128196; View attachment</a></div>';
+    }
+    html += '</div></div>';
+  });
+
+  return html;
+}
+
+function switchCommsTab(tab) {
+  ['announcements','itineraries','fundraiser','all'].forEach(function(t) {
+    var panel = document.getElementById('comms-panel-' + t);
+    var btn   = document.getElementById('comms-tab-' + t);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--blue)' : 'var(--gray-500)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--blue)' : 'none';
+      btn.style.marginBottom = t === tab ? '-2px' : '0';
+    }
+  });
+}
+
+function postTypeChanged(type) {
+  // Show event link for itineraries
+  var evGroup = document.getElementById('pf-event-group');
+  if (evGroup) evGroup.style.display = type==='itinerary' ? 'block' : 'block';
+}
+
+function openPostForm(defaultType, postId) {
+  editingPostId = postId || null;
+  var p = postId ? commsData.posts.find(function(x){ return x.post_id===postId; }) : null;
+  var fields = ['post_type','audience','title','event_id','priority','pinned','publish_date','expiry_date','require_ack','content','attachment_url'];
+  fields.forEach(function(f) {
+    var el = document.getElementById('pf-' + f);
+    if (el) el.value = p ? (p[f]||'') : (f==='post_type'?defaultType||'announcement':f==='audience'?'all':f==='priority'?'normal':f==='pinned'?'false':f==='require_ack'?'false':f==='publish_date'?new Date().toISOString().split('T')[0]:'');
+  });
+  document.getElementById('post-form-title').textContent = postId ? 'Edit post' : 'New post';
+  document.getElementById('delete-post-btn').style.display = postId ? 'inline-flex' : 'none';
+  document.getElementById('post-form-modal').classList.add('open');
+}
+
+function closePostForm() { document.getElementById('post-form-modal').classList.remove('open'); }
+
+async function savePost(status) {
+  var title   = document.getElementById('pf-title').value.trim();
+  var content = document.getElementById('pf-content').value.trim();
+  if (!title)   { toast('Title is required.', 'error'); return; }
+  if (!content) { toast('Content is required.', 'error'); return; }
+
+  var record = { post_id: editingPostId || '', status: status };
+  ['post_type','audience','title','event_id','priority','pinned','publish_date','expiry_date','require_ack','content','attachment_url'].forEach(function(f) {
+    record[f] = document.getElementById('pf-' + f).value;
+  });
+  record.author = state.user ? (state.user.name||state.user.email) : '';
+
+  try {
+    var result = await apiCall({ action: 'save_post', record: JSON.stringify(record) });
+    if (result.success) {
+      toast(status==='published' ? 'Post published! Visible on parent portals.' : 'Draft saved.', 'success');
+      closePostForm();
+      await renderCommunications();
+    } else { toast('Error: '+(result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save post.', 'error'); }
+}
+
+async function publishPost(postId) {
+  var p = commsData.posts.find(function(x){ return x.post_id===postId; });
+  if (!p) return;
+  var updated = Object.assign({}, p, { status: 'published' });
+  try {
+    var result = await apiCall({ action: 'save_post', record: JSON.stringify(updated) });
+    if (result.success) { toast('Post published!', 'success'); await renderCommunications(); }
+  } catch(e) { toast('Could not publish.', 'error'); }
+}
+
+async function deletePost() {
+  if (!editingPostId || !confirm('Delete this post?')) return;
+  try {
+    var p = commsData.posts.find(function(x){ return x.post_id===editingPostId; });
+    var result = await apiCall({ action: 'save_post', record: JSON.stringify(Object.assign({},p,{status:'deleted',title:'_deleted_'})) });
+    if (result.success) { toast('Post deleted.', 'info'); closePostForm(); await renderCommunications(); }
+  } catch(e) { toast('Could not delete.', 'error'); }
+}
 
 // ════════════════════════════════════════════════════════════
 //  YEAR SELECTOR
