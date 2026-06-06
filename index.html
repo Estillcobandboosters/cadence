@@ -572,6 +572,21 @@
         <div id="page-title">Dashboard</div>
       </div>
       <div class="top-bar-actions">
+        <div style="position:relative;">
+          <button id="notif-bell" onclick="toggleNotifications()" style="background:none;border:none;cursor:pointer;padding:6px;border-radius:6px;position:relative;font-size:20px;color:var(--gray-500);transition:color 0.15s;" title="Notifications">
+            &#128276;
+            <span id="notif-badge" style="display:none;position:absolute;top:0;right:0;background:var(--danger);color:white;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;"></span>
+          </button>
+          <div id="notif-dropdown" style="display:none;position:absolute;right:0;top:44px;width:340px;background:white;border:1px solid var(--gray-300);border-radius:var(--radius);box-shadow:var(--shadow-md);z-index:200;max-height:480px;overflow-y:auto;">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;">
+              <div style="font-size:14px;font-weight:600;">Notifications</div>
+              <button onclick="refreshNotifications()" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--blue);">Refresh</button>
+            </div>
+            <div id="notif-list" style="padding:8px 0;">
+              <div style="padding:16px;text-align:center;color:var(--gray-500);font-size:13px;">Loading...</div>
+            </div>
+          </div>
+        </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:12px;color:var(--gray-500);">School year:</span>
           <select id="year-selector" class="form-select" style="padding:4px 10px;font-size:13px;font-weight:500;border-color:var(--blue);color:var(--blue);max-width:120px;" onchange="switchYear(this.value)">
@@ -7520,6 +7535,265 @@ printCheck = async function() {
     }
     window._pendingReimbId = null;
   }
+};
+
+
+// ════════════════════════════════════════════════════════════
+//  NOTIFICATIONS
+// ════════════════════════════════════════════════════════════
+var _notifOpen = false;
+
+function toggleNotifications() {
+  var dropdown = document.getElementById('notif-dropdown');
+  _notifOpen = !_notifOpen;
+  dropdown.style.display = _notifOpen ? 'block' : 'none';
+  if (_notifOpen) refreshNotifications();
+}
+
+// Close notification dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  if (_notifOpen && !e.target.closest('#notif-bell') && !e.target.closest('#notif-dropdown')) {
+    document.getElementById('notif-dropdown').style.display = 'none';
+    _notifOpen = false;
+  }
+});
+
+async function refreshNotifications() {
+  var list  = document.getElementById('notif-list');
+  var badge = document.getElementById('notif-badge');
+  if (!list) return;
+
+  list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--gray-500);font-size:13px;"><div class="spinner" style="display:inline-block;margin-right:8px;"></div>Loading...</div>';
+
+  try {
+    var u = state.user;
+    if (!u) return;
+
+    var notifications = [];
+
+    // Load data in parallel based on role
+    var promises = [];
+    var isAdmin     = u.role === 'admin';
+    var isTreasurer = u.role === 'admin' || u.role === 'treasurer';
+    var isPresident = u.role === 'admin' || u.role === 'president';
+    var isStaff     = u.role === 'admin' || u.role === 'staff';
+
+    var dataMap = {};
+
+    if (isAdmin) {
+      promises.push(apiCall({ action: 'get_users' }).then(function(r){ dataMap.users = r.data||[]; }));
+      promises.push(apiCall({ action: 'get_form_submissions' }).then(function(r){ dataMap.submissions = r.data||[]; }));
+      promises.push(apiCall({ action: 'get_forms' }).then(function(r){ dataMap.forms = r.data||[]; }));
+      promises.push(apiCall({ action: 'get_assignments' }).then(function(r){ dataMap.assignments = r.data||[]; }));
+      promises.push(apiCall({ action: 'get_students' }).then(function(r){ dataMap.students = r.data||[]; }));
+    }
+    if (isTreasurer || isPresident) {
+      promises.push(apiCall({ action: 'get_reimbursements' }).then(function(r){ dataMap.reimbursements = r.data||[]; }));
+    }
+    if (isStaff) {
+      promises.push(apiCall({ action: 'get_events' }).then(function(r){ dataMap.events = r.data||[]; }));
+      promises.push(apiCall({ action: 'get_attendance' }).then(function(r){ dataMap.attendance = r.data||[]; }));
+      if (!dataMap.students) {
+        promises.push(apiCall({ action: 'get_students' }).then(function(r){ dataMap.students = r.data||[]; }));
+      }
+    }
+
+    await Promise.allSettled(promises);
+
+    var today = new Date(); today.setHours(0,0,0,0);
+    var in7   = new Date(today); in7.setDate(today.getDate()+7);
+
+    // ── Admin notifications ─────────────────────────────
+    if (isAdmin && dataMap.users) {
+      var pendingUsers = dataMap.users.filter(function(u){ return u.role==='pending'; });
+      if (pendingUsers.length > 0) {
+        notifications.push({
+          type:    'warning',
+          icon:    '&#128100;',
+          title:   pendingUsers.length + ' pending portal access request' + (pendingUsers.length>1?'s':''),
+          detail:  pendingUsers.map(function(u){ return u.name||u.email; }).join(', '),
+          action:  'navigate(\'users\')',
+          actionLabel: 'Review'
+        });
+      }
+    }
+
+    // ── Treasurer notifications ─────────────────────────
+    if (dataMap.reimbursements) {
+      if (isTreasurer) {
+        var pendingReimb = dataMap.reimbursements.filter(function(r){ return r.status==='pending'; });
+        if (pendingReimb.length > 0) {
+          notifications.push({
+            type:    'warning',
+            icon:    '&#9993;',
+            title:   pendingReimb.length + ' reimbursement' + (pendingReimb.length>1?'s':'') + ' awaiting treasurer approval',
+            detail:  pendingReimb.map(function(r){ return r.requester_name+' ($'+parseFloat(r.amount||0).toFixed(2)+')'; }).join(', '),
+            action:  'navigate(\'reimbursements\')',
+            actionLabel: 'Review'
+          });
+        }
+        var readyToPrint = dataMap.reimbursements.filter(function(r){ return r.status==='approved'; });
+        if (readyToPrint.length > 0) {
+          notifications.push({
+            type:    'info',
+            icon:    '&#128424;',
+            title:   readyToPrint.length + ' reimbursement check' + (readyToPrint.length>1?'s':'') + ' ready to print',
+            detail:  readyToPrint.map(function(r){ return r.requester_name+' ($'+parseFloat(r.amount||0).toFixed(2)+')'; }).join(', '),
+            action:  'navigate(\'reimbursements\')',
+            actionLabel: 'Print'
+          });
+        }
+      }
+      if (isPresident) {
+        var awaitingPresident = dataMap.reimbursements.filter(function(r){ return r.status==='treasurer_approved'; });
+        if (awaitingPresident.length > 0) {
+          notifications.push({
+            type:    'warning',
+            icon:    '&#9993;',
+            title:   awaitingPresident.length + ' reimbursement' + (awaitingPresident.length>1?'s':'') + ' awaiting your approval',
+            detail:  awaitingPresident.map(function(r){ return r.requester_name+' ($'+parseFloat(r.amount||0).toFixed(2)+')'; }).join(', '),
+            action:  'navigate(\'reimbursements\')',
+            actionLabel: 'Review'
+          });
+        }
+      }
+    }
+
+    // ── Admin: missing forms ────────────────────────────
+    if (isAdmin && dataMap.forms && dataMap.submissions && dataMap.students) {
+      var reqForms    = dataMap.forms.filter(function(f){ return f.required==='true'||f.required==='TRUE'; });
+      var activeStudents = dataMap.students.filter(function(s){ return s.status==='active' && s.school_year===state.selectedYear; });
+      var missingCount = 0;
+      reqForms.forEach(function(f) {
+        activeStudents.forEach(function(s) {
+          var hasSub = dataMap.submissions.find(function(sub){ return sub.student_id===s.student_id && sub.form_id===f.form_id && (sub.status==='received'||sub.status==='complete'); });
+          if (!hasSub) missingCount++;
+        });
+      });
+      if (missingCount > 0) {
+        notifications.push({
+          type:    'warning',
+          icon:    '&#9633;',
+          title:   missingCount + ' missing required form submission' + (missingCount>1?'s':''),
+          detail:  'Some students have not returned required forms',
+          action:  'navigate(\'forms\')',
+          actionLabel: 'View'
+        });
+      }
+    }
+
+    // ── Admin: overdue inventory ────────────────────────
+    if (isAdmin && dataMap.assignments) {
+      var overdue = dataMap.assignments.filter(function(a) {
+        return !a.returned_date && a.expected_return && new Date(a.expected_return) < today;
+      });
+      if (overdue.length > 0) {
+        notifications.push({
+          type:    'warning',
+          icon:    '&#9651;',
+          title:   overdue.length + ' item' + (overdue.length>1?'s':'') + ' overdue for return',
+          detail:  'Uniforms or instruments past expected return date',
+          action:  'navigate(\'uniforms\')',
+          actionLabel: 'View'
+        });
+      }
+    }
+
+    // ── Staff: upcoming events ──────────────────────────
+    if (isStaff && dataMap.events) {
+      var upcoming = dataMap.events.filter(function(e) {
+        var d = new Date(e.date);
+        return d >= today && d <= in7;
+      }).sort(function(a,b){ return new Date(a.date)-new Date(b.date); });
+      if (upcoming.length > 0) {
+        notifications.push({
+          type:    'info',
+          icon:    '&#9711;',
+          title:   upcoming.length + ' event' + (upcoming.length>1?'s':'') + ' in the next 7 days',
+          detail:  upcoming.map(function(e){ return e.title + ' (' + formatDate(e.date) + ')'; }).join(', '),
+          action:  'navigate(\'events\')',
+          actionLabel: 'View'
+        });
+      }
+    }
+
+    // ── Staff: events missing attendance ───────────────
+    if (isStaff && dataMap.events && dataMap.attendance && dataMap.students) {
+      var activeCount = dataMap.students.filter(function(s){ return s.status==='active' && s.school_year===state.selectedYear; }).length;
+      var pastRequired = dataMap.events.filter(function(e) {
+        return (e.required==='true'||e.required==='TRUE') && new Date(e.date) < today;
+      });
+      var noAttendance = pastRequired.filter(function(e) {
+        var count = dataMap.attendance.filter(function(a){ return a.event_id===e.event_id; }).length;
+        return count === 0 && activeCount > 0;
+      });
+      if (noAttendance.length > 0) {
+        notifications.push({
+          type:    'warning',
+          icon:    '&#10003;',
+          title:   noAttendance.length + ' past event' + (noAttendance.length>1?'s':'') + ' missing attendance',
+          detail:  noAttendance.slice(0,3).map(function(e){ return e.title; }).join(', '),
+          action:  'navigate(\'attendance\')',
+          actionLabel: 'Take roll'
+        });
+      }
+    }
+
+    // ── Render notifications ────────────────────────────
+    var totalCount = notifications.filter(function(n){ return n.type==='warning'; }).length;
+
+    // Update badge
+    if (totalCount > 0) {
+      badge.textContent = totalCount > 9 ? '9+' : totalCount;
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    if (notifications.length === 0) {
+      list.innerHTML = '<div style="padding:24px;text-align:center;">' +
+        '<div style="font-size:32px;margin-bottom:8px;">&#10003;</div>' +
+        '<div style="font-size:14px;font-weight:500;color:var(--gray-700);">All caught up!</div>' +
+        '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">No pending actions.</div>' +
+        '</div>';
+      return;
+    }
+
+    var html = '';
+    notifications.forEach(function(n) {
+      var bgColor    = n.type==='warning' ? '#FFF8E1' : n.type==='danger' ? '#FFEBEE' : '#E3F2FD';
+      var borderColor = n.type==='warning' ? '#FFE082' : n.type==='danger' ? '#FFCDD2' : '#90CAF9';
+      var iconColor  = n.type==='warning' ? '#F57F17' : n.type==='danger' ? 'var(--danger)' : 'var(--blue)';
+      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 16px;border-bottom:1px solid var(--gray-100);background:' + bgColor + ';border-left:3px solid ' + borderColor + ';">';
+      html += '<div style="font-size:20px;color:' + iconColor + ';flex-shrink:0;">' + n.icon + '</div>';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<div style="font-size:13px;font-weight:600;color:var(--gray-900);">' + n.title + '</div>';
+      if (n.detail) html += '<div style="font-size:11px;color:var(--gray-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + n.detail + '</div>';
+      html += '</div>';
+      if (n.action) {
+        html += '<button onclick="' + n.action + ';toggleNotifications();" class="btn btn-sm btn-secondary" style="flex-shrink:0;font-size:11px;">' + (n.actionLabel||'View') + '</button>';
+      }
+      html += '</div>';
+    });
+
+    list.innerHTML = html;
+
+  } catch(e) {
+    list.innerHTML = '<div style="padding:16px;color:var(--gray-500);font-size:13px;">Could not load notifications.</div>';
+    console.error('Notification error:', e);
+  }
+}
+
+// Auto-load notifications on login
+var _origShowApp2 = showApp;
+showApp = async function() {
+  await _origShowApp2();
+  // Load notification count after a short delay
+  setTimeout(function() {
+    refreshNotifications();
+    // Refresh every 5 minutes
+    setInterval(refreshNotifications, 5 * 60 * 1000);
+  }, 2000);
 };
 
 // ════════════════════════════════════════════════════════════
