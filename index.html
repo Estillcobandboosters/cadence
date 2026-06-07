@@ -810,7 +810,21 @@ function navigate(page) {
 // ── API Helper ─────────────────────────────────────────────
 async function apiCall(params) {
   const allParams = Object.assign({ token: state.token }, params);
-  // Serialize any object values to JSON strings for URL params
+
+  // Use POST for file uploads (base64 data can exceed GET URL limits)
+  if (params.action === 'upload_receipt' && params.file_data) {
+    const res = await fetch(CONFIG.SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(Object.fromEntries(
+        Object.entries(allParams).map(([k,v]) => [k, typeof v === 'object' ? JSON.stringify(v) : v])
+      )).toString(),
+      redirect: 'follow'
+    });
+    return res.json();
+  }
+
+  // All other calls use GET
   const urlParams = new URLSearchParams();
   for (const [k, v] of Object.entries(allParams)) {
     urlParams.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
@@ -7376,8 +7390,8 @@ var _reimbReceiptDataUrl = null;
 function handleReceiptSelect(input) {
   var file = input.files[0];
   if (!file) return;
-  if (file.size > 10 * 1024 * 1024) {
-    toast('File must be under 10MB.', 'error');
+  if (file.size > 5 * 1024 * 1024) {
+    toast('File must be under 5MB. For larger files please use a Google Drive link instead.', 'error');
     return;
   }
   _reimbReceiptFile = file;
@@ -7443,7 +7457,7 @@ async function submitReimbRequest() {
       if (uploadResult.success) {
         receiptUrl = uploadResult.file_url;
       } else {
-        toast('Receipt upload failed: ' + (uploadResult.error||'Unknown') + '. Please use a Drive link instead.', 'error');
+        toast('Receipt upload failed: ' + (uploadResult.error||'Unknown') + '. Please use a Google Drive link instead — paste the link in the field below.', 'error');
         submitBtn.textContent = 'Submit request';
         submitBtn.disabled = false;
         return;
