@@ -6927,8 +6927,15 @@ function buildCheckHTML(forPrint) {
   // MICR line encoding
   var micrLine = '\u2446' + routing + '\u2446' + ' \u2448' + acctNum + '\u2448' + ' ' + checkNo;
 
-  var orgName  = acct.organization || 'Estill County Band Boosters';
-  var bankName = acct.bank_name || 'Your Bank';
+  var orgName    = (_settings && _settings.org_name)         || acct.organization || 'Estill County Band Boosters';
+  var orgAddress = (_settings && _settings.org_address)      || '';
+  var orgCity    = (_settings && _settings.org_city)         || '';
+  var orgState   = (_settings && _settings.org_state)        || '';
+  var orgZip     = (_settings && _settings.org_zip)          || '';
+  var orgPhone   = (_settings && _settings.org_phone)        || '';
+  var sig1Title  = (_settings && _settings.check_sig1_title) || 'Treasurer';
+  var sig2Title  = (_settings && _settings.check_sig2_title) || 'President';
+  var bankName   = acct.bank_name || 'Your Bank';
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
     '<title>Check #' + checkNo + '</title>' +
