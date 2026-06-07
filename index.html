@@ -556,6 +556,9 @@
       <a class="nav-item" onclick="navigate('users')" href="#">
         <span class="nav-icon">&#9675;</span> Users
       </a>
+      <a class="nav-item" onclick="navigate('settings')" href="#">
+        <span class="nav-icon">&#9881;</span> Settings
+      </a>
     </div>
 
     <div class="sidebar-footer">
@@ -628,6 +631,7 @@
       <div id="page-communications" style="display:none"></div>
       <div id="page-reimbursements" style="display:none"></div>
       <div id="page-users"       style="display:none"></div>
+      <div id="page-settings"    style="display:none"></div>
     </div>
   </div>
 </div>
@@ -736,7 +740,7 @@ async function showApp() {
   if (['admin','staff','treasurer','president'].indexOf(u.role) > -1) {
     document.getElementById('treasurer-nav').style.display = 'block';
   }
-  if (u.role === 'admin') {
+  if (u.role === 'admin' || u.role === 'president') {
     document.getElementById('admin-nav').style.display = 'block';
   }
   // Show parent view button for all non-parent roles
@@ -765,10 +769,11 @@ const PAGE_TITLES = {
   communications: 'Communications',
   treasurer:      'Treasurer',
   reimbursements: 'Reimbursements',
-  users:       'Users & Access'
+  users:       'Users & Access',
+  settings:    'Settings'
 };
 
-const ALL_PAGES = ['dashboard','roster','fees','attendance','uniforms','instruments','events','volunteers','fundraising','forms','communications','treasurer','reimbursements','users'];
+const ALL_PAGES = ['dashboard','roster','fees','attendance','uniforms','instruments','events','volunteers','fundraising','forms','communications','treasurer','reimbursements','users','settings'];
 
 function navigate(page) {
   // Close mobile menu if open
@@ -804,7 +809,8 @@ function navigate(page) {
     communications:   renderCommunications,
     treasurer:        renderTreasurer,
     reimbursements:   renderReimbursements,
-    users:        renderUsers
+    users:        renderUsers,
+    settings:     renderSettings
   };
   if (renderers[page]) renderers[page]();
 }
@@ -7204,11 +7210,13 @@ async function renderReimbursements() {
 }
 
 function canTreasurerApprove() {
-  return state.user && (state.user.role === 'admin' || state.user.role === 'treasurer');
+  return state.user && ['admin','treasurer','president'].indexOf(state.user.role) > -1;
 }
 
 function canPresidentApprove() {
-  return state.user && (state.user.role === 'admin' || state.user.role === 'president');
+  // Only president role (not regular admin) can do final approval
+  // This prevents the same person from approving both steps
+  return state.user && state.user.role === 'president';
 }
 
 function renderReimbView() {
@@ -8945,6 +8953,237 @@ async function uploadToCloudinary(file) {
   if (data.secure_url) return data.secure_url;
   throw new Error(data.error ? data.error.message : 'Upload failed');
 }
+
+// ════════════════════════════════════════════════════════════
+//  SETTINGS MODULE
+// ════════════════════════════════════════════════════════════
+var _settings = null;
+
+async function renderSettings() {
+  var el = document.getElementById('page-settings');
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading settings...</div>';
+  try {
+    var res = await apiCall({ action: 'get_settings' });
+    _settings = res.data || {};
+    renderSettingsView();
+  } catch(e) {
+    // Settings may not exist yet - use defaults
+    _settings = {};
+    renderSettingsView();
+  }
+}
+
+function getSettingDefault(key) {
+  var defaults = {
+    org_name:        'Estill County Band Boosters',
+    org_address:     '',
+    org_city:        'Irvine',
+    org_state:       'KY',
+    org_zip:         '40336',
+    org_phone:       '',
+    org_email:       '',
+    org_website:     '',
+    check_sig1_title: 'Treasurer',
+    check_sig2_title: 'President',
+    check_memo_prefix: 'Estill County Band Boosters',
+    venmo_username:  'estillco-bandboosters',
+    square_link:     '',
+    treasurer_email: '',
+    reimb_categories: 'Band Dues/Fees,Uniform Purchase,Uniform Repair/Cleaning,Equipment Purchase,Equipment Repair,Instrument Purchase,Instrument Repair,Trip Expense,Transportation,Hotel/Lodging,Food/Concessions,Supplies/Materials,Printing/Copying,Awards/Trophies,Postage/Shipping,Office Supplies,Fundraiser Expense,Entry Fees/Registration,Music/Arrangements,Other (see notes)',
+    fee_types: 'Band Dues,Trip Fee,Uniform Fee,Equipment Fee,Fundraiser,Miscellaneous'
+  };
+  return _settings[key] !== undefined ? _settings[key] : defaults[key];
+}
+
+function renderSettingsView() {
+  var el = document.getElementById('page-settings');
+  var s  = function(k) { return getSettingDefault(k); };
+
+  var html = '';
+
+  // Tabs
+  html += '<div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);">';
+  [
+    { id: 'org',     label: '&#127968; Organization' },
+    { id: 'check',   label: '&#9998; Check printing' },
+    { id: 'payment', label: '&#9654; Payments' },
+    { id: 'lists',   label: '&#9776; Lists & categories' }
+  ].forEach(function(t, i) {
+    html += '<button id="set-tab-' + t.id + '" onclick="switchSettingsTab(\'' + t.id + '\')" style="padding:10px 18px;border:none;background:none;font-size:13px;font-weight:500;color:' + (i===0?'var(--blue)':'var(--gray-500)') + ';border-bottom:' + (i===0?'2px solid var(--blue)':'none') + ';margin-bottom:' + (i===0?'-2px':'0') + ';cursor:pointer;">' + t.label + '</button>';
+  });
+  html += '</div>';
+
+  // ── Organization tab ──
+  html += '<div id="set-panel-org">';
+  html += '<div class="card"><div class="card-header"><div class="card-title">Organization information</div>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveSettingsSection(\'org\')">Save</button></div>';
+  html += '<div class="card-body"><div class="form-grid">';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Organization name</label>';
+  html += '<input class="form-input" id="set-org_name" value="' + s('org_name') + '"/></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Street address</label>';
+  html += '<input class="form-input" id="set-org_address" value="' + s('org_address') + '" placeholder="123 Main St"/></div>';
+  html += '<div class="form-group"><label class="form-label">City</label>';
+  html += '<input class="form-input" id="set-org_city" value="' + s('org_city') + '"/></div>';
+  html += '<div class="form-group"><label class="form-label">State</label>';
+  html += '<input class="form-input" id="set-org_state" value="' + s('org_state') + '" maxlength="2"/></div>';
+  html += '<div class="form-group"><label class="form-label">ZIP code</label>';
+  html += '<input class="form-input" id="set-org_zip" value="' + s('org_zip') + '" maxlength="10"/></div>';
+  html += '<div class="form-group"><label class="form-label">Phone</label>';
+  html += '<input class="form-input" id="set-org_phone" value="' + s('org_phone') + '" placeholder="(555) 555-5555"/></div>';
+  html += '<div class="form-group"><label class="form-label">Email</label>';
+  html += '<input class="form-input" id="set-org_email" value="' + s('org_email') + '" placeholder="info@ecbb.org"/></div>';
+  html += '<div class="form-group"><label class="form-label">Website</label>';
+  html += '<input class="form-input" id="set-org_website" value="' + s('org_website') + '" placeholder="www.ecboosters.org"/></div>';
+  html += '</div></div></div>';
+
+  // Preview
+  html += '<div class="card" style="margin-top:4px;"><div class="card-header"><div class="card-title">How it appears on printed documents</div></div>';
+  html += '<div class="card-body">';
+  html += '<div style="border:1px solid var(--gray-300);border-radius:8px;padding:16px;background:var(--gray-50);font-family:Arial,sans-serif;">';
+  html += '<div style="font-size:15px;font-weight:700;color:#1565C0;">' + s('org_name') + '</div>';
+  if (s('org_address')) html += '<div style="font-size:12px;color:#666;">' + s('org_address') + '</div>';
+  if (s('org_city')) html += '<div style="font-size:12px;color:#666;">' + s('org_city') + ', ' + s('org_state') + ' ' + s('org_zip') + '</div>';
+  if (s('org_phone')) html += '<div style="font-size:12px;color:#666;">' + s('org_phone') + '</div>';
+  html += '</div></div></div>';
+  html += '</div>';
+
+  // ── Check printing tab ──
+  html += '<div id="set-panel-check" style="display:none;">';
+  html += '<div class="card"><div class="card-header"><div class="card-title">Check printing settings</div>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveSettingsSection(\'check\')">Save</button></div>';
+  html += '<div class="card-body"><div class="form-grid">';
+  html += '<div class="form-group"><label class="form-label">Signature line 1 title</label>';
+  html += '<input class="form-input" id="set-check_sig1_title" value="' + s('check_sig1_title') + '" placeholder="Treasurer"/></div>';
+  html += '<div class="form-group"><label class="form-label">Signature line 2 title</label>';
+  html += '<input class="form-input" id="set-check_sig2_title" value="' + s('check_sig2_title') + '" placeholder="President"/></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Check header / organization name on check</label>';
+  html += '<input class="form-input" id="set-check_memo_prefix" value="' + s('check_memo_prefix') + '"/></div>';
+  html += '</div></div></div>';
+
+  // Check preview
+  html += '<div class="card" style="margin-top:4px;"><div class="card-header"><div class="card-title">Check preview</div></div>';
+  html += '<div class="card-body">';
+  html += '<div style="border:1px solid #999;border-radius:4px;padding:16px;background:white;font-family:Arial,sans-serif;position:relative;max-width:600px;">';
+  html += '<div style="font-size:14px;font-weight:700;color:#1565C0;">' + s('check_memo_prefix') + '</div>';
+  html += '<div style="display:flex;justify-content:space-between;margin:12px 0 8px;font-size:12px;">';
+  html += '<div>Pay to the order of: <span style="border-bottom:1px solid #333;display:inline-block;width:200px;">&nbsp;</span></div>';
+  html += '<div>$ <span style="border:2px solid #333;padding:2px 8px;">0.00</span></div></div>';
+  html += '<div style="display:flex;justify-content:space-between;margin-top:24px;">';
+  html += '<div style="font-size:11px;color:#666;">For: <span style="border-bottom:1px solid #333;display:inline-block;width:160px;">&nbsp;</span></div>';
+  html += '<div style="display:flex;gap:30px;">';
+  html += '<div style="text-align:center;"><div style="border-top:1px solid #333;width:120px;margin-bottom:4px;"></div><div style="font-size:9px;color:#666;">' + s('check_sig1_title') + '</div></div>';
+  html += '<div style="text-align:center;"><div style="border-top:1px solid #333;width:120px;margin-bottom:4px;"></div><div style="font-size:9px;color:#666;">' + s('check_sig2_title') + '</div></div>';
+  html += '</div></div></div></div></div>';
+  html += '</div>';
+
+  // ── Payment tab ──
+  html += '<div id="set-panel-payment" style="display:none;">';
+  html += '<div class="card"><div class="card-header"><div class="card-title">Payment settings</div>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveSettingsSection(\'payment\')">Save</button></div>';
+  html += '<div class="card-body"><div class="form-grid">';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Venmo username</label>';
+  html += '<div style="display:flex;align-items:center;gap:8px;"><span style="color:var(--gray-500);font-size:14px;">@</span>';
+  html += '<input class="form-input" id="set-venmo_username" value="' + s('venmo_username') + '" placeholder="your-venmo-handle"/></div></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Square payment link</label>';
+  html += '<input class="form-input" id="set-square_link" value="' + s('square_link') + '" placeholder="https://square.link/u/xxxxxxxx"/>';
+  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Get this from Square Dashboard &rarr; Online checkout &rarr; Payment links</div></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Treasurer notification email</label>';
+  html += '<input class="form-input" id="set-treasurer_email" value="' + s('treasurer_email') + '" placeholder="treasurer@ecbb.org"/>';
+  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:3px;">Override email for payment notifications. Leave blank to use the treasurer role user\'s email.</div></div>';
+  html += '</div></div></div>';
+  html += '</div>';
+
+  // ── Lists & categories tab ──
+  html += '<div id="set-panel-lists" style="display:none;">';
+  html += '<div class="card"><div class="card-header"><div class="card-title">Reimbursement categories</div>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveSettingsSection(\'lists\')">Save all lists</button></div>';
+  html += '<div class="card-body">';
+  html += '<div style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">One category per line. These appear in the reimbursement request form.</div>';
+  html += '<textarea class="form-textarea" id="set-reimb_categories" style="min-height:200px;font-family:monospace;font-size:13px;">' + s('reimb_categories').split(',').join('\n') + '</textarea>';
+  html += '</div></div>';
+
+  html += '<div class="card" style="margin-top:16px;"><div class="card-header"><div class="card-title">Fee types</div></div>';
+  html += '<div class="card-body">';
+  html += '<div style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">One fee type per line. These appear as default options when assigning fees to students.</div>';
+  html += '<textarea class="form-textarea" id="set-fee_types" style="min-height:120px;font-family:monospace;font-size:13px;">' + s('fee_types').split(',').join('\n') + '</textarea>';
+  html += '</div></div>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function switchSettingsTab(tab) {
+  ['org','check','payment','lists'].forEach(function(t) {
+    var panel = document.getElementById('set-panel-' + t);
+    var btn   = document.getElementById('set-tab-' + t);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--blue)' : 'var(--gray-500)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--blue)' : 'none';
+      btn.style.marginBottom = t === tab ? '-2px' : '0';
+    }
+  });
+}
+
+async function saveSettingsSection(section) {
+  var fields = {
+    org:     ['org_name','org_address','org_city','org_state','org_zip','org_phone','org_email','org_website'],
+    check:   ['check_sig1_title','check_sig2_title','check_memo_prefix'],
+    payment: ['venmo_username','square_link','treasurer_email'],
+    lists:   ['reimb_categories','fee_types']
+  };
+
+  var sectionFields = fields[section] || [];
+  var updates = {};
+
+  sectionFields.forEach(function(f) {
+    var el = document.getElementById('set-' + f);
+    if (!el) return;
+    var val = el.value;
+    // Convert textarea line-by-line back to comma-separated
+    if (f === 'reimb_categories' || f === 'fee_types') {
+      val = val.split('\n').map(function(v){ return v.trim(); }).filter(Boolean).join(',');
+    }
+    updates[f] = val;
+    _settings[f] = val;
+  });
+
+  try {
+    var result = await apiCall({ action: 'save_settings', settings: JSON.stringify(updates) });
+    if (result.success) {
+      toast('Settings saved!', 'success');
+      // Apply settings live
+      applySettingsLive();
+      // Re-render to update preview
+      renderSettingsView();
+      switchSettingsTab(section);
+    } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
+  } catch(e) { toast('Could not save settings.', 'error'); }
+}
+
+function applySettingsLive() {
+  // Update Venmo username
+  if (_settings.venmo_username) {
+    window.VENMO_USERNAME_OVERRIDE = _settings.venmo_username;
+  }
+  // Update reimbursement categories for next form open
+  if (_settings.reimb_categories) {
+    window.REIMB_CATEGORIES = _settings.reimb_categories.split(',').map(function(c){ return c.trim(); });
+  }
+}
+
+// Load settings on app start
+var _origShowApp3 = showApp;
+showApp = async function() {
+  await _origShowApp3();
+  // Load settings silently in background
+  try {
+    var res = await apiCall({ action: 'get_settings' });
+    _settings = res.data || {};
+    applySettingsLive();
+  } catch(e) { _settings = {}; }
+};
+
 // ════════════════════════════════════════════════════════════
 //  YEAR SELECTOR
 // ════════════════════════════════════════════════════════════
