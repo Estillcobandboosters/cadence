@@ -7882,12 +7882,14 @@ async function reimbPrintCheck() {
   var attempts = 0;
   var waitForChecks = setInterval(function() {
     attempts++;
-    var checksPanel = document.getElementById('tr-panel-checks');
-    if (checksPanel || attempts > 20) {
+    // Look for the treasurer tab bar - means the page has rendered
+    var tabBar = document.querySelector('#page-treasurer div[style*="border-bottom:2px solid var(--gray-200)"]');
+    if (tabBar || attempts > 30) {
       clearInterval(waitForChecks);
-      if (checksPanel) {
+      if (tabBar) {
+        // Trigger the checks tab - this creates the panel and form
         switchTrTab('checks');
-        // Pre-fill after checks panel is visible
+        // Pre-fill after checks panel renders
         setTimeout(function() {
           var d = window._pendingCheckData;
           if (!d) return;
@@ -7903,7 +7905,7 @@ async function reimbPrintCheck() {
           if (dateEl)                  dateEl.value   = d.date;
           toast('Check pre-filled! Review details and click Print check.', 'info');
           window._pendingCheckData = null;
-        }, 200);
+        }, 300);
       }
     }
   }, 150);
