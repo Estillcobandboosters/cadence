@@ -7813,28 +7813,54 @@ async function reimbPrintCheck() {
   var r = reimbData.requests.find(function(x){ return x.reimb_id===_reimbActionId; });
   if (!r) return;
 
-  // Close modal and navigate to checks tab
-  document.getElementById('reimb-action-modal').classList.remove('open');
+  // Store data before navigating (navigate clears page)
+  var checkData = {
+    account_id:  r.account_id || '',
+    payee:       r.payee || r.requester_name || '',
+    amount:      r.amount || '',
+    memo:        r.description || '',
+    date:        new Date().toISOString().split('T')[0],
+    reimbId:     r.reimb_id
+  };
+  window._pendingReimbId  = r.reimb_id;
+  window._pendingCheckData = checkData;
+
+  // Close modal
+  var modal = document.getElementById('reimb-action-modal');
+  if (modal) modal.classList.remove('open');
+
+  // Navigate to treasurer and switch to checks tab
   navigate('treasurer');
-  setTimeout(function() {
-    switchTrTab('checks');
-    // Pre-fill the check form
-    setTimeout(function() {
-      var acctEl = document.getElementById('chk-account');
-      if (acctEl && r.account_id) acctEl.value = r.account_id;
-      var payeeEl = document.getElementById('chk-payee');
-      if (payeeEl) payeeEl.value = r.payee || r.requester_name || '';
-      var amtEl = document.getElementById('chk-amount');
-      if (amtEl) { amtEl.value = r.amount; updateAmountWords(); }
-      var memoEl = document.getElementById('chk-memo');
-      if (memoEl) memoEl.value = r.description || '';
-      var dateEl = document.getElementById('chk-date');
-      if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
-      // Store reimb ID for post-print update
-      window._pendingReimbId = _reimbActionId;
-      toast('Check form pre-filled from reimbursement request. Review and print!', 'info');
-    }, 300);
-  }, 300);
+
+  // Wait for treasurer page to render, then switch to checks tab and pre-fill
+  var attempts = 0;
+  var waitForChecks = setInterval(function() {
+    attempts++;
+    var checksPanel = document.getElementById('tr-panel-checks');
+    if (checksPanel || attempts > 20) {
+      clearInterval(waitForChecks);
+      if (checksPanel) {
+        switchTrTab('checks');
+        // Pre-fill after checks panel is visible
+        setTimeout(function() {
+          var d = window._pendingCheckData;
+          if (!d) return;
+          var acctEl  = document.getElementById('chk-account');
+          var payeeEl = document.getElementById('chk-payee');
+          var amtEl   = document.getElementById('chk-amount');
+          var memoEl  = document.getElementById('chk-memo');
+          var dateEl  = document.getElementById('chk-date');
+          if (acctEl && d.account_id)  acctEl.value  = d.account_id;
+          if (payeeEl)                 payeeEl.value  = d.payee;
+          if (amtEl)                 { amtEl.value    = d.amount; updateAmountWords(); }
+          if (memoEl)                  memoEl.value   = d.memo;
+          if (dateEl)                  dateEl.value   = d.date;
+          toast('Check pre-filled! Review details and click Print check.', 'info');
+          window._pendingCheckData = null;
+        }, 200);
+      }
+    }
+  }, 150);
 }
 
 // Hook into printCheck to mark reimbursement complete
