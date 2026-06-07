@@ -5321,6 +5321,12 @@ async function loadParentData() {
         });
         html += '</tbody></table>';
       }
+      // Payment button - show when balance > 0
+      if (balance > 0) {
+        html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-100);">';
+        html += '<button class="btn btn-primary" onclick="openPaymentPortal(\'' + student.student_id + '\')" style="width:100%;padding:12px;font-size:15px;">&#9654; Make a payment</button>';
+        html += '</div>';
+      }
       html += '</div></div>'; // close portal-section-body and portal-section
 
       // Attendance
@@ -8468,6 +8474,221 @@ function printAckReport(postId, postTitle) {
   var win = window.open('', '_blank', 'width=900,height=700');
   win.document.write(html);
   win.document.close();
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  PARENT PAYMENT PORTAL
+// ════════════════════════════════════════════════════════════
+const VENMO_USERNAME = 'estillco-bandboosters';
+
+async function openPaymentPortal(studentId) {
+  // Get student fees from already-loaded data
+  var student  = null;
+  var sFees    = [];
+
+  // Try to get from feesData first (if on fees page), else from portal data
+  if (typeof feesData !== 'undefined' && feesData.students) {
+    student = feesData.students.find(function(s){ return s.student_id===studentId; });
+    sFees   = feesData.fees.filter(function(f){ return f.student_id===studentId && parseFloat(f.balance||0)>0; });
+  }
+
+  // Fall back to fresh API call if needed
+  if (!student) {
+    try {
+      var [sRes, fRes] = await Promise.all([
+        apiCall({ action: 'get_students' }),
+        apiCall({ action: 'get_fees' })
+      ]);
+      var allStudents = sRes.data || [];
+      var allFees     = fRes.data || [];
+      student = allStudents.find(function(s){ return s.student_id===studentId; });
+      sFees   = allFees.filter(function(f){ return f.student_id===studentId && parseFloat(f.balance||0)>0; });
+    } catch(e) {
+      toast('Could not load payment info.', 'error');
+      return;
+    }
+  }
+
+  if (!student) { toast('Student not found.', 'error'); return; }
+
+  var totalBalance = sFees.reduce(function(s,f){ return s+parseFloat(f.balance||0); }, 0);
+  if (totalBalance <= 0) { toast('No balance due!', 'info'); return; }
+
+  var backdrop = document.getElementById('payment-portal-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'payment-portal-modal';
+    document.body.appendChild(backdrop);
+  }
+
+  // Build fee options for dropdown
+  var feeOptions = sFees.map(function(f) {
+    return '<option value="' + f.fee_type + '|' + parseFloat(f.balance||0).toFixed(2) + '">' +
+      f.fee_type + (f.description?' &mdash; '+f.description:'') +
+      ' ($' + parseFloat(f.balance||0).toFixed(2) + ' remaining)</option>';
+  }).join('');
+
+  backdrop.innerHTML = '<div class="modal" style="width:500px;max-width:96vw;">' +
+    '<div class="modal-header" style="background:var(--blue);color:white;">' +
+    '<div>' +
+    '<div class="modal-title" style="color:white;">Make a payment</div>' +
+    '<div style="font-size:12px;opacity:0.85;margin-top:2px;">' + student.first_name + ' ' + student.last_name + ' &mdash; ' + student.school_year + '</div>' +
+    '</div>' +
+    '<button class="modal-close" style="color:white;" onclick="document.getElementById(\'payment-portal-modal\').classList.remove(\'open\')">&times;</button>' +
+    '</div>' +
+    '<div class="modal-body">' +
+
+    // Balance summary
+    '<div style="background:var(--gray-50);border:1px solid var(--gray-300);border-radius:var(--radius);padding:14px;margin-bottom:20px;">' +
+    '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);margin-bottom:10px;">Outstanding balance</div>' +
+    sFees.map(function(f) {
+      return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">' +
+        '<span>' + f.fee_type + (f.description?' &mdash; '+f.description:'') + '</span>' +
+        '<span style="font-weight:600;color:var(--danger);">$' + parseFloat(f.balance||0).toFixed(2) + '</span>' +
+        '</div>';
+    }).join('') +
+    '<div style="display:flex;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--gray-300);margin-top:6px;font-weight:700;">' +
+    '<span>Total outstanding</span><span style="color:var(--danger);">$' + totalBalance.toFixed(2) + '</span>' +
+    '</div></div>' +
+
+    // Amount
+    '<div class="form-group" style="margin-bottom:16px;">' +
+    '<label class="form-label">Payment amount ($)</label>' +
+    '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
+    '<button class="btn btn-sm btn-secondary" onclick="setPaymentAmount(' + totalBalance.toFixed(2) + ')" id="pay-full-btn">Full balance $' + totalBalance.toFixed(2) + '</button>' +
+    '<button class="btn btn-sm btn-secondary" onclick="setPaymentAmount(' + (totalBalance/2).toFixed(2) + ')">Half $' + (totalBalance/2).toFixed(2) + '</button>' +
+    '<button class="btn btn-sm btn-secondary" onclick="setCustomAmount()">Custom</button>' +
+    '</div>' +
+    '<input class="form-input" type="number" step="0.01" id="payment-amount" value="' + totalBalance.toFixed(2) + '" min="0.01" max="' + totalBalance.toFixed(2) + '" oninput="updatePaymentMemo()"/>' +
+    '</div>' +
+
+    // Apply to
+    '<div class="form-group" style="margin-bottom:16px;">' +
+    '<label class="form-label">Applying this payment to</label>' +
+    '<select class="form-select" id="payment-apply-to" onchange="updatePaymentMemo()">' +
+    feeOptions +
+    (sFees.length > 1 ? '<option value="split|0">Split between fees (treasurer will allocate)</option>' : '') +
+    '<option value="other|0">Other &mdash; specify below</option>' +
+    '</select>' +
+    '</div>' +
+
+    // Other/note field
+    '<div class="form-group" id="payment-other-group" style="display:none;margin-bottom:16px;">' +
+    '<label class="form-label">Specify what this payment is for</label>' +
+    '<input class="form-input" id="payment-other-text" placeholder="e.g. Partial payment toward trip fee..." oninput="updatePaymentMemo()"/>' +
+    '</div>' +
+
+    // Additional note
+    '<div class="form-group" style="margin-bottom:20px;">' +
+    '<label class="form-label">Additional note (optional)</label>' +
+    '<input class="form-input" id="payment-note" placeholder="e.g. Paying $100 now, will pay rest Friday..." oninput="updatePaymentMemo()"/>' +
+    '</div>' +
+
+    // Memo preview
+    '<div style="background:#E3F2FD;border:1px solid #90CAF9;border-radius:var(--radius);padding:12px;margin-bottom:20px;">' +
+    '<div style="font-size:11px;font-weight:600;color:var(--blue-dark);text-transform:uppercase;margin-bottom:4px;">Venmo memo preview</div>' +
+    '<div id="payment-memo-preview" style="font-size:13px;color:var(--blue-dark);font-family:monospace;"></div>' +
+    '</div>' +
+
+    // Pay button
+    '<button class="btn btn-primary" onclick="sendVenmoPayment(\'' + studentId + '\',\'' + (student.first_name+' '+student.last_name).replace(/'/g,'') + '\')" style="width:100%;padding:14px;font-size:15px;background:#008CFF;border-radius:8px;">' +
+    '<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHBhdGggZD0iTTIxLjMgMS41OGMuMzguNjMuNTUgMS4yOC41NSAxLjk1IDAgMi40My0yLjA3IDUuNTktNi4yIDkuNDdMMTIgMTYuMzhsLTMuNjUtMy4zOEMzLjI0IDguNiAxLjUgNS45IDEuNSAzLjUzYzAtLjY3LjE3LTEuMzIuNTUtMS45NUw0LjI2IDMuNWMtLjM4LjYzLS41NyAxLjI4LS41NyAxLjk1IDAgMS40Ni43NiAyLjkzIDIuMjcgNC4zOEw4LjUgMTJsLTIuNTQtMi4xN0M0LjcgOC41NiAzLjkzIDcuMSAzLjkzIDUuNDVjMC0uNjcuMTktMS4zMi41Ny0xLjk1aDIuMjdjLS4zOC42My0uNTcgMS4yOC0uNTcgMS45NSAwIDEuMDMuNTcgMi4xIDEuNzEgMy4yMUw5LjUgMTBsLTEuMjEtMS4wNGMtLjc2LS43Ni0xLjE0LTEuNTItMS4xNC0yLjI4IDAtLjY3LjE5LTEuMzIuNTctMS45NUgyMWMuMzguNjMuNTcgMS4yOC41NyAxLjk1IDAgMy4wNS0yLjI4IDYuNzYtNi44NCAxMS4wNUwxMiAyMi40MmwtMy40LTMuMTRDMy44NiAxNC44NCAxLjUgMTEgMS41IDcuNTNjMC0uNjcuMTktMS4zMi41Ny0xLjk1SDIxLjN6Ii8+PC9zdmc+" style="vertical-align:middle;margin-right:8px;" alt=""/>  Pay with Venmo' +
+    '</button>' +
+
+    '<div style="margin-top:10px;text-align:center;font-size:11px;color:var(--gray-500);">Opens the Venmo app or website. Payment is not recorded until the treasurer confirms receipt.</div>' +
+
+    '</div></div>';
+
+  backdrop.classList.add('open');
+
+  // Initialize memo preview
+  setTimeout(updatePaymentMemo, 100);
+}
+
+function setPaymentAmount(amount) {
+  var input = document.getElementById('payment-amount');
+  if (input) { input.value = amount.toFixed(2); updatePaymentMemo(); }
+}
+
+function setCustomAmount() {
+  var input = document.getElementById('payment-amount');
+  if (input) { input.value = ''; input.focus(); }
+}
+
+function updatePaymentMemo() {
+  var amount   = parseFloat(document.getElementById('payment-amount')?.value || 0);
+  var applyTo  = document.getElementById('payment-apply-to')?.value || '';
+  var otherTxt = document.getElementById('payment-other-text')?.value || '';
+  var note     = document.getElementById('payment-note')?.value || '';
+  var preview  = document.getElementById('payment-memo-preview');
+  var otherGrp = document.getElementById('payment-other-group');
+
+  // Show/hide other field
+  if (otherGrp) otherGrp.style.display = applyTo.startsWith('other') ? 'block' : 'none';
+
+  var applyLabel = '';
+  if (applyTo.startsWith('other')) {
+    applyLabel = otherTxt || 'Other';
+  } else if (applyTo.startsWith('split')) {
+    applyLabel = 'Split payment';
+  } else {
+    applyLabel = applyTo.split('|')[0] || '';
+  }
+
+  // Build memo
+  var memo = 'Cadence';
+  if (applyLabel) memo += ' - ' + applyLabel;
+  if (note)       memo += ' - ' + note;
+
+  if (preview) preview.textContent = memo || '(enter details above)';
+}
+
+async function sendVenmoPayment(studentId, studentName) {
+  var amount   = parseFloat(document.getElementById('payment-amount')?.value || 0);
+  var applyTo  = document.getElementById('payment-apply-to')?.value || '';
+  var otherTxt = document.getElementById('payment-other-text')?.value || '';
+  var note     = document.getElementById('payment-note')?.value || '';
+
+  if (!amount || amount <= 0) { toast('Please enter a valid amount.', 'error'); return; }
+
+  var applyLabel = '';
+  if (applyTo.startsWith('other'))  applyLabel = otherTxt || 'Other';
+  else if (applyTo.startsWith('split')) applyLabel = 'Split payment';
+  else applyLabel = applyTo.split('|')[0] || '';
+
+  var memo = 'Cadence';
+  if (applyLabel) memo += ' - ' + applyLabel;
+  if (note)       memo += ' - ' + note;
+
+  // Notify treasurer via Apps Script
+  try {
+    await apiCall({
+      action:         'notify_treasurer',
+      student_name:   studentName,
+      amount:         amount.toFixed(2),
+      apply_to:       applyLabel,
+      note:           note,
+      payer_email:    state.user ? state.user.email : '',
+      payer_name:     state.user ? (state.user.name||state.user.email) : ''
+    });
+  } catch(e) {
+    // Notification failure shouldn't block the payment
+    console.warn('Treasurer notification failed:', e);
+  }
+
+  // Build Venmo URL
+  var venmoMemo = encodeURIComponent(memo);
+  var venmoUrl  = 'https://venmo.com/' + VENMO_USERNAME + '?txn=pay&amount=' + amount.toFixed(2) + '&note=' + venmoMemo;
+
+  // Close modal
+  document.getElementById('payment-portal-modal').classList.remove('open');
+
+  // Open Venmo
+  window.open(venmoUrl, '_blank');
+
+  toast('Opening Venmo... Remember to allow 1-2 business days for your balance to update.', 'info');
 }
 
 // ════════════════════════════════════════════════════════════
