@@ -7362,7 +7362,11 @@ function buildReimbTable(requests, accounts, mode) {
     html += '<td><span class="badge ' + (statusColors[r.status]||'badge-gray') + '">' + (statusLabels[r.status]||r.status) + '</span></td>';
     html += '<td style="text-align:center;">';
     if (r.receipt_url) {
-      html += '<a href="' + r.receipt_url + '" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;">&#128196; View</a>';
+      if (r.receipt_url.startsWith('data:')) {
+        html += '<button class="btn btn-sm btn-secondary" style="font-size:11px;" onclick="showReceiptFullscreen(\'' + r.reimb_id + '\')">&#128247; View</button>';
+      } else {
+        html += '<a href="' + r.receipt_url + '" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;">&#128196; View</a>';
+      }
     } else {
       html += '<span style="color:var(--gray-400);font-size:12px;">None</span>';
     }
@@ -7450,12 +7454,12 @@ async function submitReimbRequest() {
   try {
     var receiptUrl = url;
 
-    // If file selected, upload directly to Google Drive using OAuth token
+    // If file selected, compress and store as base64 data URL
     if (_reimbReceiptFile && !url) {
       try {
-        receiptUrl = await uploadFileToDrive(_reimbReceiptFile);
+        receiptUrl = await compressAndEncodeReceipt(_reimbReceiptFile);
       } catch(uploadErr) {
-        toast('Receipt upload failed: ' + uploadErr.message + '. Please try a smaller file or paste a Google Drive link.', 'error');
+        toast('Could not process receipt: ' + uploadErr.message, 'error');
         submitBtn.textContent = 'Submit request';
         submitBtn.disabled = false;
         return;
@@ -7503,6 +7507,24 @@ async function submitReimbRequest() {
 
 // Review / approval
 var _reimbActionId = null;
+
+function showReceiptFullscreen(reimbId) {
+  var r = reimbData.requests.find(function(x){ return x.reimb_id===reimbId; });
+  if (!r || !r.receipt_url) return;
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  overlay.onclick = function(){ document.body.removeChild(overlay); };
+  var img = document.createElement('img');
+  img.src = r.receipt_url;
+  img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5);';
+  var closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '&times;';
+  closeBtn.style.cssText = 'position:absolute;top:20px;right:20px;background:white;border:none;border-radius:50%;width:36px;height:36px;font-size:20px;cursor:pointer;';
+  closeBtn.onclick = function(){ document.body.removeChild(overlay); };
+  overlay.appendChild(img);
+  overlay.appendChild(closeBtn);
+  document.body.appendChild(overlay);
+}
 
 function openReimbAction(reimbId) {
   _reimbActionId = reimbId;
@@ -8728,109 +8750,53 @@ async function sendVenmoPayment(studentId, studentName) {
 
 
 // ════════════════════════════════════════════════════════════
-//  GOOGLE DRIVE DIRECT UPLOAD
+//  RECEIPT COMPRESSION & ENCODING
 // ════════════════════════════════════════════════════════════
-async function uploadFileToDrive(file) {
-  // Get the OAuth access token from Google
-  const token = await getGoogleAccessToken();
-  if (!token) throw new Error('Could not get Google authorization. Please sign out and back in.');
-
-  // Step 1: Find or create the Cadence Receipts folder
-  const folderName = 'Cadence Receipts';
-  let folderId = null;
-
-  const searchRes = await fetch(
-    'https://www.googleapis.com/drive/v3/files?q=' +
-    encodeURIComponent("name='" + folderName + "' and mimeType='application/vnd.google-apps.folder' and trashed=false") +
-    '&fields=files(id,name)',
-    { headers: { 'Authorization': 'Bearer ' + token } }
-  );
-  const searchData = await searchRes.json();
-  if (searchData.files && searchData.files.length > 0) {
-    folderId = searchData.files[0].id;
-  } else {
-    // Create the folder
-    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' })
-    });
-    const createData = await createRes.json();
-    folderId = createData.id;
-  }
-
-  // Step 2: Upload the file using multipart upload
-  const metadata = {
-    name: new Date().toISOString().split('T')[0] + '_receipt_' + file.name,
-    parents: folderId ? [folderId] : []
-  };
-
-  const boundary = 'cadence_upload_' + Date.now();
-  const delimiter = '\r\n--' + boundary + '\r\n';
-  const closeDelim = '\r\n--' + boundary + '--';
-
-  // Read file as ArrayBuffer
-  const fileBuffer = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => resolve(e.target.result);
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
-  });
-
-  // Build multipart body
-  const metaStr = delimiter +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) +
-    delimiter +
-    'Content-Type: ' + file.type + '\r\n\r\n';
-
-  const metaBytes = new TextEncoder().encode(metaStr);
-  const closeBytes = new TextEncoder().encode(closeDelim);
-  const body = new Uint8Array(metaBytes.length + fileBuffer.byteLength + closeBytes.length);
-  body.set(metaBytes, 0);
-  body.set(new Uint8Array(fileBuffer), metaBytes.length);
-  body.set(closeBytes, metaBytes.length + fileBuffer.byteLength);
-
-  const uploadRes = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': 'multipart/related; boundary=' + boundary
-      },
-      body: body
-    }
-  );
-
-  const uploadData = await uploadRes.json();
-  if (!uploadData.id) throw new Error(uploadData.error ? uploadData.error.message : 'Upload failed');
-
-  // Step 3: Make the file viewable by anyone with the link
-  await fetch('https://www.googleapis.com/drive/v3/files/' + uploadData.id + '/permissions', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'reader', type: 'anyone' })
-  });
-
-  return uploadData.webViewLink || ('https://drive.google.com/file/d/' + uploadData.id + '/view');
-}
-
-async function getGoogleAccessToken() {
-  // Use Google Identity Services to get a fresh access token
-  return new Promise((resolve) => {
-    if (typeof google === 'undefined' || !google.accounts) {
-      resolve(null);
+async function compressAndEncodeReceipt(file) {
+  return new Promise(function(resolve, reject) {
+    // For PDFs, just encode as base64 directly (no compression possible)
+    if (file.type === 'application/pdf') {
+      if (file.size > 500 * 1024) {
+        reject(new Error('PDF too large. Please use a file under 500KB or paste a Google Drive link.'));
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function(e) { resolve(e.target.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
       return;
     }
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.GOOGLE_CLIENT,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: (response) => {
-        resolve(response.access_token || null);
+
+    // For images, compress using canvas
+    var img = new Image();
+    var objectUrl = URL.createObjectURL(file);
+    img.onload = function() {
+      URL.revokeObjectURL(objectUrl);
+      var canvas = document.createElement('canvas');
+      var MAX_DIM = 1200;
+      var w = img.width, h = img.height;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+        else       { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
       }
-    });
-    client.requestAccessToken({ prompt: '' });
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      // Compress to JPEG at 0.7 quality
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      // Check size - base64 in sheet cell limit ~50KB practical limit
+      if (dataUrl.length > 200000) {
+        // Try harder compression
+        dataUrl = canvas.toDataURL('image/jpeg', 0.4);
+      }
+      if (dataUrl.length > 300000) {
+        reject(new Error('Image still too large after compression. Please use a Google Drive link instead.'));
+        return;
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = function() { reject(new Error('Could not read image file.')); };
+    img.src = objectUrl;
   });
 }
 
