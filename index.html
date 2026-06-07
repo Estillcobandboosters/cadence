@@ -8824,7 +8824,7 @@ async function getGoogleAccessToken() {
       return;
     }
     const client = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.GOOGLE_CLIENT_ID,
+      client_id: CONFIG.GOOGLE_CLIENT,
       scope: 'https://www.googleapis.com/auth/drive.file',
       callback: (response) => {
         resolve(response.access_token || null);
