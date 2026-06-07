@@ -5905,6 +5905,31 @@ function renderTreasurerView() {
   html += '</div></div>';
 
   el.innerHTML = html;
+
+  // If flagged to go to checks tab (from reimbursement print check)
+  if (window._navigateToChecks) {
+    window._navigateToChecks = false;
+    // Wait for the tab extensions (pieces 2&3) to attach, then switch
+    setTimeout(function() {
+      switchTrTab('checks');
+      setTimeout(function() {
+        var d = window._pendingCheckData;
+        if (!d) return;
+        var acctEl  = document.getElementById('chk-account');
+        var payeeEl = document.getElementById('chk-payee');
+        var amtEl   = document.getElementById('chk-amount');
+        var memoEl  = document.getElementById('chk-memo');
+        var dateEl  = document.getElementById('chk-date');
+        if (acctEl && d.account_id)  acctEl.value  = d.account_id;
+        if (payeeEl)                 payeeEl.value  = d.payee;
+        if (amtEl)                 { amtEl.value    = d.amount; updateAmountWords(); }
+        if (memoEl)                  memoEl.value   = d.memo;
+        if (dateEl)                  dateEl.value   = d.date;
+        toast('Check pre-filled! Review details and click Print check.', 'info');
+        window._pendingCheckData = null;
+      }, 400);
+    }, 200);
+  }
 }
 
 function buildTxnTable(txns, accounts, balances) {
@@ -7878,37 +7903,8 @@ async function reimbPrintCheck() {
   // Navigate to treasurer and switch to checks tab
   navigate('treasurer');
 
-  // Wait for treasurer page to render, then switch to checks tab and pre-fill
-  var attempts = 0;
-  var waitForChecks = setInterval(function() {
-    attempts++;
-    // Look for the treasurer tab bar - means the page has rendered
-    var tabBar = document.querySelector('#page-treasurer div[style*="border-bottom:2px solid var(--gray-200)"]');
-    if (tabBar || attempts > 30) {
-      clearInterval(waitForChecks);
-      if (tabBar) {
-        // Trigger the checks tab - this creates the panel and form
-        switchTrTab('checks');
-        // Pre-fill after checks panel renders
-        setTimeout(function() {
-          var d = window._pendingCheckData;
-          if (!d) return;
-          var acctEl  = document.getElementById('chk-account');
-          var payeeEl = document.getElementById('chk-payee');
-          var amtEl   = document.getElementById('chk-amount');
-          var memoEl  = document.getElementById('chk-memo');
-          var dateEl  = document.getElementById('chk-date');
-          if (acctEl && d.account_id)  acctEl.value  = d.account_id;
-          if (payeeEl)                 payeeEl.value  = d.payee;
-          if (amtEl)                 { amtEl.value    = d.amount; updateAmountWords(); }
-          if (memoEl)                  memoEl.value   = d.memo;
-          if (dateEl)                  dateEl.value   = d.date;
-          toast('Check pre-filled! Review details and click Print check.', 'info');
-          window._pendingCheckData = null;
-        }, 300);
-      }
-    }
-  }, 150);
+  // Set flag so renderTreasurerView knows to switch to checks tab
+  window._navigateToChecks = true;
 }
 
 // Hook into printCheck to mark reimbursement complete
