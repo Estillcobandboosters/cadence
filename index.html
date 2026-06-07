@@ -556,7 +556,7 @@
         </div>
         <button class="signout-btn" onclick="signOut()" title="Sign out">↩</button>
       </div>
-      <button id="parent-view-btn" onclick="switchToParentView()" style="display:none;width:100%;margin-top:8px;padding:7px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--gray-400);font-family:var(--font);font-size:12px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.14)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">
+      <button id="parent-view-btn" onclick="switchToParentView()" style="display:none;width:100%;margin-top:8px;padding:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);border-radius:6px;color:white;font-family:var(--font);font-size:12px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">
         &#127968; Switch to parent view
       </button>
     </div>
@@ -5142,54 +5142,36 @@ async function showParentPortal() {
   const u = state.user;
   portal.innerHTML = `
     <style>
-      #parent-portal {
-        min-height: 100vh;
-        background: var(--gray-50);
-        font-family: var(--font);
-      }
-      .portal-header {
-        background: var(--black);
-        padding: 0 24px;
-        height: 60px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .portal-header-logo {
-        font-family: var(--font-serif);
-        font-size: 22px;
-        color: var(--white);
-      }
-      .portal-header-logo span { color: var(--blue-mid); }
-      .portal-body { max-width: 800px; margin: 0 auto; padding: 24px 16px; }
-      .portal-welcome { margin-bottom: 24px; }
-      .portal-section { background: white; border: 1px solid var(--gray-300); border-radius: var(--radius); margin-bottom: 20px; box-shadow: var(--shadow); overflow: hidden; }
-      .portal-section-header { background: var(--blue); color: white; padding: 12px 18px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-      .portal-section-body { padding: 16px 18px; }
-      .portal-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 14px; }
-      .portal-row:last-child { border-bottom: none; }
-      .portal-label { color: var(--gray-500); font-size: 13px; }
-      .portal-value { font-weight: 500; }
+      #parent-portal { min-height:100vh; background:var(--gray-50); font-family:var(--font); }
+      .portal-section { background:white; border:1px solid var(--gray-300); border-radius:var(--radius); margin-bottom:20px; box-shadow:var(--shadow); overflow:hidden; }
+      .portal-section-header { background:var(--blue); color:white; padding:12px 18px; font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+      .portal-section-body { padding:16px 18px; }
+      .portal-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--gray-100); font-size:14px; }
+      .portal-row:last-child { border-bottom:none; }
+      .portal-label { color:var(--gray-500); font-size:13px; }
+      .portal-value { font-weight:500; }
     </style>
 
-    <div class="portal-header">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <img id="portal-logo" src="${LOGO_DATA_URL}" style="height:36px;background:white;border-radius:4px;padding:2px;"/>
-        <div class="portal-header-logo">Cadence<span>.</span></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <span style="font-size:13px;color:var(--gray-400);">${u.name||u.email}</span>
-        <button onclick="parentSignOut()" style="background:rgba(255,255,255,0.1);border:none;color:var(--gray-300);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;">Sign out</button>
+    <!-- Top nav: Cadence branding only -->
+    <div style="background:#0A0A0A;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 0 rgba(255,255,255,0.08);">
+      <div style="font-family:var(--font-serif);font-size:24px;color:white;letter-spacing:-0.5px;">Cadence<span style="color:#4FC3F7;">.</span></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;color:rgba(255,255,255,0.5);">${u.name||u.email}</span>
+        <button onclick="parentSignOut()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.75);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);">Sign out</button>
       </div>
     </div>
 
-    <div class="portal-body">
-      <div class="portal-welcome">
-        <div style="font-size:22px;font-weight:600;margin-bottom:4px;">Welcome, ${u.name||''}!</div>
-        <div style="font-size:14px;color:var(--gray-500);">Estill County Band Boosters · ${CONFIG.SCHOOL_YEAR}</div>
-      </div>
+    <!-- Hero banner with ECBB logo -->
+    <div style="background:linear-gradient(135deg,#1565C0 0%,#0D47A1 60%,#01579B 100%);padding:32px 24px 36px;text-align:center;">
+      <img id="portal-logo" src="" style="height:80px;width:auto;background:white;border-radius:12px;padding:6px 10px;margin:0 auto 16px;display:block;box-shadow:0 4px 20px rgba(0,0,0,0.3);"/>
+      <div style="font-size:20px;font-weight:700;color:white;margin-bottom:4px;">Estill County Band Boosters</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.75);">Family Portal &mdash; ${CONFIG.SCHOOL_YEAR}</div>
+    </div>
+
+    <!-- Content -->
+    <div style="max-width:800px;margin:0 auto;padding:24px 16px;">
       <div id="portal-content">
-        <div style="display:flex;align-items:center;gap:10px;color:var(--gray-500);padding:40px 0;">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;color:var(--gray-500);padding:40px 0;">
           <div class="spinner"></div> Loading your account...
         </div>
       </div>
@@ -7970,36 +7952,27 @@ async function switchToParentView() {
 
   // Inject back button override into showParentPortal
   var u = state.user;
-  portal.innerHTML = '<div style="background:var(--black);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;">' +
-    '<div style="display:flex;align-items:center;gap:12px;">' +
-    '<img src="' + LOGO_DATA_URL + '" style="height:36px;background:white;border-radius:4px;padding:2px;"/>' +
-    '<div style="font-family:var(--font-serif);font-size:22px;color:white;">Cadence<span style="color:var(--blue-mid);">.</span></div>' +
+  portal.innerHTML =
+    '<div style="background:#0A0A0A;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 0 rgba(255,255,255,0.08);">' +
+      '<div style="font-family:var(--font-serif);font-size:24px;color:white;letter-spacing:-0.5px;">Cadence<span style="color:#4FC3F7;">.</span></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<span style="font-size:12px;color:rgba(255,255,255,0.5);">' + (u.name||u.email) + '</span>' +
+        (u.role !== 'parent' ? '<button onclick="switchBackToAdmin()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);">&#8592; Back to admin</button>' : '') +
+        '<button onclick="parentSignOut()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.75);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);">Sign out</button>' +
+      '</div>' +
     '</div>' +
-    '<div style="display:flex;align-items:center;gap:12px;">' +
-    '<span style="font-size:12px;color:var(--gray-400);">Parent view &mdash; ' + (u.name||u.email) + '</span>' +
-    '<button onclick="switchBackToAdmin()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:white;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-family:var(--font);">&#8592; Back to admin</button>' +
-    '<button onclick="parentSignOut()" style="background:rgba(255,255,255,0.08);border:none;color:var(--gray-400);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;">Sign out</button>' +
-    '</div></div>' +
+    '<div style="background:linear-gradient(135deg,#1565C0 0%,#0D47A1 60%,#01579B 100%);padding:32px 24px 36px;text-align:center;">' +
+      '<img src="' + LOGO_DATA_URL + '" style="height:80px;width:auto;background:white;border-radius:12px;padding:6px 10px;margin:0 auto 16px;display:block;box-shadow:0 4px 20px rgba(0,0,0,0.3);"/>' +
+      '<div style="font-size:20px;font-weight:700;color:white;margin-bottom:4px;">Estill County Band Boosters</div>' +
+      '<div style="font-size:13px;color:rgba(255,255,255,0.75);">Family Portal &mdash; ' + CONFIG.SCHOOL_YEAR + '</div>' +
+    '</div>' +
     '<div style="max-width:800px;margin:0 auto;padding:24px 16px;">' +
-    '<div class="portal-welcome"><div style="font-size:22px;font-weight:600;margin-bottom:4px;">Parent view</div>' +
-    '<div style="font-size:14px;color:var(--gray-500);">Viewing as parent &mdash; ' + CONFIG.SCHOOL_YEAR + '</div></div>' +
-    '<div id="portal-content"><div style="display:flex;align-items:center;gap:10px;color:var(--gray-500);padding:40px 0;"><div class="spinner"></div> Loading...</div></div>' +
+      '<div id="portal-content">' +
+        '<div style="display:flex;align-items:center;justify-content:center;gap:10px;color:var(--gray-500);padding:40px 0;">' +
+          '<div class="spinner"></div> Loading your account...' +
+        '</div>' +
+      '</div>' +
     '</div>';
-
-  // Add portal styles if not present
-  if (!document.getElementById('portal-styles')) {
-    var style = document.createElement('style');
-    style.id = 'portal-styles';
-    style.textContent = '#parent-portal { min-height:100vh; background:var(--gray-50); font-family:var(--font); }' +
-      '.portal-section { background:white; border:1px solid var(--gray-300); border-radius:var(--radius); margin-bottom:20px; box-shadow:var(--shadow); overflow:hidden; }' +
-      '.portal-section-header { background:var(--blue); color:white; padding:12px 18px; font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }' +
-      '.portal-section-body { padding:16px 18px; }' +
-      '.portal-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--gray-100); font-size:14px; }' +
-      '.portal-row:last-child { border-bottom:none; }' +
-      '.portal-label { color:var(--gray-500); font-size:13px; }' +
-      '.portal-value { font-weight:500; }';
-    document.head.appendChild(style);
-  }
 
   await loadParentData();
 }
