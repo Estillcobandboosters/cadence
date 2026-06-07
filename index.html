@@ -7294,16 +7294,14 @@ function renderReimbView() {
   html += '<div class="form-group"><label class="form-label">Mailing address for check</label>';
   html += '<input class="form-input" id="rf-address" placeholder="Street address, City, State ZIP"/></div>';
   html += '<div class="form-group" style="grid-column:1/-1;">';
-  html += '<label class="form-label">Receipt / invoice *</label>';
-  html += '<div style="border:2px dashed var(--gray-300);border-radius:var(--radius);padding:20px;text-align:center;background:var(--gray-50);" id="receipt-drop-zone">';
-  html += '<div style="font-size:24px;margin-bottom:8px;">&#128196;</div>';
-  html += '<div style="font-size:14px;font-weight:500;margin-bottom:4px;">Upload receipt or invoice</div>';
-  html += '<div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">JPG, PNG, or PDF &mdash; max 10MB</div>';
-  html += '<input type="file" id="rf-receipt-file" accept=".jpg,.jpeg,.png,.pdf" style="display:none;" onchange="handleReceiptSelect(this)"/>';
-  html += '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'rf-receipt-file\').click()">Choose file</button>';
-  html += '<div id="receipt-file-name" style="margin-top:8px;font-size:13px;color:var(--gray-500);"></div>';
+  html += '<label class="form-label">Receipt / invoice (optional)</label>';
+  html += '<div style="background:#E3F2FD;border:1px solid #90CAF9;border-radius:var(--radius);padding:12px 14px;font-size:13px;color:#0D47A1;margin-bottom:10px;">';
+  html += '<strong>How to attach a receipt:</strong> Take a photo &rarr; upload to ';
+  html += '<a href="https://drive.google.com" target="_blank" style="color:#0D47A1;font-weight:600;">Google Drive</a>';
+  html += ' &rarr; right-click &rarr; Share &rarr; Anyone with link &rarr; paste link below.<br/>';
+  html += '<span style="opacity:0.8;">Or leave blank and bring the physical receipt to the treasurer.</span>';
   html += '</div>';
-  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">Or paste a Google Drive link: <input class="form-input" id="rf-receipt-url" placeholder="https://drive.google.com/..." style="display:inline;width:auto;margin-left:4px;"/></div>';
+  html += '<input class="form-input" id="rf-receipt-url" placeholder="https://drive.google.com/file/d/... (optional)"/>';
   html += '</div>';
   html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Additional notes</label>';
   html += '<textarea class="form-textarea" id="rf-notes" placeholder="Any additional information..."></textarea></div>';
@@ -7421,8 +7419,6 @@ function handleReceiptSelect(input) {
 }
 
 function openReimbForm() {
-  _reimbReceiptFile = null;
-  _reimbReceiptDataUrl = null;
   var fields = ['description','notes','address'];
   fields.forEach(function(f) {
     var el = document.getElementById('rf-' + f);
@@ -7431,8 +7427,6 @@ function openReimbForm() {
   document.getElementById('rf-amount').value = '';
   document.getElementById('rf-payee').value = '';
   document.getElementById('rf-receipt-url').value = '';
-  document.getElementById('receipt-file-name').innerHTML = '';
-  document.getElementById('rf-receipt-file').value = '';
   document.getElementById('reimb-form-modal').classList.add('open');
 }
 
@@ -7451,7 +7445,7 @@ async function submitReimbRequest() {
   if (!desc)   { toast('Description is required.', 'error'); return; }
   if (!amount || parseFloat(amount) <= 0) { toast('Please enter a valid amount.', 'error'); return; }
   if (!date)   { toast('Purchase date is required.', 'error'); return; }
-  if (!url && !_reimbReceiptDataUrl) { toast('Please attach a receipt or provide a Drive link.', 'error'); return; }
+  // Receipt is optional - submitter can bring physical receipt to treasurer
 
   var submitBtn = document.getElementById('reimb-submit-btn');
   submitBtn.textContent = 'Uploading...';
@@ -7460,17 +7454,7 @@ async function submitReimbRequest() {
   try {
     var receiptUrl = url;
 
-    // If file selected, compress and store as base64 data URL
-    if (_reimbReceiptFile && !url) {
-      try {
-        receiptUrl = await compressAndEncodeReceipt(_reimbReceiptFile);
-      } catch(uploadErr) {
-        toast('Could not process receipt: ' + uploadErr.message, 'error');
-        submitBtn.textContent = 'Submit request';
-        submitBtn.disabled = false;
-        return;
-      }
-    }
+    // Receipt URL from Drive link field only
 
     var record = {
       reimb_id:       '',
