@@ -5143,8 +5143,8 @@ async function showParentPortal() {
   portal.innerHTML = `
     <style>
       #parent-portal { min-height:100vh; background:var(--gray-50); font-family:var(--font); }
-      .portal-section { background:white; border:1px solid var(--gray-300); border-radius:var(--radius); margin-bottom:20px; box-shadow:var(--shadow); overflow:hidden; }
-      .portal-section-header { background:var(--blue); color:white; padding:12px 18px; font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+      .portal-section { background:white; border:1px solid var(--gray-200); border-radius:10px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.06); overflow:hidden; }
+      .portal-section-header { background:var(--blue); color:white; padding:14px 18px; font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
       .portal-section-body { padding:16px 18px; }
       .portal-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--gray-100); font-size:14px; }
       .portal-row:last-child { border-bottom:none; }
@@ -5247,21 +5247,48 @@ async function loadParentData() {
         return !sSubs.find(function(s) { return s.form_id===f.form_id && (s.status==='received'||s.status==='complete'); });
       });
 
-      // Student header
-      html += '<div style="background:var(--blue);border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;color:white;">';
-      html += '<div style="font-size:20px;font-weight:700;">' + student.first_name + ' ' + student.last_name + '</div>';
-      html += '<div style="font-size:13px;opacity:0.85;margin-top:2px;">Grade ' + student.grade + ' &middot; ' + (student.section||'') + ' &middot; ' + (student.instrument||'') + '</div>';
-      html += '</div>';
+      // Student header card
+      html += '<div style="background:white;border:1px solid var(--gray-200);border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:16px;">';
+      html += '<div style="width:52px;height:52px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:white;flex-shrink:0;">' + student.first_name.charAt(0) + student.last_name.charAt(0) + '</div>';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:20px;font-weight:700;color:var(--gray-900);">' + student.first_name + ' ' + student.last_name + '</div>';
+      html += '<div style="font-size:13px;color:var(--gray-500);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap;">';
+      html += '<span>&#127979; Grade ' + student.grade + '</span>';
+      if (student.section) html += '<span>&#9835; ' + student.section + '</span>';
+      if (student.instrument) html += '<span>&#127931; ' + student.instrument + '</span>';
+      if (student.ensembles) {
+        student.ensembles.split(',').filter(Boolean).forEach(function(e) {
+          html += '<span style="background:var(--blue);color:white;padding:1px 7px;border-radius:10px;font-size:11px;">' + e.trim() + '</span>';
+        });
+      }
+      html += '</div></div></div>';
 
       // Fee summary
       html += '<div class="portal-section">';
-      html += '<div class="portal-section-header"><span>Fees &amp; Balance</span>';
-      html += '<span style="font-size:18px;font-weight:700;">' + (balance>0 ? '$'+balance.toFixed(2)+' due' : 'Paid in full &#10003;') + '</span></div>';
+      html += '<div class="portal-section-header" style="background:' + (balance>0?'var(--blue)':'#2E7D32') + ';">';
+      html += '<span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">' + (balance>0?'&#9654;':'&#10003;') + '</span> Fees &amp; Balance</span>';
+      html += '<span style="font-size:16px;font-weight:700;">' + (balance>0?'$'+balance.toFixed(2)+' due':'Paid in full!') + '</span></div>';
       html += '<div class="portal-section-body">';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;text-align:center;">';
-      html += '<div style="background:var(--gray-50);border-radius:8px;padding:12px;"><div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Total due</div><div style="font-size:22px;font-weight:700;">$' + totalDue.toFixed(2) + '</div></div>';
-      html += '<div style="background:#E8F5E9;border-radius:8px;padding:12px;"><div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Paid</div><div style="font-size:22px;font-weight:700;color:var(--success);">$' + totalPaid.toFixed(2) + '</div></div>';
-      html += '<div style="background:' + (balance>0?'#FFEBEE':'#E8F5E9') + ';border-radius:8px;padding:12px;"><div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Balance</div><div style="font-size:22px;font-weight:700;color:' + (balance>0?'var(--danger)':'var(--success)') + ';">' + (balance>0?'$'+balance.toFixed(2):'&#10003;') + '</div></div>';
+      // Progress bar if there are fees
+      if (totalDue > 0) {
+        var paidPct = Math.min(100, Math.round((totalPaid/totalDue)*100));
+        html += '<div style="margin-bottom:16px;">';
+        html += '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-bottom:4px;">';
+        html += '<span>Payment progress</span><span>' + paidPct + '% paid</span></div>';
+        html += '<div style="height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">';
+        html += '<div style="height:10px;border-radius:5px;background:' + (paidPct>=100?'#2E7D32':'var(--blue)') + ';width:' + paidPct + '%;transition:width 0.5s;"></div>';
+        html += '</div></div>';
+      }
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;text-align:center;">';
+      html += '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;">';
+      html += '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Total due</div>';
+      html += '<div style="font-size:20px;font-weight:700;">$' + totalDue.toFixed(2) + '</div></div>';
+      html += '<div style="background:#E8F5E9;border:1px solid #C8E6C9;border-radius:8px;padding:12px;">';
+      html += '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Paid</div>';
+      html += '<div style="font-size:20px;font-weight:700;color:#2E7D32;">$' + totalPaid.toFixed(2) + '</div></div>';
+      html += '<div style="background:' + (balance>0?'#FFEBEE':'#E8F5E9') + ';border:1px solid ' + (balance>0?'#FFCDD2':'#C8E6C9') + ';border-radius:8px;padding:12px;">';
+      html += '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Balance</div>';
+      html += '<div style="font-size:20px;font-weight:700;color:' + (balance>0?'var(--danger)':'#2E7D32') + ';">' + (balance>0?'$'+balance.toFixed(2):'&#10003;') + '</div></div>';
       html += '</div>';
 
       if (sFees.length > 0) {
@@ -5313,7 +5340,7 @@ async function loadParentData() {
 
       // Attendance
       html += '<div class="portal-section">';
-      html += '<div class="portal-section-header">Attendance</div>';
+      html += '<div class="portal-section-header"><span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">&#10003;</span> Attendance</span></div>';
       html += '<div class="portal-section-body">';
       html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;text-align:center;">';
       html += '<div style="background:#E8F5E9;border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;">Present</div><div style="font-size:20px;font-weight:700;color:var(--success);">' + present + '</div></div>';
@@ -5419,7 +5446,7 @@ async function loadParentData() {
     } catch(e) { /* posts not critical */ }
 
     // Upcoming events
-    html += '<div class="portal-section"><div class="portal-section-header">Upcoming events</div>';
+    html += '<div class="portal-section"><div class="portal-section-header"><span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">&#9711;</span> Upcoming events</span></div>';
     if (upcoming.length === 0) {
       html += '<div class="portal-section-body"><div style="color:var(--gray-500);font-size:13px;">No upcoming events scheduled.</div></div>';
     } else {
@@ -5443,7 +5470,7 @@ async function loadParentData() {
     // Contact info
     html += '<div class="portal-section">';
     html += '<div class="portal-section-header" style="justify-content:space-between;">';
-    html += '<span>Your contact info</span>';
+    html += '<span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">&#9993;</span> Your contact info</span>';
     html += '<button onclick="openParentContactEdit()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Edit</button>';
     html += '</div><div class="portal-section-body">';
     html += '<div class="portal-row"><span class="portal-label">Name</span><span class="portal-value">' + myGuardian.first_name + ' ' + myGuardian.last_name + '</span></div>';
