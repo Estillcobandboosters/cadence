@@ -7896,9 +7896,15 @@ async function reimbPrintCheck() {
   window._pendingReimbId  = r.reimb_id;
   window._pendingCheckData = checkData;
 
-  // Close modal
+  // Close and remove modal from DOM entirely
   var modal = document.getElementById('reimb-action-modal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.classList.remove('open');
+    // Small delay then remove so transition completes
+    setTimeout(function() {
+      if (modal.parentElement) modal.parentElement.removeChild(modal);
+    }, 300);
+  }
 
   // Navigate to treasurer and switch to checks tab
   navigate('treasurer');
