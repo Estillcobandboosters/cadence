@@ -733,7 +733,7 @@ async function showApp() {
   document.getElementById('user-role').textContent   = u.role;
   document.getElementById('user-avatar').textContent = (u.name || u.email).charAt(0).toUpperCase();
 
-  if (u.role === 'admin' || u.role === 'staff' || u.role === 'treasurer' || u.role === 'president') {
+  if (['admin','staff','treasurer','president'].indexOf(u.role) > -1) {
     document.getElementById('treasurer-nav').style.display = 'block';
   }
   if (u.role === 'admin') {
@@ -4265,8 +4265,8 @@ function renderUsersTable() {
               <label class="form-label">Role</label>
               <select class="form-select" id="uf-role">
                 <option value="admin">Admin — full access</option>
+                <option value="president">President — final approval + accounting</option>
                 <option value="treasurer">Treasurer — accounting + approvals</option>
-                <option value="president">President — final approval authority</option>
                 <option value="staff">Staff — roster, attendance, inventory</option>
                 <option value="parent">Parent — portal access only</option>
               </select>
@@ -7283,9 +7283,19 @@ function renderReimbView() {
   html += '<input class="form-input" type="number" step="0.01" id="rf-amount" placeholder="0.00"/></div>';
   html += '<div class="form-group"><label class="form-label">Category</label>';
   html += '<select class="form-select" id="rf-category">';
-  var cats = ['Uniform Purchase','Equipment Purchase','Trip Expense','Food/Concessions','Printing/Supplies','Office Supplies','Postage','Other'];
+  var cats = [
+    'Band Dues/Fees','Uniform Purchase','Uniform Repair/Cleaning',
+    'Equipment Purchase','Equipment Repair','Instrument Purchase','Instrument Repair',
+    'Trip Expense','Transportation','Hotel/Lodging',
+    'Food/Concessions','Supplies/Materials','Printing/Copying',
+    'Awards/Trophies','Postage/Shipping','Office Supplies',
+    'Fundraiser Expense','Entry Fees/Registration','Music/Arrangements',
+    'Other (see notes)'
+  ];
   cats.forEach(function(c){ html += '<option value="' + c + '">' + c + '</option>'; });
-  html += '</select></div>';
+  html += '</select>';
+  html += '<div style="margin-top:4px;font-size:11px;color:var(--gray-500);">If your category is not listed, choose <em>Other (see notes)</em> and explain in the notes field.</div>';
+  html += '</div>';
   html += '<div class="form-group"><label class="form-label">Reimburse from account</label>';
   html += '<select class="form-select" id="rf-account_id">';
   html += '<option value="">Treasurer will select</option>';
@@ -7738,9 +7748,14 @@ async function reimbApprove() {
     var result = await apiCall({ action: 'save_reimbursement', record: JSON.stringify(updated) });
     if (result.success) {
       toast('Request approved!', 'success');
-      document.getElementById('reimb-action-modal').classList.remove('open');
-      await renderReimbursements();
-      switchReimbTab(updated.status === 'treasurer_approved' ? 'tr_approved' : 'ready');
+      // Update local data immediately so modal refresh works
+      var idx = reimbData.requests.findIndex(function(x){ return x.reimb_id===_reimbActionId; });
+      if (idx > -1) reimbData.requests[idx] = updated;
+      // Close modal
+      var modal = document.getElementById('reimb-action-modal');
+      if (modal) modal.classList.remove('open');
+      // Reload page data in background
+      renderReimbursements();
     } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
   } catch(e) { toast('Could not approve.', 'error'); }
 }
@@ -7755,8 +7770,11 @@ async function reimbDeny() {
     var result = await apiCall({ action: 'save_reimbursement', record: JSON.stringify(updated) });
     if (result.success) {
       toast('Request denied.', 'info');
-      document.getElementById('reimb-action-modal').classList.remove('open');
-      await renderReimbursements();
+      var idx = reimbData.requests.findIndex(function(x){ return x.reimb_id===_reimbActionId; });
+      if (idx > -1) reimbData.requests[idx] = updated;
+      var modal = document.getElementById('reimb-action-modal');
+      if (modal) modal.classList.remove('open');
+      renderReimbursements();
     }
   } catch(e) { toast('Could not deny.', 'error'); }
 }
@@ -7782,8 +7800,11 @@ async function reimbSendBack() {
     var result = await apiCall({ action: 'save_reimbursement', record: JSON.stringify(updated) });
     if (result.success) {
       toast('Request returned to submitter.', 'info');
-      document.getElementById('reimb-action-modal').classList.remove('open');
-      await renderReimbursements();
+      var idx = reimbData.requests.findIndex(function(x){ return x.reimb_id===_reimbActionId; });
+      if (idx > -1) reimbData.requests[idx] = updated;
+      var modal = document.getElementById('reimb-action-modal');
+      if (modal) modal.classList.remove('open');
+      renderReimbursements();
     }
   } catch(e) { toast('Could not return request.', 'error'); }
 }
