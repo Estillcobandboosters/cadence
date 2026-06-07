@@ -6967,8 +6967,13 @@ function buildCheckHTML(forPrint) {
     (forPrint ? '' : '<div class="no-print"><button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;margin-right:8px;">&#128424; Print</button><button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;">Close</button><div style="font-size:11px;color:#666;margin-top:6px;">Print on blank check stock with MICR toner. Use 8.5\u201d \u00d7 3.5\u201d check format.</div></div>') +
     '<div class="check-page"><div class="check">' +
     '<div class="check-header">' +
-    '<div><div class="check-org">' + orgName + '</div>' +
-    '<div class="check-org-sub">' + bankName + '</div></div>' +
+    '<div>' +
+    '<div class="check-org">' + orgName + '</div>' +
+    (orgAddress ? '<div class="check-org-sub">' + orgAddress + '</div>' : '') +
+    ((orgCity||orgState||orgZip) ? '<div class="check-org-sub">' + [orgCity,orgState,orgZip].filter(Boolean).join(', ') + '</div>' : '') +
+    (orgPhone ? '<div class="check-org-sub">' + orgPhone + '</div>' : '') +
+    '<div class="check-org-sub">' + bankName + '</div>' +
+    '</div>' +
     '<div class="check-number">No. ' + checkNo + '</div>' +
     '</div>' +
     '<div class="check-date-row"><span class="check-date-label">Date</span><span class="check-date-value">' + dateStr + '</span></div>' +
@@ -6978,8 +6983,8 @@ function buildCheckHTML(forPrint) {
     '<div><div class="check-bank">' + bankName + '</div>' +
     '<div class="check-memo"><span class="check-memo-label">For: </span><span class="check-memo-value">' + (memo||'') + '</span></div></div>' +
     '<div class="check-signatures">' +
-    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
-    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">' + sig1Title + '</div></div>' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">' + sig2Title + '</div></div>' +
     '</div></div>' +
     '<div class="micr">' + micrLine + '</div>' +
     '</div></div></body></html>';
@@ -7011,8 +7016,16 @@ function reprintCheck(txnId) {
   var routing  = acct.routing_number  || 'XXXXXXXXX';
   var acctNum  = acct.account_number  || ('XXXXX' + (acct.last_four||'XXXX'));
   var checkNo  = t.check_number || '0000';
-  var orgName  = acct.organization || 'Estill County Band Boosters';
-  var bankName = acct.bank_name    || 'Your Bank';
+  // Pull org info from settings if available
+  var orgName    = (_settings && _settings.org_name)    || acct.organization || 'Estill County Band Boosters';
+  var orgAddress = (_settings && _settings.org_address) || '';
+  var orgCity    = (_settings && _settings.org_city)    || '';
+  var orgState   = (_settings && _settings.org_state)   || '';
+  var orgZip     = (_settings && _settings.org_zip)     || '';
+  var orgPhone   = (_settings && _settings.org_phone)   || '';
+  var sig1Title  = (_settings && _settings.check_sig1_title) || 'Treasurer';
+  var sig2Title  = (_settings && _settings.check_sig2_title) || 'President';
+  var bankName   = acct.bank_name || 'Your Bank';
 
   // Parse payee from description e.g. "Check #1042 - John Smith"
   var payee = t.description || '';
@@ -7067,8 +7080,13 @@ function reprintCheck(txnId) {
     '<div class="check-page"><div class="check">' +
     '<div class="reprint-stamp">REPRINT</div>' +
     '<div class="check-header">' +
-    '<div><div class="check-org">' + orgName + '</div>' +
-    '<div class="check-org-sub">' + bankName + '</div></div>' +
+    '<div>' +
+    '<div class="check-org">' + orgName + '</div>' +
+    (orgAddress ? '<div class="check-org-sub">' + orgAddress + '</div>' : '') +
+    ((orgCity||orgState||orgZip) ? '<div class="check-org-sub">' + [orgCity,orgState,orgZip].filter(Boolean).join(', ') + '</div>' : '') +
+    (orgPhone ? '<div class="check-org-sub">' + orgPhone + '</div>' : '') +
+    '<div class="check-org-sub">' + bankName + '</div>' +
+    '</div>' +
     '<div class="check-number">No. ' + checkNo + '</div>' +
     '</div>' +
     '<div class="check-date-row"><span class="check-date-label">Date</span><span class="check-date-value">' + dateStr + '</span></div>' +
@@ -7078,8 +7096,8 @@ function reprintCheck(txnId) {
     '<div><div class="check-bank">' + bankName + '</div>' +
     '<div class="check-memo"><span class="check-memo-label">For: </span><span class="check-memo-value">' + memo + '</span></div></div>' +
     '<div class="check-signatures">' +
-    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
-    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">Authorized Signature</div></div>' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">' + sig1Title + '</div></div>' +
+    '<div class="check-sig"><div class="check-sig-line"></div><div class="check-sig-label">' + sig2Title + '</div></div>' +
     '</div></div>' +
     '<div class="micr">' + micrLine + '</div>' +
     '</div></div></body></html>';
