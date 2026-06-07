@@ -5662,6 +5662,14 @@ async function renderTreasurer() {
   const el = document.getElementById('page-treasurer');
   el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--gray-500);"><div class="spinner"></div> Loading treasurer...</div>';
   try {
+    // Load settings if not already loaded (needed for check printing)
+    if (!_settings || Object.keys(_settings).length === 0) {
+      try {
+        var sRes = await apiCall({ action: 'get_settings' });
+        _settings = sRes.data || {};
+        applySettingsLive();
+      } catch(e) { _settings = _settings || {}; }
+    }
     const [acctRes, txnRes] = await Promise.allSettled([
       apiCall({ action: 'get_accounts' }),
       apiCall({ action: 'get_transactions' })
@@ -6927,15 +6935,18 @@ function buildCheckHTML(forPrint) {
   // MICR line encoding
   var micrLine = '\u2446' + routing + '\u2446' + ' \u2448' + acctNum + '\u2448' + ' ' + checkNo;
 
-  var orgName    = (_settings && _settings.org_name)         || acct.organization || 'Estill County Band Boosters';
-  var orgAddress = (_settings && _settings.org_address)      || '';
-  var orgCity    = (_settings && _settings.org_city)         || '';
-  var orgState   = (_settings && _settings.org_state)        || '';
-  var orgZip     = (_settings && _settings.org_zip)          || '';
-  var orgPhone   = (_settings && _settings.org_phone)        || '';
-  var sig1Title  = (_settings && _settings.check_sig1_title) || 'Treasurer';
-  var sig2Title  = (_settings && _settings.check_sig2_title) || 'President';
-  var bankName   = acct.bank_name || 'Your Bank';
+  // Always prefer settings over account data for org info
+  var s_         = _settings || {};
+  var orgName    = s_.org_name         || 'Estill County Band Boosters';
+  var orgAddress = s_.org_address      || '';
+  var orgCity    = s_.org_city         || '';
+  var orgState   = s_.org_state        || '';
+  var orgZip     = s_.org_zip          || '';
+  var orgPhone   = s_.org_phone        || '';
+  var sig1Title  = s_.check_sig1_title || 'Treasurer';
+  var sig2Title  = s_.check_sig2_title || 'President';
+  var bankName   = acct.bank_name      || s_.org_bank || 'Your Bank';
+  var cityLine   = [orgCity, orgState, orgZip].filter(Boolean).join(', ');
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
     '<title>Check #' + checkNo + '</title>' +
@@ -6977,8 +6988,8 @@ function buildCheckHTML(forPrint) {
     '<div>' +
     '<div class="check-org">' + orgName + '</div>' +
     (orgAddress ? '<div class="check-org-sub">' + orgAddress + '</div>' : '') +
-    ((orgCity||orgState||orgZip) ? '<div class="check-org-sub">' + [orgCity,orgState,orgZip].filter(Boolean).join(', ') + '</div>' : '') +
-    (orgPhone ? '<div class="check-org-sub">' + orgPhone + '</div>' : '') +
+    (cityLine   ? '<div class="check-org-sub">' + cityLine + '</div>' : '') +
+    (orgPhone   ? '<div class="check-org-sub">' + orgPhone + '</div>' : '') +
     '<div class="check-org-sub">' + bankName + '</div>' +
     '</div>' +
     '<div class="check-number">No. ' + checkNo + '</div>' +
@@ -7024,15 +7035,17 @@ function reprintCheck(txnId) {
   var acctNum  = acct.account_number  || ('XXXXX' + (acct.last_four||'XXXX'));
   var checkNo  = t.check_number || '0000';
   // Pull org info from settings if available
-  var orgName    = (_settings && _settings.org_name)    || acct.organization || 'Estill County Band Boosters';
-  var orgAddress = (_settings && _settings.org_address) || '';
-  var orgCity    = (_settings && _settings.org_city)    || '';
-  var orgState   = (_settings && _settings.org_state)   || '';
-  var orgZip     = (_settings && _settings.org_zip)     || '';
-  var orgPhone   = (_settings && _settings.org_phone)   || '';
-  var sig1Title  = (_settings && _settings.check_sig1_title) || 'Treasurer';
-  var sig2Title  = (_settings && _settings.check_sig2_title) || 'President';
-  var bankName   = acct.bank_name || 'Your Bank';
+  var s_         = _settings || {};
+  var orgName    = s_.org_name         || 'Estill County Band Boosters';
+  var orgAddress = s_.org_address      || '';
+  var orgCity    = s_.org_city         || '';
+  var orgState   = s_.org_state        || '';
+  var orgZip     = s_.org_zip          || '';
+  var orgPhone   = s_.org_phone        || '';
+  var sig1Title  = s_.check_sig1_title || 'Treasurer';
+  var sig2Title  = s_.check_sig2_title || 'President';
+  var bankName   = acct.bank_name      || s_.org_bank || 'Your Bank';
+  var cityLine   = [orgCity, orgState, orgZip].filter(Boolean).join(', ');
 
   // Parse payee from description e.g. "Check #1042 - John Smith"
   var payee = t.description || '';
@@ -7090,8 +7103,8 @@ function reprintCheck(txnId) {
     '<div>' +
     '<div class="check-org">' + orgName + '</div>' +
     (orgAddress ? '<div class="check-org-sub">' + orgAddress + '</div>' : '') +
-    ((orgCity||orgState||orgZip) ? '<div class="check-org-sub">' + [orgCity,orgState,orgZip].filter(Boolean).join(', ') + '</div>' : '') +
-    (orgPhone ? '<div class="check-org-sub">' + orgPhone + '</div>' : '') +
+    (cityLine   ? '<div class="check-org-sub">' + cityLine + '</div>' : '') +
+    (orgPhone   ? '<div class="check-org-sub">' + orgPhone + '</div>' : '') +
     '<div class="check-org-sub">' + bankName + '</div>' +
     '</div>' +
     '<div class="check-number">No. ' + checkNo + '</div>' +
