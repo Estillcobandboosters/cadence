@@ -7294,14 +7294,16 @@ function renderReimbView() {
   html += '<div class="form-group"><label class="form-label">Mailing address for check</label>';
   html += '<input class="form-input" id="rf-address" placeholder="Street address, City, State ZIP"/></div>';
   html += '<div class="form-group" style="grid-column:1/-1;">';
-  html += '<label class="form-label">Receipt / invoice (optional)</label>';
-  html += '<div style="background:#E3F2FD;border:1px solid #90CAF9;border-radius:var(--radius);padding:12px 14px;font-size:13px;color:#0D47A1;margin-bottom:10px;">';
-  html += '<strong>How to attach a receipt:</strong> Take a photo &rarr; upload to ';
-  html += '<a href="https://drive.google.com" target="_blank" style="color:#0D47A1;font-weight:600;">Google Drive</a>';
-  html += ' &rarr; right-click &rarr; Share &rarr; Anyone with link &rarr; paste link below.<br/>';
-  html += '<span style="opacity:0.8;">Or leave blank and bring the physical receipt to the treasurer.</span>';
+  html += '<label class="form-label">Receipt / invoice</label>';
+  html += '<div id="receipt-upload-area" style="border:2px dashed var(--gray-300);border-radius:var(--radius);padding:24px;text-align:center;background:var(--gray-50);cursor:pointer;" onclick="document.getElementById(\'rf-receipt-file\').click()">';
+  html += '<div style="font-size:32px;margin-bottom:8px;">&#128247;</div>';
+  html += '<div style="font-size:14px;font-weight:500;color:var(--gray-700);margin-bottom:4px;">Tap to upload receipt photo</div>';
+  html += '<div style="font-size:12px;color:var(--gray-500);">JPG, PNG, or PDF &mdash; up to 10MB</div>';
+  html += '<input type="file" id="rf-receipt-file" accept="image/*,.pdf" style="display:none;" onchange="handleReceiptFile(this)"/>';
   html += '</div>';
-  html += '<input class="form-input" id="rf-receipt-url" placeholder="https://drive.google.com/file/d/... (optional)"/>';
+  html += '<div id="receipt-preview-area" style="display:none;margin-top:10px;"></div>';
+  html += '<div style="margin-top:8px;font-size:12px;color:var(--gray-500);text-align:center;">— or paste a link —</div>';
+  html += '<input class="form-input" id="rf-receipt-url" placeholder="https://drive.google.com/... or any image URL (optional)" style="margin-top:6px;"/>';
   html += '</div>';
   html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Additional notes</label>';
   html += '<textarea class="form-textarea" id="rf-notes" placeholder="Any additional information..."></textarea></div>';
@@ -7419,6 +7421,8 @@ function handleReceiptSelect(input) {
 }
 
 function openReimbForm() {
+  _reimbReceiptFile = null;
+  _reimbUploadedUrl = null;
   var fields = ['description','notes','address'];
   fields.forEach(function(f) {
     var el = document.getElementById('rf-' + f);
@@ -7427,6 +7431,12 @@ function openReimbForm() {
   document.getElementById('rf-amount').value = '';
   document.getElementById('rf-payee').value = '';
   document.getElementById('rf-receipt-url').value = '';
+  var pa = document.getElementById('receipt-preview-area');
+  var ua = document.getElementById('receipt-upload-area');
+  if (pa) { pa.innerHTML = ''; pa.style.display = 'none'; }
+  if (ua) ua.style.display = 'block';
+  var fi = document.getElementById('rf-receipt-file');
+  if (fi) fi.value = '';
   document.getElementById('reimb-form-modal').classList.add('open');
 }
 
@@ -7454,7 +7464,19 @@ async function submitReimbRequest() {
   try {
     var receiptUrl = url;
 
-    // Receipt URL from Drive link field only
+    // Upload file to Cloudinary if selected
+    if (_reimbReceiptFile && !url) {
+      submitBtn.textContent = 'Uploading receipt...';
+      try {
+        receiptUrl = await uploadToCloudinary(_reimbReceiptFile);
+        toast('Receipt uploaded!', 'success');
+      } catch(uploadErr) {
+        toast('Receipt upload failed: ' + uploadErr.message, 'error');
+        submitBtn.textContent = 'Submit request';
+        submitBtn.disabled = false;
+        return;
+      }
+    }
 
     var record = {
       reimb_id:       '',
@@ -8788,67 +8810,78 @@ async function sendVenmoPayment(studentId, studentName) {
 }
 
 
-// ════════════════════════════════════════════════════════════
-//  RECEIPT COMPRESSION & ENCODING
-// ════════════════════════════════════════════════════════════
-async function compressAndEncodeReceipt(file) {
-  return new Promise(function(resolve, reject) {
-    // For PDFs, just encode as base64 directly (no compression possible)
-    if (file.type === 'application/pdf') {
-      if (file.size > 500 * 1024) {
-        reject(new Error('PDF too large. Please use a file under 500KB or paste a Google Drive link.'));
-        return;
-      }
-      var reader = new FileReader();
-      reader.onload = function(e) { resolve(e.target.result); };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-      return;
-    }
 
-    // For images, compress using canvas
-    var img = new Image();
-    var objectUrl = URL.createObjectURL(file);
-    img.onload = function() {
-      URL.revokeObjectURL(objectUrl);
-      var canvas = document.createElement('canvas');
-      var MAX_DIM = 1200;
-      var w = img.width, h = img.height;
-      if (w > MAX_DIM || h > MAX_DIM) {
-        if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
-        else       { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
-      }
-      canvas.width = w; canvas.height = h;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      // Compress to JPEG - target under 30KB base64 for sheet storage
-      var dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-      if (dataUrl.length > 100000) {
-        dataUrl = canvas.toDataURL('image/jpeg', 0.4);
-      }
-      if (dataUrl.length > 100000) {
-        // Shrink dimensions more aggressively
-        var MAX2 = 800;
-        var w2 = w, h2 = h;
-        if (w2 > MAX2 || h2 > MAX2) {
-          if (w2 > h2) { h2 = Math.round(h2 * MAX2 / w2); w2 = MAX2; }
-          else         { w2 = Math.round(w2 * MAX2 / h2); h2 = MAX2; }
-        }
-        canvas.width = w2; canvas.height = h2;
-        ctx.drawImage(img, 0, 0, w2, h2);
-        dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-      }
-      if (dataUrl.length > 150000) {
-        reject(new Error('Image still too large. Please use a photo under 2MB or paste a Google Drive link.'));
-        return;
-      }
-      resolve(dataUrl);
+// ════════════════════════════════════════════════════════════
+//  CLOUDINARY RECEIPT UPLOAD
+// ════════════════════════════════════════════════════════════
+var _reimbReceiptFile = null;
+var _reimbUploadedUrl = null;
+
+function handleReceiptFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) {
+    toast('File must be under 10MB.', 'error');
+    return;
+  }
+  _reimbReceiptFile = file;
+  _reimbUploadedUrl = null;
+
+  // Show preview
+  var previewArea = document.getElementById('receipt-preview-area');
+  var uploadArea  = document.getElementById('receipt-upload-area');
+  if (!previewArea) return;
+
+  previewArea.style.display = 'block';
+  if (uploadArea) uploadArea.style.display = 'none';
+
+  if (file.type.startsWith('image/')) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      previewArea.innerHTML =
+        '<div style="position:relative;display:inline-block;">' +
+        '<img src="' + e.target.result + '" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--gray-300);"/>' +
+        '<button onclick="clearReceiptFile()" style="position:absolute;top:-8px;right:-8px;background:var(--danger);color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;">&times;</button>' +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB) &mdash; <span style="color:var(--blue);">Will upload when you submit</span></div>';
     };
-    img.onerror = function() { reject(new Error('Could not read image file.')); };
-    img.src = objectUrl;
-  });
+    reader.readAsDataURL(file);
+  } else {
+    previewArea.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--gray-50);border:1px solid var(--gray-300);border-radius:8px;">' +
+      '<span style="font-size:24px;">&#128196;</span>' +
+      '<div style="flex:1;"><div style="font-weight:500;">' + file.name + '</div>' +
+      '<div style="font-size:12px;color:var(--gray-500);">' + (file.size/1024).toFixed(0) + ' KB &mdash; <span style="color:var(--blue);">Will upload when you submit</span></div></div>' +
+      '<button onclick="clearReceiptFile()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:20px;">&times;</button>' +
+      '</div>';
+  }
 }
 
+function clearReceiptFile() {
+  _reimbReceiptFile = null;
+  _reimbUploadedUrl = null;
+  var previewArea = document.getElementById('receipt-preview-area');
+  var uploadArea  = document.getElementById('receipt-upload-area');
+  var fileInput   = document.getElementById('rf-receipt-file');
+  if (previewArea) { previewArea.innerHTML = ''; previewArea.style.display = 'none'; }
+  if (uploadArea)  uploadArea.style.display = 'block';
+  if (fileInput)   fileInput.value = '';
+}
+
+async function uploadToCloudinary(file) {
+  var formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CONFIG.CLOUDINARY_PRESET);
+  formData.append('folder', 'cadence_receipts');
+
+  var res = await fetch(
+    'https://api.cloudinary.com/v1_1/' + CONFIG.CLOUDINARY_CLOUD + '/auto/upload',
+    { method: 'POST', body: formData }
+  );
+  var data = await res.json();
+  if (data.secure_url) return data.secure_url;
+  throw new Error(data.error ? data.error.message : 'Upload failed');
+}
 // ════════════════════════════════════════════════════════════
 //  YEAR SELECTOR
 // ════════════════════════════════════════════════════════════
