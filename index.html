@@ -9153,15 +9153,21 @@ async function saveSettingsSection(section) {
 
   try {
     var result = await apiCall({ action: 'save_settings', settings: JSON.stringify(updates) });
+    console.log('save_settings result:', result);
+    if (!result) {
+      toast('No response from server. Please check your connection.', 'error');
+      return;
+    }
     if (result.success) {
       toast('Settings saved!', 'success');
-      // Apply settings live
       applySettingsLive();
-      // Re-render to update preview
       renderSettingsView();
       switchSettingsTab(section);
     } else { toast('Error: ' + (result.error||'Unknown'), 'error'); }
-  } catch(e) { toast('Could not save settings.', 'error'); }
+  } catch(e) {
+    console.error('saveSettingsSection error:', e);
+    toast('Could not save settings: ' + e.message, 'error');
+  }
 }
 
 function applySettingsLive() {
