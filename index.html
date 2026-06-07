@@ -7423,25 +7423,38 @@ function handleReceiptSelect(input) {
 function openReimbForm() {
   _reimbReceiptFile = null;
   _reimbUploadedUrl = null;
+
+  // Move modal to body if nested inside a page div (fixes display issues)
+  var modal = document.getElementById('reimb-form-modal');
+  if (modal && modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+
   var fields = ['description','notes','address'];
   fields.forEach(function(f) {
     var el = document.getElementById('rf-' + f);
     if (el) el.value = '';
   });
-  document.getElementById('rf-amount').value = '';
-  document.getElementById('rf-payee').value = '';
-  document.getElementById('rf-receipt-url').value = '';
+  var amtEl = document.getElementById('rf-amount');
+  if (amtEl) amtEl.value = '';
+  var payeeEl = document.getElementById('rf-payee');
+  if (payeeEl) payeeEl.value = '';
+  var urlEl = document.getElementById('rf-receipt-url');
+  if (urlEl) urlEl.value = '';
   var pa = document.getElementById('receipt-preview-area');
   var ua = document.getElementById('receipt-upload-area');
   if (pa) { pa.innerHTML = ''; pa.style.display = 'none'; }
   if (ua) ua.style.display = 'block';
   var fi = document.getElementById('rf-receipt-file');
   if (fi) fi.value = '';
-  document.getElementById('reimb-form-modal').classList.add('open');
+
+  if (modal) modal.classList.add('open');
+  else toast('Could not open form. Please refresh the page.', 'error');
 }
 
 function closeReimbForm() {
-  document.getElementById('reimb-form-modal').classList.remove('open');
+  var m = document.getElementById('reimb-form-modal');
+  if (m) m.classList.remove('open');
 }
 
 async function submitReimbRequest() {
