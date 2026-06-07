@@ -368,6 +368,17 @@
     .toast.info    { background: var(--blue); }
     @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } }
 
+    /* Parent Portal */
+    #parent-portal { min-height:100vh; background:#f3f4f6; font-family:var(--font); }
+    .portal-section { background:white; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.06); overflow:hidden; }
+    .portal-section-header { background:var(--blue); color:white !important; padding:14px 18px; font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+    .portal-section-header * { color:white !important; }
+    .portal-section-body { padding:16px 18px; }
+    .portal-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f3f4f6; font-size:14px; }
+    .portal-row:last-child { border-bottom:none; }
+    .portal-label { color:#6b7280; font-size:13px; }
+    .portal-value { font-weight:500; }
+
     /* Responsive */
     @media (max-width: 768px) {
       #sidebar {
