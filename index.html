@@ -9112,6 +9112,9 @@ function renderSettingsView() {
   el.innerHTML = html;
 }
 
+// Alias so button onclick works
+function saveSettings(section) { return saveSettingsSection(section); }
+
 function switchSettingsTab(tab) {
   ['org','check','payment','lists'].forEach(function(t) {
     var panel = document.getElementById('set-panel-' + t);
