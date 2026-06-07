@@ -987,7 +987,7 @@ async function renderDashboard() {
 //  ROSTER — Full module
 // ════════════════════════════════════════════════════════════
 let rosterStudents = [];
-let rosterFilter = { search: '', section: '', grade: '', status: 'active' };
+let rosterFilter = { search: '', section: '', grade: '', status: 'active', ensemble: '' };
 
 async function renderRoster() {
   const el = document.getElementById('page-roster');
@@ -1017,8 +1017,9 @@ function renderRosterTable() {
     const matchSection = !rosterFilter.section || s.section === rosterFilter.section;
     const matchGrade   = !rosterFilter.grade   || s.grade   === rosterFilter.grade;
     const matchStatus  = !rosterFilter.status  || s.status  === rosterFilter.status;
-    const matchYear    = !state.selectedYear   || s.school_year === state.selectedYear;
-    return matchSearch && matchSection && matchGrade && matchStatus && matchYear;
+    const matchYear     = !state.selectedYear    || s.school_year === state.selectedYear;
+    const matchEnsemble = !rosterFilter.ensemble || (s.ensembles && s.ensembles.split(',').map(function(e){ return e.trim(); }).indexOf(rosterFilter.ensemble) > -1);
+    return matchSearch && matchSection && matchGrade && matchStatus && matchYear && matchEnsemble;
   });
 
   el.innerHTML = `
@@ -1037,6 +1038,13 @@ function renderRosterTable() {
         <option value="">All statuses</option>
         <option value="active" ${rosterFilter.status==='active'?'selected':''}>Active</option>
         <option value="inactive" ${rosterFilter.status==='inactive'?'selected':''}>Inactive</option>
+      </select>
+      <select class="form-select" style="max-width:150px;" onchange="rosterFilter.ensemble=this.value;renderRosterTable()">
+        <option value="">All ensembles</option>
+        <option value="marching" ${rosterFilter.ensemble==='marching'?'selected':''}>Marching Band</option>
+        <option value="pep"      ${rosterFilter.ensemble==='pep'     ?'selected':''}>Pep Band</option>
+        <option value="concert"  ${rosterFilter.ensemble==='concert' ?'selected':''}>Concert Band</option>
+        <option value="jazz"     ${rosterFilter.ensemble==='jazz'    ?'selected':''}>Jazz Band</option>
       </select>
       <span style="color:var(--gray-500);font-size:13px;margin-left:auto;">${filtered.length} student${filtered.length!==1?'s':''}</span>
       <button class="btn btn-sm btn-secondary" onclick="printRoster('full')">&#128424; Print roster</button>
@@ -1060,7 +1068,10 @@ function renderRosterTable() {
                     <td style="text-align:center;width:28px;">
                       ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
                     </td>
-                    <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                    <td>
+                      <strong>${s.first_name} ${s.last_name}</strong>
+                      ${s.ensembles ? '<div style="margin-top:3px;">' + s.ensembles.split(',').filter(Boolean).map(function(e){ return '<span class="badge badge-blue" style="font-size:9px;margin-right:2px;">'+e.trim()+'</span>'; }).join('') + '</div>' : ''}
+                    </td>
                     <td>${s.grade}</td>
                     <td>${s.section||'&mdash;'}</td>
                     <td>${s.instrument||'&mdash;'}</td>
@@ -1102,6 +1113,23 @@ function renderRosterTable() {
             <div class="form-group">
               <label class="form-label">Section</label>
               <input class="form-input" id="sf-section" placeholder="e.g. Woodwinds, Brass..."/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ensembles</label>
+              <div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--gray-300);border-radius:8px;background:var(--gray-50);">
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:400;">
+                  <input type="checkbox" id="sf-ens-marching" style="width:15px;height:15px;accent-color:var(--blue);"/> Marching Band
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:400;">
+                  <input type="checkbox" id="sf-ens-pep" style="width:15px;height:15px;accent-color:var(--blue);"/> Pep Band
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:400;">
+                  <input type="checkbox" id="sf-ens-concert" style="width:15px;height:15px;accent-color:var(--blue);"/> Concert Band
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:400;">
+                  <input type="checkbox" id="sf-ens-jazz" style="width:15px;height:15px;accent-color:var(--blue);"/> Jazz Band
+                </label>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Instrument</label>
@@ -1158,6 +1186,12 @@ function openStudentModal(student) {
     const el = document.getElementById('sf-' + f);
     if (el) el.value = student ? (student[f] || '') : (f === 'status' ? 'active' : f === 'school_year' ? CONFIG.SCHOOL_YEAR : '');
   });
+  // Load ensemble checkboxes
+  var ensembles = student ? (student.ensembles || '').split(',').map(function(e){ return e.trim(); }) : [];
+  ['marching','pep','concert','jazz'].forEach(function(e) {
+    var chk = document.getElementById('sf-ens-' + e);
+    if (chk) chk.checked = ensembles.indexOf(e) > -1;
+  });
   if (student) {
     editingStudentId = student.student_id;
     document.getElementById('student-modal-title').textContent = 'Edit student';
@@ -1181,6 +1215,12 @@ async function saveStudent() {
   ['first_name','last_name','grade','section','instrument','shirt_size','school_year','status','medical_notes','photo_consent'].forEach(f => {
     record[f] = document.getElementById('sf-' + f).value;
   });
+  // Save ensembles as comma-separated string
+  var selectedEnsembles = ['marching','pep','concert','jazz'].filter(function(e) {
+    var chk = document.getElementById('sf-ens-' + e);
+    return chk && chk.checked;
+  });
+  record.ensembles = selectedEnsembles.join(',');
   try {
     const result = await apiCall({ action: 'save_student', record: JSON.stringify(record) });
     if (result.success) {
@@ -1305,7 +1345,10 @@ function renderFeesOverview() {
                     <td style="text-align:center;width:28px;">
                       ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
                     </td>
-                    <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                    <td>
+                      <strong>${s.first_name} ${s.last_name}</strong>
+                      ${s.ensembles ? '<div style="margin-top:3px;">' + s.ensembles.split(',').filter(Boolean).map(function(e){ return '<span class="badge badge-blue" style="font-size:9px;margin-right:2px;">'+e.trim()+'</span>'; }).join('') + '</div>' : ''}
+                    </td>
                     <td>${s.grade}</td>
                     <td>${s.section||'—'}</td>
                     <td>${s.feeCount}</td>
@@ -1847,7 +1890,10 @@ function renderAttendanceOverview() {
                     <td style="text-align:center;width:28px;">
                       ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
                     </td>
-                    <td><strong>${s.first_name} ${s.last_name}</strong></td>
+                    <td>
+                      <strong>${s.first_name} ${s.last_name}</strong>
+                      ${s.ensembles ? '<div style="margin-top:3px;">' + s.ensembles.split(',').filter(Boolean).map(function(e){ return '<span class="badge badge-blue" style="font-size:9px;margin-right:2px;">'+e.trim()+'</span>'; }).join('') + '</div>' : ''}
+                    </td>
                     <td>${s.grade}</td>
                     <td>${s.section||'—'}</td>
                     <td><span class="badge badge-green">${s.present}</span></td>
@@ -5327,9 +5373,21 @@ async function loadParentData() {
       var postsRes = await apiCall({ action: 'get_posts' });
       var allPosts = postsRes.data || [];
       var today2   = new Date(); today2.setHours(0,0,0,0);
+      // Find this parent's student to check ensemble membership
+      var portalStudent = null;
+      if (window._portalGuardian) {
+        var allStudentsForFilter = allStudents || [];
+        portalStudent = allStudentsForFilter.find(function(s){ return s.student_id === window._portalGuardian.student_id; });
+      }
+      var studentEnsembles = portalStudent && portalStudent.ensembles ? portalStudent.ensembles.split(',').map(function(e){ return e.trim(); }) : [];
+
       var visiblePosts = allPosts.filter(function(p) {
         if (p.status !== 'published') return false;
         if (p.expiry_date && new Date(p.expiry_date) < today2) return false;
+        // Check audience
+        if (p.audience === 'marching' && studentEnsembles.indexOf('marching') === -1) return false;
+        if (p.audience === 'pep'      && studentEnsembles.indexOf('pep')      === -1) return false;
+        if (p.audience === 'staff')   return false; // staff-only posts don't show on parent portal
         return true;
       }).sort(function(a,b) {
         // Pinned first, then urgent, then by date
