@@ -5421,7 +5421,7 @@ async function loadParentData() {
           }
           if (reqAck) {
             html += '<div style="margin-top:10px;">';
-            html += '<button onclick="acknowledgePost(\'' + p.post_id + '\')" style="background:var(--success);color:white;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-family:var(--font);">&#10003; I have read and acknowledged this</button>';
+            html += '<button id="ack-btn-' + p.post_id + '" onclick="acknowledgePost(\'' + p.post_id + '\')" style="background:var(--success);color:white;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-family:var(--font);">&#10003; I have read and acknowledged this</button>';
             html += '</div>';
           }
           html += '</div></div></div>';
@@ -5482,13 +5482,23 @@ async function acknowledgePost(postId) {
       user_email: state.user ? state.user.email : '',
       ack_date:   new Date().toISOString().split('T')[0]
     };
-    await apiCall({ action: 'save_acknowledgment', record: JSON.stringify(record) });
-    toast('Acknowledged! Thank you.', 'success');
-    // Disable the button
-    event.target.disabled = true;
-    event.target.textContent = '&#10003; Acknowledged';
-    event.target.style.background = 'var(--gray-300)';
-  } catch(e) { toast('Could not save acknowledgment.', 'error'); }
+    var result = await apiCall({ action: 'save_acknowledgment', record: JSON.stringify(record) });
+    if (result.success) {
+      toast('Acknowledged! Thank you.', 'success');
+      // Find and update the button by post ID
+      var btn = document.getElementById('ack-btn-' + postId);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '&#10003; Acknowledged';
+        btn.style.background = 'var(--gray-400)';
+        btn.style.cursor = 'default';
+      }
+    } else {
+      toast('Could not save acknowledgment: ' + (result.error||'Unknown'), 'error');
+    }
+  } catch(e) {
+    toast('Could not save acknowledgment.', 'error');
+  }
 }
 
 function openParentContactEdit() {
@@ -8189,6 +8199,11 @@ function buildPostsList(posts, events, type) {
     if (p.attachment_url) {
       html += '<div style="margin-top:10px;"><a href="' + p.attachment_url + '" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;">&#128196; View attachment</a></div>';
     }
+    if (reqAck) {
+      html += '<div style="margin-top:10px;">';
+      html += '<button class="btn btn-sm btn-secondary ack-report-btn" data-post-id="' + p.post_id + '" data-post-title="' + (p.title||'').replace(/"/g,'&quot;') + '">&#10003; View acknowledgments</button>';
+      html += '</div>';
+    }
     html += '</div></div>';
   });
 
@@ -8268,6 +8283,191 @@ async function deletePost() {
     var result = await apiCall({ action: 'save_post', record: JSON.stringify(Object.assign({},p,{status:'deleted',title:'_deleted_'})) });
     if (result.success) { toast('Post deleted.', 'info'); closePostForm(); await renderCommunications(); }
   } catch(e) { toast('Could not delete.', 'error'); }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  ACKNOWLEDGMENT REPORT
+// ════════════════════════════════════════════════════════════
+async function viewAcknowledgments(postId, postTitle) {
+  // Create or reuse modal
+  var backdrop = document.getElementById('ack-report-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.id = 'ack-report-modal';
+    document.body.appendChild(backdrop);
+  }
+
+  backdrop.innerHTML = '<div class="modal" style="width:640px;max-width:96vw;">' +
+    '<div class="modal-header">' +
+    '<div><div class="modal-title">Acknowledgments &mdash; ' + postTitle + '</div>' +
+    '<div style="font-size:12px;color:var(--gray-500);margin-top:2px;">Who has and has not acknowledged this post</div></div>' +
+    '<button class="modal-close" onclick="document.getElementById(\'ack-report-modal\').classList.remove(\'open\')">&times;</button>' +
+    '</div>' +
+    '<div class="modal-body" id="ack-report-body">' +
+    '<div style="display:flex;align-items:center;gap:10px;padding:20px;color:var(--gray-500);"><div class="spinner"></div> Loading...</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+    '<button class="btn btn-secondary" onclick="document.getElementById(\'ack-report-modal\').classList.remove(\'open\')">Close</button>' +
+    '<button class="btn btn-secondary" onclick="printAckReport(\'' + postId + '\',\'' + postTitle + '\')">&#128424; Print report</button>' +
+    '</div>' +
+    '</div>';
+  backdrop.classList.add('open');
+
+  try {
+    // Load acknowledgments, guardians, and students in parallel
+    var [acksRes, guardiansRes, studentsRes] = await Promise.all([
+      apiCall({ action: 'get_acknowledgments' }),
+      apiCall({ action: 'get_guardians' }),
+      apiCall({ action: 'get_students' })
+    ]);
+
+    var acks      = (acksRes.data     || []).filter(function(a){ return a.post_id === postId; });
+    var guardians = guardiansRes.data  || [];
+    var students  = (studentsRes.data  || []).filter(function(s){ return s.school_year === state.selectedYear && s.status === 'active'; });
+
+    // Build ack lookup by email
+    var ackedEmails = {};
+    acks.forEach(function(a) {
+      ackedEmails[a.user_email.toLowerCase()] = a.ack_date;
+    });
+
+    // Build per-student acknowledgment status
+    // Match guardians to students, check if any guardian for each student has acked
+    var studentStatus = students.map(function(s) {
+      var studentGuardians = guardians.filter(function(g){ return g.student_id === s.student_id; });
+      var primaryGuardian  = studentGuardians.find(function(g){ return String(g.is_primary).toUpperCase() === 'TRUE'; }) || studentGuardians[0];
+      var acked = studentGuardians.find(function(g){ return g.email && ackedEmails[g.email.toLowerCase()]; });
+      return {
+        student:  s,
+        guardian: primaryGuardian,
+        acked:    !!acked,
+        ackDate:  acked && acked.email ? ackedEmails[acked.email.toLowerCase()] : null,
+        ackedBy:  acked ? (acked.first_name + ' ' + acked.last_name) : null
+      };
+    }).sort(function(a,b) {
+      // Unacknowledged first, then alphabetical
+      if (a.acked !== b.acked) return a.acked ? 1 : -1;
+      return (a.student.last_name||'').localeCompare(b.student.last_name||'');
+    });
+
+    var ackedCount   = studentStatus.filter(function(s){ return s.acked; }).length;
+    var pendingCount = studentStatus.filter(function(s){ return !s.acked; }).length;
+    var pct = students.length > 0 ? Math.round((ackedCount/students.length)*100) : 0;
+
+    var html = '';
+
+    // Summary
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">';
+    html += '<div style="background:#E8F5E9;border-radius:var(--radius);padding:12px;text-align:center;">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Acknowledged</div>';
+    html += '<div style="font-size:24px;font-weight:700;color:var(--success);">' + ackedCount + '</div></div>';
+    html += '<div style="background:#FFEBEE;border-radius:var(--radius);padding:12px;text-align:center;">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Not yet</div>';
+    html += '<div style="font-size:24px;font-weight:700;color:var(--danger);">' + pendingCount + '</div></div>';
+    html += '<div style="background:var(--gray-50);border-radius:var(--radius);padding:12px;text-align:center;">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;">Rate</div>';
+    html += '<div style="font-size:24px;font-weight:700;color:' + (pct>=80?'var(--success)':pct>=50?'#F59E0B':'var(--danger)') + ';">' + pct + '%</div></div>';
+    html += '</div>';
+
+    // Progress bar
+    html += '<div style="height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden;margin-bottom:20px;">';
+    html += '<div style="height:8px;background:var(--success);border-radius:4px;width:' + pct + '%;transition:width 0.5s;"></div></div>';
+
+    // Student list
+    html += '<div class="table-wrap"><table style="font-size:13px;">';
+    html += '<thead><tr>';
+    html += '<th>Student</th><th>Guardian</th><th>Contact</th>';
+    html += '<th style="text-align:center;">Acknowledged</th><th>Date</th>';
+    html += '</tr></thead><tbody>';
+
+    studentStatus.forEach(function(row) {
+      var s = row.student;
+      var g = row.guardian;
+      html += '<tr style="background:' + (row.acked?'#F0FDF4':'#FEF2F2') + ';">';
+      html += '<td><strong>' + s.first_name + ' ' + s.last_name + '</strong>';
+      html += '<div style="font-size:11px;color:var(--gray-500);">Grade ' + s.grade + ' &middot; ' + (s.section||'') + '</div></td>';
+      html += '<td>' + (g ? g.first_name + ' ' + g.last_name : '&mdash;') + '</td>';
+      html += '<td style="font-size:11px;">' + (g && g.email ? '<a href="mailto:' + g.email + '" style="color:var(--blue);">' + g.email + '</a>' : '&mdash;') + '</td>';
+      html += '<td style="text-align:center;font-size:16px;">' + (row.acked ? '&#10003;' : '&#10007;') + '</td>';
+      html += '<td style="font-size:12px;">' + (row.ackDate ? formatDate(row.ackDate) : '<span style="color:var(--gray-400);">Pending</span>') + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    // Store data for printing
+    window._ackReportData = { postTitle, studentStatus, ackedCount, pendingCount, pct };
+
+    document.getElementById('ack-report-body').innerHTML = html;
+
+  } catch(e) {
+    document.getElementById('ack-report-body').innerHTML =
+      '<div style="color:var(--danger);padding:20px;">Error loading acknowledgments: ' + e.message + '</div>';
+  }
+}
+
+function printAckReport(postId, postTitle) {
+  var r = window._ackReportData;
+  if (!r) { toast('Please open the report first.', 'error'); return; }
+
+  var today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  var rows = r.studentStatus.map(function(row) {
+    var s = row.student;
+    var g = row.guardian;
+    return '<tr>' +
+      '<td><strong>' + s.first_name + ' ' + s.last_name + '</strong></td>' +
+      '<td>Grade ' + s.grade + '</td>' +
+      '<td>' + (s.section||'&mdash;') + '</td>' +
+      '<td>' + (g ? g.first_name + ' ' + g.last_name : '&mdash;') + '</td>' +
+      '<td>' + (g && g.phone ? g.phone : '&mdash;') + '</td>' +
+      '<td style="text-align:center;font-size:16px;">' + (row.acked ? '&#10003;' : '&#10007;') + '</td>' +
+      '<td>' + (row.ackDate ? formatDate(row.ackDate) : 'Pending') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
+    '<title>Acknowledgment Report</title>' +
+    '<style>* { box-sizing:border-box; margin:0; padding:0; }' +
+    'body { font-family:Arial,sans-serif; font-size:12px; padding:24px; }' +
+    '.header { display:flex; justify-content:space-between; margin-bottom:20px; padding-bottom:12px; border-bottom:2px solid #1565C0; }' +
+    '.summary { display:flex; gap:20px; background:#f3f4f6; padding:10px 14px; border-radius:6px; margin-bottom:16px; }' +
+    '.summary div strong { font-size:18px; display:block; }' +
+    'table { width:100%; border-collapse:collapse; }' +
+    'th { background:#1565C0; color:white; padding:6px 8px; text-align:left; font-size:10px; text-transform:uppercase; }' +
+    'td { padding:6px 8px; border-bottom:1px solid #f0f0f0; }' +
+    'tr:nth-child(even) { background:#fafafa; }' +
+    '.footer { margin-top:20px; padding-top:10px; border-top:1px solid #e5e7eb; font-size:10px; color:#999; text-align:center; }' +
+    '@media print { .no-print { display:none; } }' +
+    '</style></head><body>' +
+    '<div class="no-print" style="padding:12px;background:#f3f4f6;text-align:center;margin-bottom:16px;border-radius:6px;">' +
+    '<button onclick="window.print()" style="padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;">Print</button>' +
+    '<button onclick="window.close()" style="padding:8px 16px;background:#e5e7eb;color:#333;border:none;border-radius:6px;cursor:pointer;margin-left:8px;">Close</button>' +
+    '</div>' +
+    '<div class="header">' +
+    '<div><img src="' + LOGO_DATA_URL + '" style="height:40px;margin-bottom:4px;display:block;"/>' +
+    '<div style="font-size:10px;color:#666;">Estill County Band Boosters</div></div>' +
+    '<div style="text-align:right;"><div style="font-size:18px;font-weight:700;">Acknowledgment Report</div>' +
+    '<div style="font-size:13px;color:#666;">' + r.postTitle + '</div>' +
+    '<div style="font-size:10px;color:#999;margin-top:4px;">Printed: ' + today + '</div></div>' +
+    '</div>' +
+    '<div class="summary">' +
+    '<div><strong>' + r.ackedCount + '</strong>Acknowledged</div>' +
+    '<div><strong>' + r.pendingCount + '</strong>Not yet</div>' +
+    '<div><strong>' + r.pct + '%</strong>Response rate</div>' +
+    '</div>' +
+    '<table><thead><tr>' +
+    '<th>Student</th><th>Grade</th><th>Section</th><th>Guardian</th><th>Phone</th>' +
+    '<th style="text-align:center;">Ack?</th><th>Date</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="footer">Estill County Band Boosters &middot; Cadence &middot; ' + today + '</div>' +
+    '</body></html>';
+
+  var win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
 }
 
 // ════════════════════════════════════════════════════════════
