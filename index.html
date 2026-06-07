@@ -8885,10 +8885,11 @@ async function uploadToCloudinary(file) {
   var formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', CONFIG.CLOUDINARY_PRESET);
-  formData.append('folder', 'cadence_receipts');
 
+  // Use correct resource type for Cloudinary
+  var resourceType = file.type === 'application/pdf' ? 'raw' : 'image';
   var res = await fetch(
-    'https://api.cloudinary.com/v1_1/' + CONFIG.CLOUDINARY_CLOUD + '/auto/upload',
+    'https://api.cloudinary.com/v1_1/' + CONFIG.CLOUDINARY_CLOUD + '/' + resourceType + '/upload',
     { method: 'POST', body: formData }
   );
   var data = await res.json();
