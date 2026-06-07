@@ -5265,9 +5265,9 @@ async function loadParentData() {
 
       // Fee summary
       html += '<div class="portal-section">';
-      html += '<div class="portal-section-header" style="background:' + (balance>0?'var(--blue)':'#2E7D32') + ';">';
-      html += '<span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">' + (balance>0?'&#9654;':'&#10003;') + '</span> Fees &amp; Balance</span>';
-      html += '<span style="font-size:16px;font-weight:700;">' + (balance>0?'$'+balance.toFixed(2)+' due':'Paid in full!') + '</span></div>';
+      html += '<div style="background:' + (balance>0?'var(--blue)':'#2E7D32') + ';color:white;padding:14px 18px;font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:center;">';
+      html += '<span style="display:flex;align-items:center;gap:8px;color:white;"><span style="font-size:16px;">' + (balance>0?'&#9654;':'&#10003;') + '</span> Fees &amp; Balance</span>';
+      html += '<span style="font-size:16px;font-weight:700;color:white;">' + (balance>0?'$'+balance.toFixed(2)+' due':'Paid in full!') + '</span></div>';
       html += '<div class="portal-section-body">';
       // Progress bar if there are fees
       if (totalDue > 0) {
@@ -5339,8 +5339,8 @@ async function loadParentData() {
       html += '</div></div>'; // close portal-section-body and portal-section
 
       // Attendance
-      html += '<div class="portal-section">';
-      html += '<div class="portal-section-header"><span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">&#10003;</span> Attendance</span></div>';
+      html += '<div class="portal-section" style="margin-top:16px;">';
+      html += '<div class="portal-section-header"><span style="display:flex;align-items:center;gap:8px;">&#10003; Attendance</span></div>';
       html += '<div class="portal-section-body">';
       html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;text-align:center;">';
       html += '<div style="background:#E8F5E9;border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;">Present</div><div style="font-size:20px;font-weight:700;color:var(--success);">' + present + '</div></div>';
@@ -5446,11 +5446,11 @@ async function loadParentData() {
     } catch(e) { /* posts not critical */ }
 
     // Upcoming events
-    html += '<div class="portal-section"><div class="portal-section-header"><span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">&#9711;</span> Upcoming events</span></div>';
+    html += '<div class="portal-section" style="margin-top:16px;"><div class="portal-section-header"><span style="display:flex;align-items:center;gap:8px;">&#9711; Upcoming events</span></div>';
     if (upcoming.length === 0) {
       html += '<div class="portal-section-body"><div style="color:var(--gray-500);font-size:13px;">No upcoming events scheduled.</div></div>';
     } else {
-      html += '<div class="card-body" style="padding:0;">';
+      html += '<div style="padding:0;">';
       upcoming.forEach(function(e) {
         var d = new Date(e.date);
         var isReq = e.required==='true' || e.required==='TRUE';
@@ -5468,17 +5468,29 @@ async function loadParentData() {
     html += '</div>';
 
     // Contact info
-    html += '<div class="portal-section">';
+    html += '<div class="portal-section" style="margin-top:16px;">';
     html += '<div class="portal-section-header" style="justify-content:space-between;">';
-    html += '<span style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">&#9993;</span> Your contact info</span>';
-    html += '<button onclick="openParentContactEdit()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Edit</button>';
-    html += '</div><div class="portal-section-body">';
-    html += '<div class="portal-row"><span class="portal-label">Name</span><span class="portal-value">' + myGuardian.first_name + ' ' + myGuardian.last_name + '</span></div>';
-    html += '<div class="portal-row"><span class="portal-label">Email</span><span class="portal-value">' + (myGuardian.email||'&mdash;') + '</span></div>';
-    html += '<div class="portal-row"><span class="portal-label">Phone</span><span class="portal-value">' + (myGuardian.phone||'&mdash;') + '</span></div>';
-    html += '<div class="portal-row"><span class="portal-label">Alt phone</span><span class="portal-value">' + (myGuardian.alt_phone||'&mdash;') + '</span></div>';
-    html += '<div class="portal-row"><span class="portal-label">Email updates</span><span class="portal-value">' + (String(myGuardian.receives_emails).toUpperCase()==='TRUE'?'Yes':'No') + '</span></div>';
-    html += '</div></div>';
+    html += '<span style="display:flex;align-items:center;gap:8px;">&#9993; Your contact info</span>';
+    html += '<button onclick="openParentContactEdit()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:white;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);">Edit</button>';
+    html += '</div>';
+    html += '<div class="portal-section-body" style="padding:0;">';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">';
+    html += '<div style="padding:12px 18px;border-bottom:1px solid var(--gray-100);border-right:1px solid var(--gray-100);">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Name</div>';
+    html += '<div style="font-size:14px;font-weight:500;">' + myGuardian.first_name + ' ' + myGuardian.last_name + '</div></div>';
+    html += '<div style="padding:12px 18px;border-bottom:1px solid var(--gray-100);">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Email</div>';
+    html += '<div style="font-size:13px;word-break:break-all;">' + (myGuardian.email||'&mdash;') + '</div></div>';
+    html += '<div style="padding:12px 18px;border-bottom:1px solid var(--gray-100);border-right:1px solid var(--gray-100);">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Phone</div>';
+    html += '<div style="font-size:14px;">' + (myGuardian.phone ? '<a href="tel:'+myGuardian.phone+'" style="color:var(--blue);">'+myGuardian.phone+'</a>' : '&mdash;') + '</div></div>';
+    html += '<div style="padding:12px 18px;border-bottom:1px solid var(--gray-100);">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Alt phone</div>';
+    html += '<div style="font-size:14px;">' + (myGuardian.alt_phone||'&mdash;') + '</div></div>';
+    html += '<div style="padding:12px 18px;grid-column:1/-1;">';
+    html += '<div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Email updates</div>';
+    html += '<div style="font-size:14px;">' + (String(myGuardian.receives_emails).toUpperCase()==='TRUE'?'<span style="color:var(--success);">&#10003; Yes &mdash; receiving email updates</span>':'<span style="color:var(--gray-500);">No</span>') + '</div></div>';
+    html += '</div></div></div>';
 
     document.getElementById('portal-content').innerHTML = html;
 
