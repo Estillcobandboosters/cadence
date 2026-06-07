@@ -9553,6 +9553,17 @@ function closeMobileMenu() {
 }
 
 // Logo used on printed documents only (receipts, statements, reports)
+
+// Event delegation for acknowledgment report buttons
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest ? e.target.closest('.ack-report-btn') : null;
+  if (!btn && e.target.classList && e.target.classList.contains('ack-report-btn')) btn = e.target;
+  if (btn) {
+    var postId    = btn.getAttribute('data-post-id');
+    var postTitle = btn.getAttribute('data-post-title') || 'Post';
+    if (postId) viewAcknowledgments(postId, postTitle);
+  }
+});
 </script>
 </body>
 </html>
