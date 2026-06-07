@@ -7598,6 +7598,41 @@ function openReimbAction(reimbId) {
   html += '<textarea class="form-textarea" id="reimb-return-note" placeholder="Explain what information or correction is needed..." style="min-height:60px;"></textarea>';
   html += '</div>';
 
+  // Ensure modal exists - create on body if missing
+  var actionModal = document.getElementById('reimb-action-modal');
+  if (!actionModal) {
+    actionModal = document.createElement('div');
+    actionModal.className = 'modal-backdrop';
+    actionModal.id = 'reimb-action-modal';
+    // Build modal using createElement to avoid quote issues
+    var modalDiv = document.createElement('div');
+    modalDiv.className = 'modal';
+    modalDiv.innerHTML = '<div class="modal-header"><div class="modal-title" id="reimb-action-title">Review request</div></div>' +
+      '<div class="modal-body" id="reimb-action-body"></div>' +
+      '<div class="modal-footer" id="reimb-action-footer"></div>';
+    actionModal.appendChild(modalDiv);
+    document.body.appendChild(actionModal);
+    // Add close button to header
+    var closeBtn = modalDiv.querySelector('.modal-header');
+    var closeBtnEl = document.createElement('button');
+    closeBtnEl.className = 'modal-close';
+    closeBtnEl.innerHTML = '&times;';
+    closeBtnEl.onclick = function(){ actionModal.classList.remove('open'); };
+    closeBtn.appendChild(closeBtnEl);
+    // Add footer buttons
+    var footer = document.getElementById('reimb-action-footer');
+    footer.innerHTML = '<button class="btn btn-secondary" id="reimb-close-btn">Close</button>' +
+      '<button class="btn btn-secondary" id="reimb-return-btn" style="display:none;">&#8617; Send back</button>' +
+      '<button class="btn btn-danger" id="reimb-deny-btn" style="display:none;">Deny</button>' +
+      '<button class="btn btn-primary" id="reimb-approve-btn" style="display:none;">Approve</button>' +
+      '<button class="btn btn-primary" id="reimb-print-btn" style="display:none;">&#128424; Print check</button>';
+    document.getElementById('reimb-close-btn').onclick = function(){ actionModal.classList.remove('open'); };
+    document.getElementById('reimb-return-btn').onclick = reimbSendBack;
+    document.getElementById('reimb-deny-btn').onclick = reimbDeny;
+    document.getElementById('reimb-approve-btn').onclick = reimbApprove;
+    document.getElementById('reimb-print-btn').onclick = reimbPrintCheck;
+  }
+
   document.getElementById('reimb-action-body').innerHTML = html;
   document.getElementById('reimb-action-title').textContent = 'Reimbursement Request — $' + parseFloat(r.amount||0).toFixed(2);
 
