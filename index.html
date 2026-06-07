@@ -9078,20 +9078,13 @@ function renderSettingsView() {
   html += '<input class="form-input" id="set-check_memo_prefix" value="' + s('check_memo_prefix') + '"/></div>';
   html += '</div></div></div>';
 
-  // Check preview
+  // Check preview - dynamic, updates as fields change
   html += '<div class="card" style="margin-top:4px;"><div class="card-header"><div class="card-title">Check preview</div></div>';
   html += '<div class="card-body">';
-  html += '<div style="border:1px solid #999;border-radius:4px;padding:16px;background:white;font-family:Arial,sans-serif;position:relative;max-width:600px;">';
-  html += '<div style="font-size:14px;font-weight:700;color:#1565C0;">' + s('check_memo_prefix') + '</div>';
-  html += '<div style="display:flex;justify-content:space-between;margin:12px 0 8px;font-size:12px;">';
-  html += '<div>Pay to the order of: <span style="border-bottom:1px solid #333;display:inline-block;width:200px;">&nbsp;</span></div>';
-  html += '<div>$ <span style="border:2px solid #333;padding:2px 8px;">0.00</span></div></div>';
-  html += '<div style="display:flex;justify-content:space-between;margin-top:24px;">';
-  html += '<div style="font-size:11px;color:#666;">For: <span style="border-bottom:1px solid #333;display:inline-block;width:160px;">&nbsp;</span></div>';
-  html += '<div style="display:flex;gap:30px;">';
-  html += '<div style="text-align:center;"><div style="border-top:1px solid #333;width:120px;margin-bottom:4px;"></div><div style="font-size:9px;color:#666;">' + s('check_sig1_title') + '</div></div>';
-  html += '<div style="text-align:center;"><div style="border-top:1px solid #333;width:120px;margin-bottom:4px;"></div><div style="font-size:9px;color:#666;">' + s('check_sig2_title') + '</div></div>';
-  html += '</div></div></div></div></div>';
+  html += '<div id="check-preview-box" style="border:1px solid #999;border-radius:4px;padding:16px;background:white;font-family:Arial,sans-serif;position:relative;max-width:600px;">';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--gray-500);margin-top:8px;">Preview updates as you type.</div>';
+  html += '</div></div>';
   html += '</div>';
 
   // ── Payment tab ──
@@ -9133,6 +9126,37 @@ function renderSettingsView() {
 // Alias so button onclick works
 function saveSettings(section) { return saveSettingsSection(section); }
 
+function updateCheckPreview() {
+  var box = document.getElementById('check-preview-box');
+  if (!box) return;
+  var orgName   = (document.getElementById('set-org_name')         || {}).value || getSettingDefault('org_name');
+  var orgAddr   = (document.getElementById('set-org_address')      || {}).value || getSettingDefault('org_address');
+  var orgCity   = (document.getElementById('set-org_city')         || {}).value || getSettingDefault('org_city');
+  var orgState  = (document.getElementById('set-org_state')        || {}).value || getSettingDefault('org_state');
+  var orgZip    = (document.getElementById('set-org_zip')          || {}).value || getSettingDefault('org_zip');
+  var orgPhone  = (document.getElementById('set-org_phone')        || {}).value || getSettingDefault('org_phone');
+  var checkName = (document.getElementById('set-check_memo_prefix')|| {}).value || getSettingDefault('check_memo_prefix');
+  var sig1      = (document.getElementById('set-check_sig1_title') || {}).value || getSettingDefault('check_sig1_title');
+  var sig2      = (document.getElementById('set-check_sig2_title') || {}).value || getSettingDefault('check_sig2_title');
+
+  var cityLine = [orgCity, orgState, orgZip].filter(Boolean).join(', ');
+
+  box.innerHTML =
+    '<div style="font-size:14px;font-weight:700;color:#1565C0;margin-bottom:2px;">' + (checkName||orgName) + '</div>' +
+    (orgAddr  ? '<div style="font-size:11px;color:#555;">' + orgAddr + '</div>' : '') +
+    (cityLine ? '<div style="font-size:11px;color:#555;">' + cityLine + '</div>' : '') +
+    (orgPhone ? '<div style="font-size:11px;color:#555;">' + orgPhone + '</div>' : '') +
+    '<div style="display:flex;justify-content:space-between;margin:12px 0 8px;font-size:12px;">' +
+    '<div>Pay to the order of: <span style="border-bottom:1px solid #333;display:inline-block;width:180px;">&nbsp;</span></div>' +
+    '<div>$ <span style="border:2px solid #333;padding:2px 8px;">0.00</span></div></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:24px;align-items:flex-end;">' +
+    '<div style="font-size:11px;color:#666;">For: <span style="border-bottom:1px solid #333;display:inline-block;width:140px;">&nbsp;</span></div>' +
+    '<div style="display:flex;gap:24px;">' +
+    '<div style="text-align:center;"><div style="border-top:1px solid #333;width:110px;margin-bottom:4px;"></div><div style="font-size:9px;color:#666;">' + sig1 + '</div></div>' +
+    '<div style="text-align:center;"><div style="border-top:1px solid #333;width:110px;margin-bottom:4px;"></div><div style="font-size:9px;color:#666;">' + sig2 + '</div></div>' +
+    '</div></div>';
+}
+
 function switchSettingsTab(tab) {
   ['org','check','payment','lists'].forEach(function(t) {
     var panel = document.getElementById('set-panel-' + t);
@@ -9144,6 +9168,16 @@ function switchSettingsTab(tab) {
       btn.style.marginBottom = t === tab ? '-2px' : '0';
     }
   });
+  if (tab === 'check') {
+    setTimeout(function() {
+      updateCheckPreview();
+      // Add live update listeners
+      ['set-org_name','set-org_address','set-org_city','set-org_state','set-org_zip','set-org_phone','set-check_memo_prefix','set-check_sig1_title','set-check_sig2_title'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', updateCheckPreview);
+      });
+    }, 50);
+  }
 }
 
 async function saveSettingsSection(section) {
