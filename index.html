@@ -7517,11 +7517,12 @@ function showReceiptFullscreen(reimbId) {
 }
 
 function openReimbAction(reimbId) {
+  try {
   _reimbActionId = reimbId;
   var r = reimbData.requests.find(function(x){ return x.reimb_id===reimbId; });
   if (!r) {
     toast('Request not found. Please refresh the page.', 'error');
-    console.error('openReimbAction: reimb_id not found:', reimbId, 'available:', reimbData.requests.map(function(x){ return x.reimb_id; }));
+    console.error('openReimbAction: reimb_id not found:', reimbId);
     return;
   }
 
@@ -7664,7 +7665,16 @@ function openReimbAction(reimbId) {
     }
   }
 
-  document.getElementById('reimb-action-modal').classList.add('open');
+  // Make sure modal is on body so it layers correctly
+  var modal = document.getElementById('reimb-action-modal');
+  if (modal && modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+  modal.classList.add('open');
+  } catch(err) {
+    console.error('openReimbAction error:', err);
+    toast('Error opening review: ' + err.message, 'error');
+  }
 }
 
 async function reimbApprove() {
