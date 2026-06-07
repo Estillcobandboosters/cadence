@@ -5535,13 +5535,154 @@ async function loadParentData() {
     html += '<div style="font-size:14px;">' + (String(myGuardian.receives_emails).toUpperCase()==='TRUE'?'<span style="color:var(--success);">&#10003; Yes &mdash; receiving email updates</span>':'<span style="color:var(--gray-500);">No</span>') + '</div></div>';
     html += '</div></div></div>';
 
+    // Reimbursement requests section
+    html += '<div class="portal-section" style="margin-top:16px;">';
+    html += '<div class="portal-section-header" style="justify-content:space-between;">';
+    html += '<span>&#9993; Reimbursement requests</span>';
+    html += '<button onclick="openParentReimbForm()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:white;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);">+ Submit request</button>';
+    html += '</div>';
+    html += '<div id="portal-reimb-list" class="portal-section-body">';
+    html += '<div style="color:var(--gray-500);font-size:13px;">Loading...</div>';
+    html += '</div></div>';
+
     document.getElementById('portal-content').innerHTML = html;
+
+    // Load reimbursements separately so main portal loads fast
+    loadPortalReimbursements();
 
   } catch(e) {
     console.error('Portal error:', e);
     document.getElementById('portal-content').innerHTML =
       '<div style="color:var(--danger);padding:20px;">Error loading your account: ' + e.message + '</div>';
   }
+}
+
+async function loadPortalReimbursements() {
+  var listEl = document.getElementById('portal-reimb-list');
+  if (!listEl) return;
+  try {
+    var res = await apiCall({ action: 'get_reimbursements' });
+    var all  = res.data || [];
+    var mine = all.filter(function(r) {
+      return r.requester_email && r.requester_email.toLowerCase() === (state.user.email||'').toLowerCase();
+    }).sort(function(a,b){ return new Date(b.submitted_date)-new Date(a.submitted_date); });
+
+    if (mine.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--gray-500);font-size:13px;">No requests yet. Use the button above to submit a reimbursement request.</div>';
+      return;
+    }
+
+    var statusColors = { pending:'badge-gray', treasurer_approved:'badge-blue', approved:'badge-green', complete:'badge-green', denied:'badge-red', returned:'badge-red' };
+    var statusLabels = { pending:'Pending review', treasurer_approved:'In review', approved:'Approved', complete:'Complete', denied:'Denied', returned:'More info needed' };
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="border-bottom:1px solid var(--gray-200);">';
+    html += '<th style="text-align:left;padding:6px 0;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Date</th>';
+    html += '<th style="text-align:left;padding:6px 0;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Description</th>';
+    html += '<th style="text-align:right;padding:6px 0;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Amount</th>';
+    html += '<th style="text-align:center;padding:6px 0;font-size:11px;color:var(--gray-500);text-transform:uppercase;">Status</th>';
+    html += '</tr></thead><tbody>';
+    mine.forEach(function(r) {
+      html += '<tr style="border-bottom:1px solid var(--gray-100);">';
+      html += '<td style="padding:8px 0;white-space:nowrap;">' + formatDate(r.submitted_date) + '</td>';
+      html += '<td style="padding:8px 4px;">' + (r.description||'&mdash;') + '</td>';
+      html += '<td style="padding:8px 0;text-align:right;font-weight:600;">$' + parseFloat(r.amount||0).toFixed(2) + '</td>';
+      html += '<td style="padding:8px 0;text-align:center;">';
+      html += '<span class="badge ' + (statusColors[r.status]||'badge-gray') + '">' + (statusLabels[r.status]||r.status) + '</span>';
+      if (r.status === 'returned' && r.denial_reason) {
+        html += '<div style="font-size:10px;color:var(--danger);margin-top:2px;">' + r.denial_reason.replace('Returned: ','') + '</div>';
+      }
+      if (r.status === 'complete' && r.check_number) {
+        html += '<div style="font-size:10px;color:var(--gray-500);">Check #' + r.check_number + '</div>';
+      }
+      html += '</td></tr>';
+    });
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
+  } catch(e) {
+    if (listEl) listEl.innerHTML = '<div style="color:var(--gray-500);font-size:13px;">Could not load requests.</div>';
+  }
+}
+
+function openParentReimbForm() {
+  // Re-use the existing reimbursement form, pre-fill with parent's info
+  if (typeof openReimbForm === 'function') {
+    // Ensure modal is on body
+    var modal = document.getElementById('reimb-form-modal');
+    if (!modal) {
+      // Build it fresh if needed
+      reimbData = reimbData || { requests: [], accounts: [] };
+      // Load accounts first
+      apiCall({ action: 'get_accounts' }).then(function(res) {
+        reimbData.accounts = res.data || [];
+        buildReimbFormModal();
+        openReimbForm();
+      }).catch(function() {
+        toast('Could not open form. Please try again.', 'error');
+      });
+      return;
+    }
+    openReimbForm();
+  } else {
+    toast('Please use the Reimbursements section in the admin area.', 'info');
+  }
+}
+
+function buildReimbFormModal() {
+  var modal = document.getElementById('reimb-form-modal');
+  if (modal) return; // already exists
+  // Navigate to reimbursements to build the modal, then come back
+  // Instead, create a minimal version directly
+  var accounts = reimbData.accounts || [];
+  var cats = window.REIMB_CATEGORIES || ['Band Dues/Fees','Uniform Purchase','Equipment Purchase','Trip Expense','Food/Concessions','Supplies/Materials','Other (see notes)'];
+
+  var m = document.createElement('div');
+  m.className = 'modal-backdrop';
+  m.id = 'reimb-form-modal';
+  var html = '<div class="modal" style="width:600px;max-width:96vw;">';
+  html += '<div class="modal-header"><div class="modal-title">Submit reimbursement request</div>';
+  html += '<button class="modal-close" onclick="closeReimbForm()">&times;</button></div>';
+  html += '<div class="modal-body"><div class="form-grid">';
+  html += '<div class="form-group"><label class="form-label">Your name *</label>';
+  html += '<input class="form-input" id="rf-requester_name" value="' + (state.user ? state.user.name||'' : '') + '"/></div>';
+  html += '<div class="form-group"><label class="form-label">Date of purchase *</label>';
+  html += '<input class="form-input" type="date" id="rf-purchase_date" value="' + new Date().toISOString().split('T')[0] + '"/></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Description *</label>';
+  html += '<textarea class="form-textarea" id="rf-description" placeholder="What was purchased and why..."></textarea></div>';
+  html += '<div class="form-group"><label class="form-label">Amount ($) *</label>';
+  html += '<input class="form-input" type="number" step="0.01" id="rf-amount" placeholder="0.00"/></div>';
+  html += '<div class="form-group"><label class="form-label">Category</label>';
+  html += '<select class="form-select" id="rf-category">';
+  cats.forEach(function(c){ html += '<option value="' + c + '">' + c + '</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">Pay to (if different)</label>';
+  html += '<input class="form-input" id="rf-payee" placeholder="Leave blank to use your name"/></div>';
+  html += '<div class="form-group"><label class="form-label">Mailing address</label>';
+  html += '<input class="form-input" id="rf-address" placeholder="For check mailing"/></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Account</label>';
+  html += '<select class="form-select" id="rf-account_id"><option value="">Treasurer will select</option>';
+  accounts.forEach(function(a){ html += '<option value="' + a.account_id + '">' + a.name + '</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Receipt / invoice (optional)</label>';
+  var uploadAreaId = 'rf-receipt-file';
+  html += '<div id="receipt-upload-area" style="border:2px dashed var(--gray-300);border-radius:var(--radius);padding:20px;text-align:center;background:var(--gray-50);cursor:pointer;" onclick="document.getElementById(&quot;rf-receipt-file&quot;).click()">';
+  html += '<div style="font-size:28px;">&#128247;</div>';
+  html += '<div style="font-size:13px;font-weight:500;margin:4px 0;">Tap to upload receipt photo</div>';
+  html += '<div style="font-size:11px;color:var(--gray-500);">JPG, PNG, or PDF</div>';
+  html += '<input type="file" id="rf-receipt-file" accept="image/*,.pdf" style="display:none;" onchange="handleReceiptFile(this)"/>';
+  html += '</div>';
+  html += '<div id="receipt-preview-area" style="display:none;margin-top:8px;"></div>';
+  html += '<div style="margin-top:6px;font-size:12px;color:var(--gray-500);text-align:center;">— or paste a link —</div>';
+  html += '<input class="form-input" id="rf-receipt-url" placeholder="https://drive.google.com/... (optional)" style="margin-top:6px;"/>';
+  html += '</div>';
+  html += '<div class="form-group" style="grid-column:1/-1;"><label class="form-label">Additional notes</label>';
+  html += '<textarea class="form-textarea" id="rf-notes" placeholder="Any additional information..."></textarea></div>';
+  html += '</div></div>';
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-secondary" onclick="closeReimbForm()">Cancel</button>';
+  html += '<button class="btn btn-primary" onclick="submitReimbRequest()">Submit request</button>';
+  html += '</div></div>';
+  m.innerHTML = html;
+  document.body.appendChild(m);
 }
 
 async function acknowledgePost(postId) {
