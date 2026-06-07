@@ -7450,18 +7450,12 @@ async function submitReimbRequest() {
   try {
     var receiptUrl = url;
 
-    // If file selected, upload via Apps Script
-    if (_reimbReceiptDataUrl && !url) {
-      var uploadResult = await apiCall({
-        action:     'upload_receipt',
-        file_data:  _reimbReceiptDataUrl,
-        file_name:  _reimbReceiptFile ? _reimbReceiptFile.name : 'receipt.jpg',
-        mime_type:  _reimbReceiptFile ? _reimbReceiptFile.type : 'image/jpeg'
-      });
-      if (uploadResult.success) {
-        receiptUrl = uploadResult.file_url;
-      } else {
-        toast('Receipt upload failed: ' + (uploadResult.error||'Unknown') + '. Please use a Google Drive link instead — paste the link in the field below.', 'error');
+    // If file selected, upload directly to Google Drive using OAuth token
+    if (_reimbReceiptFile && !url) {
+      try {
+        receiptUrl = await uploadFileToDrive(_reimbReceiptFile);
+      } catch(uploadErr) {
+        toast('Receipt upload failed: ' + uploadErr.message + '. Please try a smaller file or paste a Google Drive link.', 'error');
         submitBtn.textContent = 'Submit request';
         submitBtn.disabled = false;
         return;
@@ -8730,6 +8724,114 @@ async function sendVenmoPayment(studentId, studentName) {
   window.open(venmoUrl, '_blank');
 
   toast('Opening Venmo... Remember to allow 1-2 business days for your balance to update.', 'info');
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  GOOGLE DRIVE DIRECT UPLOAD
+// ════════════════════════════════════════════════════════════
+async function uploadFileToDrive(file) {
+  // Get the OAuth access token from Google
+  const token = await getGoogleAccessToken();
+  if (!token) throw new Error('Could not get Google authorization. Please sign out and back in.');
+
+  // Step 1: Find or create the Cadence Receipts folder
+  const folderName = 'Cadence Receipts';
+  let folderId = null;
+
+  const searchRes = await fetch(
+    'https://www.googleapis.com/drive/v3/files?q=' +
+    encodeURIComponent("name='" + folderName + "' and mimeType='application/vnd.google-apps.folder' and trashed=false") +
+    '&fields=files(id,name)',
+    { headers: { 'Authorization': 'Bearer ' + token } }
+  );
+  const searchData = await searchRes.json();
+  if (searchData.files && searchData.files.length > 0) {
+    folderId = searchData.files[0].id;
+  } else {
+    // Create the folder
+    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' })
+    });
+    const createData = await createRes.json();
+    folderId = createData.id;
+  }
+
+  // Step 2: Upload the file using multipart upload
+  const metadata = {
+    name: new Date().toISOString().split('T')[0] + '_receipt_' + file.name,
+    parents: folderId ? [folderId] : []
+  };
+
+  const boundary = 'cadence_upload_' + Date.now();
+  const delimiter = '\r\n--' + boundary + '\r\n';
+  const closeDelim = '\r\n--' + boundary + '--';
+
+  // Read file as ArrayBuffer
+  const fileBuffer = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+
+  // Build multipart body
+  const metaStr = delimiter +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify(metadata) +
+    delimiter +
+    'Content-Type: ' + file.type + '\r\n\r\n';
+
+  const metaBytes = new TextEncoder().encode(metaStr);
+  const closeBytes = new TextEncoder().encode(closeDelim);
+  const body = new Uint8Array(metaBytes.length + fileBuffer.byteLength + closeBytes.length);
+  body.set(metaBytes, 0);
+  body.set(new Uint8Array(fileBuffer), metaBytes.length);
+  body.set(closeBytes, metaBytes.length + fileBuffer.byteLength);
+
+  const uploadRes = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'multipart/related; boundary=' + boundary
+      },
+      body: body
+    }
+  );
+
+  const uploadData = await uploadRes.json();
+  if (!uploadData.id) throw new Error(uploadData.error ? uploadData.error.message : 'Upload failed');
+
+  // Step 3: Make the file viewable by anyone with the link
+  await fetch('https://www.googleapis.com/drive/v3/files/' + uploadData.id + '/permissions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  });
+
+  return uploadData.webViewLink || ('https://drive.google.com/file/d/' + uploadData.id + '/view');
+}
+
+async function getGoogleAccessToken() {
+  // Use Google Identity Services to get a fresh access token
+  return new Promise((resolve) => {
+    if (typeof google === 'undefined' || !google.accounts) {
+      resolve(null);
+      return;
+    }
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: (response) => {
+        resolve(response.access_token || null);
+      }
+    });
+    client.requestAccessToken({ prompt: '' });
+  });
 }
 
 // ════════════════════════════════════════════════════════════
