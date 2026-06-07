@@ -811,11 +811,20 @@ function navigate(page) {
 async function apiCall(params) {
   const allParams = Object.assign({ token: state.token }, params);
 
-  // Use POST for file uploads (base64 data can exceed GET URL limits)
-  if (params.action === 'upload_receipt' && params.file_data) {
+  // Serialize values
+  const serialized = {};
+  for (const [k, v] of Object.entries(allParams)) {
+    serialized[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  }
+
+  // Check total payload size - use POST if large (e.g. contains base64 image)
+  const totalSize = Object.values(serialized).join('').length;
+  const usePOST   = totalSize > 4000;
+
+  if (usePOST) {
     const bodyParams = new URLSearchParams();
-    for (const [k, v] of Object.entries(allParams)) {
-      bodyParams.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+    for (const [k, v] of Object.entries(serialized)) {
+      bodyParams.append(k, v);
     }
     const res = await fetch(CONFIG.SCRIPT_URL, {
       method: 'POST',
@@ -825,14 +834,11 @@ async function apiCall(params) {
     });
     const text = await res.text();
     try { return JSON.parse(text); }
-    catch(e) { return { success: false, error: 'Upload failed: ' + text.substring(0, 100) }; }
+    catch(e) { return { success: false, error: 'Server error: ' + text.substring(0, 150) }; }
   }
 
-  // All other calls use GET
-  const urlParams = new URLSearchParams();
-  for (const [k, v] of Object.entries(allParams)) {
-    urlParams.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
-  }
+  // Small requests use GET
+  const urlParams = new URLSearchParams(serialized);
   const url = CONFIG.SCRIPT_URL + '?' + urlParams.toString();
   const res = await fetch(url, { method: 'GET', redirect: 'follow' });
   return res.json();
@@ -8782,15 +8788,25 @@ async function compressAndEncodeReceipt(file) {
       canvas.width = w; canvas.height = h;
       var ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      // Compress to JPEG at 0.7 quality
-      var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-      // Check size - base64 in sheet cell limit ~50KB practical limit
-      if (dataUrl.length > 200000) {
-        // Try harder compression
+      // Compress to JPEG - target under 30KB base64 for sheet storage
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+      if (dataUrl.length > 100000) {
         dataUrl = canvas.toDataURL('image/jpeg', 0.4);
       }
-      if (dataUrl.length > 300000) {
-        reject(new Error('Image still too large after compression. Please use a Google Drive link instead.'));
+      if (dataUrl.length > 100000) {
+        // Shrink dimensions more aggressively
+        var MAX2 = 800;
+        var w2 = w, h2 = h;
+        if (w2 > MAX2 || h2 > MAX2) {
+          if (w2 > h2) { h2 = Math.round(h2 * MAX2 / w2); w2 = MAX2; }
+          else         { w2 = Math.round(w2 * MAX2 / h2); h2 = MAX2; }
+        }
+        canvas.width = w2; canvas.height = h2;
+        ctx.drawImage(img, 0, 0, w2, h2);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+      }
+      if (dataUrl.length > 150000) {
+        reject(new Error('Image still too large. Please use a photo under 2MB or paste a Google Drive link.'));
         return;
       }
       resolve(dataUrl);
