@@ -4170,8 +4170,8 @@ async function renderUsers() {
   try {
     const data = await apiCall({ action: 'get_users' });
     usersData = data.data || [];
-    setTimeout(renderPermissionsTable, 100);
     renderUsersTable();
+    setTimeout(renderPermissionsTable, 150);
   } catch(e) {
     el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load users.</div></div>';
   }
@@ -4332,6 +4332,41 @@ function renderUsersTable() {
         </div>
       </div>
     </div>`;
+}
+
+function renderPermissionsTable() {
+  var tbody = document.getElementById('perms-tbody');
+  if (!tbody) return;
+  var rows = [
+    ['Dashboard & all modules',           true,  true,  true,  true,  false],
+    ['View & edit roster',                true,  true,  false, true,  false],
+    ['Guardians',                         true,  true,  false, true,  false],
+    ['Fees & dues',                       true,  true,  true,  false, false],
+    ['Record payments',                   true,  true,  true,  false, false],
+    ['Events & attendance',               true,  true,  false, true,  false],
+    ['Uniforms & instruments',            true,  true,  false, true,  false],
+    ['Volunteers & fundraising',          true,  true,  false, true,  false],
+    ['Forms & communications',            true,  true,  false, true,  false],
+    ['Treasurer / accounting',            true,  true,  true,  false, false],
+    ['Submit reimbursements',             true,  true,  true,  true,  true],
+    ['Approve reimb. (treasurer)',        true,  true,  true,  false, false],
+    ['Approve reimb. (president only)',   false, true,  false, false, false],
+    ['Print checks',                      true,  true,  true,  false, false],
+    ['Manage users & settings',           true,  true,  false, false, false],
+    ['Parent portal access',              false, false, false, false, true]
+  ];
+  var chk  = '<span style="color:var(--success);font-size:16px;">&#10003;</span>';
+  var dash = '<span style="color:var(--gray-300);">—</span>';
+  tbody.innerHTML = rows.map(function(r) {
+    return '<tr>' +
+      '<td style="font-weight:500;">' + r[0] + '</td>' +
+      '<td style="text-align:center;">' + (r[1]?chk:dash) + '</td>' +
+      '<td style="text-align:center;">' + (r[2]?chk:dash) + '</td>' +
+      '<td style="text-align:center;">' + (r[3]?chk:dash) + '</td>' +
+      '<td style="text-align:center;">' + (r[4]?chk:dash) + '</td>' +
+      '<td style="text-align:center;">' + (r[5]?chk:dash) + '</td>' +
+    '</tr>';
+  }).join('');
 }
 
 function openUserForm(user) {
