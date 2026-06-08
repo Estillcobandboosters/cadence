@@ -1031,6 +1031,17 @@ async function renderDashboard() {
 // ════════════════════════════════════════════════════════════
 let rosterStudents = [];
 let rosterFilter = { search: '', section: '', grade: '', status: 'active', ensemble: '' };
+let rosterSort   = { field: 'last_name', dir: 'asc' };
+
+function sortRoster(field) {
+  if (rosterSort.field === field) {
+    rosterSort.dir = rosterSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    rosterSort.field = field;
+    rosterSort.dir   = 'asc';
+  }
+  renderRosterTable();
+}
 
 async function renderRoster() {
   const el = document.getElementById('page-roster');
@@ -1063,6 +1074,26 @@ function renderRosterTable() {
     const matchYear     = !state.selectedYear    || s.school_year === state.selectedYear;
     const matchEnsemble = !rosterFilter.ensemble || (s.ensembles && s.ensembles.split(',').map(function(e){ return e.trim(); }).indexOf(rosterFilter.ensemble) > -1);
     return matchSearch && matchSection && matchGrade && matchStatus && matchYear && matchEnsemble;
+  });
+
+  // Apply sort
+  filtered.sort(function(a, b) {
+    var av = (a[rosterSort.field] || '').toString().toLowerCase();
+    var bv = (b[rosterSort.field] || '').toString().toLowerCase();
+    // Numeric sort for grade
+    if (rosterSort.field === 'grade') {
+      av = parseInt(av) || 0;
+      bv = parseInt(bv) || 0;
+    }
+    if (av < bv) return rosterSort.dir === 'asc' ? -1 : 1;
+    if (av > bv) return rosterSort.dir === 'asc' ?  1 : -1;
+    return 0;
+  });
+
+  // Update sort indicators
+  ['last_name','first_name','grade','section','instrument','status'].forEach(function(f) {
+    var el = document.getElementById('sort-' + f);
+    if (el) el.textContent = rosterSort.field === f ? (rosterSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
   });
 
   el.innerHTML = `
@@ -1104,7 +1135,17 @@ function renderRosterTable() {
                <div class="empty-state-text">${rosterStudents.length === 0 ? 'No students yet - add your first student!' : 'No students match your filters.'}</div>
              </div>`
           : `<div class="table-wrap"><table>
-              <thead><tr><th></th><th>Name</th><th>Grade</th><th>Section</th><th>Instrument</th><th>Shirt</th><th>Status</th><th></th></tr></thead>
+              <thead><tr>
+  <th style="width:28px;"></th>
+  <th style="cursor:pointer;user-select:none;" onclick="sortRoster('last_name')">Last name <span id="sort-last_name"></span></th>
+  <th style="cursor:pointer;user-select:none;" onclick="sortRoster('first_name')">First name <span id="sort-first_name"></span></th>
+  <th style="cursor:pointer;user-select:none;" onclick="sortRoster('grade')">Grade <span id="sort-grade"></span></th>
+  <th style="cursor:pointer;user-select:none;" onclick="sortRoster('section')">Section <span id="sort-section"></span></th>
+  <th style="cursor:pointer;user-select:none;" onclick="sortRoster('instrument')">Instrument <span id="sort-instrument"></span></th>
+  <th>Shirt</th>
+  <th style="cursor:pointer;user-select:none;" onclick="sortRoster('status')">Status <span id="sort-status"></span></th>
+  <th></th>
+</tr></thead>
               <tbody>
                 ${filtered.map(s=>`
                   <tr>
@@ -1112,7 +1153,10 @@ function renderRosterTable() {
                       ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
                     </td>
                     <td>
-                      <strong>${s.first_name} ${s.last_name}</strong>
+                      <strong>${s.last_name}</strong>
+                    </td>
+                    <td>
+                      <strong>${s.first_name}</strong>
                       ${s.ensembles ? '<div style="margin-top:3px;">' + s.ensembles.split(',').filter(Boolean).map(function(e){ return '<span class="badge badge-blue" style="font-size:9px;margin-right:2px;">'+e.trim()+'</span>'; }).join('') + '</div>' : ''}
                     </td>
                     <td>${s.grade}</td>
@@ -1389,7 +1433,10 @@ function renderFeesOverview() {
                       ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
                     </td>
                     <td>
-                      <strong>${s.first_name} ${s.last_name}</strong>
+                      <strong>${s.last_name}</strong>
+                    </td>
+                    <td>
+                      <strong>${s.first_name}</strong>
                       ${s.ensembles ? '<div style="margin-top:3px;">' + s.ensembles.split(',').filter(Boolean).map(function(e){ return '<span class="badge badge-blue" style="font-size:9px;margin-right:2px;">'+e.trim()+'</span>'; }).join('') + '</div>' : ''}
                     </td>
                     <td>${s.grade}</td>
@@ -1934,7 +1981,10 @@ function renderAttendanceOverview() {
                       ${s.medical_notes ? `<span title="${s.medical_notes}" style="color:#C62828;font-size:16px;cursor:help;" onclick="showMedicalAlert('${s.student_id}')">&#9888;</span>` : ''}
                     </td>
                     <td>
-                      <strong>${s.first_name} ${s.last_name}</strong>
+                      <strong>${s.last_name}</strong>
+                    </td>
+                    <td>
+                      <strong>${s.first_name}</strong>
                       ${s.ensembles ? '<div style="margin-top:3px;">' + s.ensembles.split(',').filter(Boolean).map(function(e){ return '<span class="badge badge-blue" style="font-size:9px;margin-right:2px;">'+e.trim()+'</span>'; }).join('') + '</div>' : ''}
                     </td>
                     <td>${s.grade}</td>
@@ -4120,6 +4170,7 @@ async function renderUsers() {
   try {
     const data = await apiCall({ action: 'get_users' });
     usersData = data.data || [];
+    setTimeout(renderPermissionsTable, 100);
     renderUsersTable();
   } catch(e) {
     el.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load users.</div></div>';
@@ -4200,31 +4251,8 @@ function renderUsersTable() {
       <div class="card-header"><div class="card-title">Role permissions</div></div>
       <div class="card-body" style="padding:0;">
         <div class="table-wrap"><table>
-          <thead><tr><th>Feature</th><th>Admin</th><th>Staff</th><th>Parent</th></tr></thead>
-          <tbody>
-            ${[
-              ['Dashboard',             true,  true,  false],
-              ['View roster',           true,  true,  false],
-              ['Edit roster',           true,  true,  false],
-              ['Guardians',             true,  true,  false],
-              ['Fees & dues',           true,  false, false],
-              ['Record payments',       true,  false, false],
-              ['Print receipts',        true,  true,  false],
-              ['Events',                true,  true,  false],
-              ['Take attendance',       true,  true,  false],
-              ['Uniforms & instruments',true,  true,  false],
-              ['Volunteers',            true,  true,  false],
-              ['Fundraising',           true,  true,  false],
-              ['Forms',                 true,  true,  false],
-              ['Manage users',          true,  false, false],
-            ].map(([feature, admin, staff, parent]) => `
-              <tr>
-                <td>${feature}</td>
-                <td style="text-align:center;">${admin  ? '<span style="color:var(--success);font-size:16px;">&#10003;</span>' : '<span style="color:var(--gray-300);">—</span>'}</td>
-                <td style="text-align:center;">${staff  ? '<span style="color:var(--success);font-size:16px;">&#10003;</span>' : '<span style="color:var(--gray-300);">—</span>'}</td>
-                <td style="text-align:center;">${parent ? '<span style="color:var(--success);font-size:16px;">&#10003;</span>' : '<span style="color:var(--gray-300);">—</span>'}</td>
-              </tr>`).join('')}
-          </tbody>
+          <thead><tr><th>Feature</th><th>Admin</th><th>President</th><th>Treasurer</th><th>Staff</th><th>Parent</th></tr></thead>
+          <tbody id="perms-tbody"></tbody>
         </table></div>
       </div>
     </div>
@@ -9176,7 +9204,8 @@ function getSettingDefault(key) {
     square_link:     '',
     treasurer_email: '',
     reimb_categories: 'Band Dues/Fees,Uniform Purchase,Uniform Repair/Cleaning,Equipment Purchase,Equipment Repair,Instrument Purchase,Instrument Repair,Trip Expense,Transportation,Hotel/Lodging,Food/Concessions,Supplies/Materials,Printing/Copying,Awards/Trophies,Postage/Shipping,Office Supplies,Fundraiser Expense,Entry Fees/Registration,Music/Arrangements,Other (see notes)',
-    fee_types: 'Band Dues,Trip Fee,Uniform Fee,Equipment Fee,Fundraiser,Miscellaneous'
+    fee_types:   'Band Dues,Trip Fee,Uniform Fee,Equipment Fee,Fundraiser,Miscellaneous',
+    instruments: 'Flute,Piccolo,Oboe,Bassoon,Clarinet,Bass Clarinet,Alto Saxophone,Tenor Saxophone,Baritone Saxophone,Trumpet,Mellophone,French Horn,Trombone,Baritone,Euphonium,Tuba,Sousaphone,Percussion,Snare Drum,Bass Drum,Tenor Drums,Cymbals,Pit Percussion,Xylophone,Marimba,Vibraphone,Color Guard,Drum Major'
   };
   return _settings[key] !== undefined ? _settings[key] : defaults[key];
 }
@@ -9286,6 +9315,12 @@ function renderSettingsView() {
   html += '<div style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">One fee type per line. These appear as default options when assigning fees to students.</div>';
   html += '<textarea class="form-textarea" id="set-fee_types" style="min-height:120px;font-family:monospace;font-size:13px;">' + s('fee_types').split(',').join('\n') + '</textarea>';
   html += '</div></div>';
+
+  html += '<div class="card" style="margin-top:16px;"><div class="card-header"><div class="card-title">Instruments</div></div>';
+  html += '<div class="card-body">';
+  html += '<div style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">One instrument per line. Used as autocomplete options when adding students. Fix typos here and they will be corrected in new entries.</div>';
+  html += '<textarea class="form-textarea" id="set-instruments" style="min-height:200px;font-family:monospace;font-size:13px;">' + s('instruments').split(',').join('\n') + '</textarea>';
+  html += '</div></div>';
   html += '</div>';
 
   el.innerHTML = html;
@@ -9353,7 +9388,7 @@ async function saveSettingsSection(section) {
     org:     ['org_name','org_address','org_city','org_state','org_zip','org_phone','org_email','org_website'],
     check:   ['check_sig1_title','check_sig2_title','check_memo_prefix'],
     payment: ['venmo_username','square_link','treasurer_email'],
-    lists:   ['reimb_categories','fee_types']
+    lists:   ['reimb_categories','fee_types','instruments']
   };
 
   var sectionFields = fields[section] || [];
