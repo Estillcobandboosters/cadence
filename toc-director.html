@@ -234,6 +234,15 @@ table.fst tr.fst-past td{opacity:.4;}
       <table class="fst"><tbody id="full-sched-body"></tbody></table>
     </div>
 
+    <!-- Print options -->
+    <div style="background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);padding:16px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:10px;">Print options</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button onclick="printMySchedule()" style="padding:11px 14px;border:1.5px solid #1565C0;border-radius:10px;background:white;color:#1565C0;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">🖨 Print my schedule card</button>
+        <button onclick="printFullSchedule()" style="padding:11px 14px;border:1.5px solid #555;border-radius:10px;background:white;color:#555;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">🖨 Print full prelims schedule</button>
+      </div>
+    </div>
+
     <div style="text-align:center;font-size:11px;color:#bbb;padding-bottom:24px;">
       Data updates automatically · <span id="last-sync">—</span>
     </div>
@@ -305,9 +314,9 @@ function buildScheduleRows() {
   const brkLen     = parseInt(settings['brklen']   || 15);
   const offArrival = parseInt(settings['off-arrival']|| 120);
   const offDress   = parseInt(settings['off-dress']  || 45);
-  const offWarmup  = parseInt(settings['off-warmup'] || 60);
-  const offTravel  = parseInt(settings['off-travel'] || 30);
-  const offGate    = parseInt(settings['off-gate']   || 20);
+  const offWarmup  = parseInt(settings['off-warmup'] || 45);
+  const offTravel  = parseInt(settings['off-travel'] || 15);
+  const offGate    = parseInt(settings['off-gate']   || 5);
   const finStart   = parseT(settings['fin-start'] || '19:00');
   const finCnt    = parseInt(settings['fin-count']|| 10);
   const finBrk    = parseInt(settings['fin-brk']  || 5);
@@ -569,6 +578,94 @@ function loadLogo() {
   if (loginIcon) {
     loginIcon.innerHTML = '<img src="'+EC_LOGO+'" style="height:60px;width:auto;"/>';
   }
+}
+
+// ── Print: My schedule card ─────────────────────────────────────────────────
+function printMySchedule() {
+  if (!_band) return;
+  const evName = document.getElementById('header-event').textContent;
+  const evDate = document.getElementById('header-date').textContent;
+  const dir  = document.getElementById('d-director').textContent;
+  const cls  = document.getElementById('d-class').textContent;
+  const lot  = document.getElementById('d-lot')?.textContent || '—';
+  const spot = document.getElementById('d-spot')?.textContent || '—';
+  const guide= document.getElementById('d-guide')?.textContent || '—';
+  const vehs = document.getElementById('d-vehicles')?.textContent || '—';
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Schedule — '+_bandName+'</title>'+
+    '<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;padding:.4in;font-size:11pt;}'+
+    '.hdr{border-bottom:3pt solid #1565C0;padding-bottom:10pt;margin-bottom:14pt;display:flex;justify-content:space-between;align-items:flex-end;}'+
+    '.school{font-size:20pt;font-weight:800;color:#1565C0;}.sub{color:#888;font-size:10pt;}'+
+    '.ev{text-align:right;font-size:10pt;color:#555;}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:14pt;}'+
+    'td{padding:8pt 10pt;border-bottom:1pt solid #eee;font-size:12pt;}'+
+    '.lbl{color:#888;font-size:9pt;text-transform:uppercase;width:38%;}'+
+    '.val{font-weight:700;}'+
+    '.perf td{background:#E3F2FD;}.perf .val{color:#1565C0;font-size:14pt;}'+
+    '.park{background:#FFF3E0;border:1pt solid #FFB74D;border-radius:6pt;padding:10pt;}'+
+    '.park h3{font-size:9pt;text-transform:uppercase;color:#E65100;margin-bottom:6pt;}'+
+    '.pr{display:flex;justify-content:space-between;font-size:10pt;padding:3pt 0;border-bottom:.5pt solid #FFE0B2;}'+
+    '.pr:last-child{border-bottom:none;}'+
+    '.np{text-align:center;padding:10pt;margin-bottom:10pt;border-bottom:1pt solid #eee;}'+
+    '.np button{padding:6pt 16pt;background:#1565C0;color:white;border:none;border-radius:5pt;cursor:pointer;font-size:10pt;font-family:Arial;}'+
+    '@media print{.np{display:none;}}</style></head><body>'+
+    '<div class="np"><button onclick="window.print()">🖨 Print</button></div>'+
+    '<div class="hdr"><div><div class="school">'+_bandName+'</div><div class="sub">'+dir+'</div><div class="sub">'+cls+'</div></div>'+
+    '<div class="ev"><div style="font-weight:700;">'+evName+'</div><div>'+evDate+'</div></div></div>'+
+    '<table>'+
+    '<tr><td class="lbl">Arrival</td><td class="val">'+_band.arrival+'</td></tr>'+
+    '<tr><td class="lbl">Dress</td><td class="val">'+_band.dress+'</td></tr>'+
+    '<tr><td class="lbl">Warm-up · Area '+_band.area+'</td><td class="val">'+_band.warmup+'</td></tr>'+
+    '<tr><td class="lbl">Travel to gate</td><td class="val">'+_band.travel+'</td></tr>'+
+    '<tr><td class="lbl">Gate</td><td class="val">'+_band.gate+'</td></tr>'+
+    '<tr class="perf"><td class="lbl">PERFORM · Draw #'+_band.draw+'</td><td class="val">'+_band.perform+'</td></tr>'+
+    '</table>'+
+    (lot&&lot!=='—'?'<div class="park"><h3>Equipment parking</h3>'+
+      '<div class="pr"><span>Lot</span><strong>'+lot+'</strong></div>'+
+      '<div class="pr"><span>Spot</span><strong>'+spot+'</strong></div>'+
+      '<div class="pr"><span>Guide</span><strong>'+guide+'</strong></div>'+
+      '<div class="pr"><span>Equipment</span><strong>'+vehs+'</strong></div></div>':'')+
+    '</body></html>';
+  const w=window.open('','_blank','width=700,height=600');
+  w.document.write(html); w.document.close();
+}
+
+// ── Print: Full prelims schedule ─────────────────────────────────────────────
+function printFullSchedule() {
+  const rows   = buildScheduleRows();
+  const evName = document.getElementById('header-event').textContent;
+  const evDate = document.getElementById('header-date').textContent;
+  let tbody='';
+  rows.forEach(r=>{
+    if(r.t==='cls'){
+      tbody+='<tr style="background:#D6E4F7;"><td colspan="4" style="padding:5pt 8pt;font-weight:800;font-size:9pt;text-transform:uppercase;color:#0D47A1;">'+r.label+'</td></tr>';
+    }else if(r.t==='band'){
+      const me=r.band===_bandName;
+      tbody+='<tr style="'+(me?'background:#E8EAF6;font-weight:700;':'')+'">'+
+        '<td style="padding:5pt 8pt;color:#1565C0;font-weight:700;width:24pt;">'+r.draw+'</td>'+
+        '<td style="padding:5pt 8pt;">'+r.band+(me?' ◀':'')+'</td>'+
+        '<td style="padding:5pt 8pt;color:#888;font-size:9pt;">'+r.dir+'</td>'+
+        '<td style="padding:5pt 8pt;font-weight:700;color:#1565C0;text-align:right;">'+r.perform+'</td>'+
+      '</tr>';
+    }else if(r.t==='brk'){
+      tbody+='<tr style="background:#FFF8E1;"><td colspan="4" style="padding:5pt 8pt;color:#E65100;font-weight:600;text-align:center;">⏸ '+r.len+'-MIN BREAK — '+r.time+'</td></tr>';
+    }else if(r.t==='awd'){
+      tbody+='<tr style="background:#E8F5E9;"><td colspan="4" style="padding:6pt 8pt;color:#1B5E20;font-weight:700;text-align:center;">🏆 '+r.label+' — '+r.time+'</td></tr>';
+    }
+  });
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Schedule — '+evName+'</title>'+
+    '<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;padding:.35in;font-size:10pt;}'+
+    'h1{font-size:15pt;color:#1565C0;margin-bottom:2pt;}.sub{color:#888;font-size:10pt;margin-bottom:10pt;}'+
+    'table{width:100%;border-collapse:collapse;}th{background:#1565C0;color:white;padding:5pt 8pt;text-align:left;font-size:8.5pt;text-transform:uppercase;}'+
+    'td{border-bottom:.5pt solid #f0f0f0;}'+
+    '.np{text-align:center;padding:8pt;margin-bottom:8pt;border-bottom:1pt solid #eee;}'+
+    '.np button{padding:6pt 14pt;background:#1565C0;color:white;border:none;border-radius:5pt;cursor:pointer;font-family:Arial;}'+
+    '@media print{.np{display:none;}}</style></head><body>'+
+    '<div class="np"><button onclick="window.print()">🖨 Print</button></div>'+
+    '<h1>'+evName+'</h1><div class="sub">'+evDate+' · Prelims performance order</div>'+
+    '<table><thead><tr><th>#</th><th>Band</th><th>Director</th><th style="text-align:right;">Perform</th></tr></thead>'+
+    '<tbody>'+tbody+'</tbody></table></body></html>';
+  const w=window.open('','_blank','width=700,height=700');
+  w.document.write(html); w.document.close();
 }
 
 // ── Init ──────────────────────────────────────────────
