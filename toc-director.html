@@ -300,11 +300,15 @@ function buildScheduleRows() {
   if (!_data) return [];
   const sections  = _data.sections  || [];
   const settings  = _data.settings  || {};
-  const start     = parseT(settings['start']  || '11:00');
-  const gap       = parseInt(settings['gap']   || 15);
-  const brkLen    = parseInt(settings['brklen']|| 15);
-  const lead      = parseInt(settings['lead']  || 90);
-  const finStart  = parseT(settings['fin-start'] || '19:00');
+  const start      = parseT(settings['start']    || '11:00');
+  const gap        = parseInt(settings['gap']      || 15);
+  const brkLen     = parseInt(settings['brklen']   || 15);
+  const offArrival = parseInt(settings['off-arrival']|| 120);
+  const offDress   = parseInt(settings['off-dress']  || 45);
+  const offWarmup  = parseInt(settings['off-warmup'] || 60);
+  const offTravel  = parseInt(settings['off-travel'] || 30);
+  const offGate    = parseInt(settings['off-gate']   || 20);
+  const finStart   = parseT(settings['fin-start'] || '19:00');
   const finCnt    = parseInt(settings['fin-count']|| 10);
   const finBrk    = parseInt(settings['fin-brk']  || 5);
   const host      = settings['ev-host']     || 'Estill County';
@@ -326,8 +330,11 @@ function buildScheduleRows() {
         rows.push({
           t:'band', draw:bi+1, band:b.name||'TBD', dir:b.dir||'',
           area, perform:fmt12(perf), performMins:perf,
-          arrival:fmt12(perf-lead), dress:fmt12(perf-lead+45),
-          warmup:fmt12(perf-30), travel:fmt12(perf-10), gate:fmt12(perf-5),
+          arrival:fmt12(perf-offArrival),
+          dress:  fmt12(perf-offArrival+offDress),
+          warmup: fmt12(perf-offWarmup),
+          travel: fmt12(perf-offTravel),
+          gate:   fmt12(perf-offGate),
         });
         cur += gap;
       });

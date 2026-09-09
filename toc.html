@@ -307,12 +307,18 @@ table.sch tr:hover td{background:#f8f9ff;}
   <div class="ctrl"><label>First performance time</label><input type="time" id="start" value="11:00" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
   <div class="ctrl"><label>Minutes between performances</label><input type="number" id="gap" value="15" min="10" max="30" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
   <div class="ctrl"><label>Break duration (minutes)</label><input type="number" id="brklen" value="15" min="5" max="30" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
-  <div class="ctrl"><label>Lead time: arrival → perform</label>
-    <select id="lead" oninput="rebuild();save()" onchange="rebuild();save()">
-      <option value="90">90 min</option>
-      <option value="75">75 min</option>
-      <option value="60">60 min</option>
-    </select>
+  <div class="sb-h">Timing offsets (minutes before perform)</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+    <div class="ctrl" style="margin:0;"><label>Arrival before</label>
+      <input type="number" id="off-arrival" value="120" min="30" max="240" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+    <div class="ctrl" style="margin:0;"><label>Dress (min after arrival)</label>
+      <input type="number" id="off-dress" value="45" min="15" max="120" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+    <div class="ctrl" style="margin:0;"><label>Warm-up before</label>
+      <input type="number" id="off-warmup" value="60" min="15" max="120" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+    <div class="ctrl" style="margin:0;"><label>Travel before</label>
+      <input type="number" id="off-travel" value="30" min="5" max="60" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+    <div class="ctrl" style="margin:0;"><label>Gate before</label>
+      <input type="number" id="off-gate" value="20" min="5" max="30" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
   </div>
 
   <div class="sb-h" style="display:flex;align-items:center;justify-content:space-between;">
@@ -1009,11 +1015,16 @@ function saveBandModal(){
 //  SCHEDULE BUILDER
 // ════════════════════════════════════════════════════════
 function rebuild(){
-  const start   =parseT(document.getElementById('start')?.value||'11:00');
-  const gap     =parseInt(document.getElementById('gap')?.value)||15;
-  const brkLen  =parseInt(document.getElementById('brklen')?.value)||15;
-  const lead    =parseInt(document.getElementById('lead')?.value)||90;
-  const awdGap  =parseInt(document.getElementById('awd-gap')?.value)||30;
+  const start      =parseT(document.getElementById('start')?.value||'11:00');
+  const gap        =parseInt(document.getElementById('gap')?.value)||15;
+  const brkLen     =parseInt(document.getElementById('brklen')?.value)||15;
+  const awdGap     =parseInt(document.getElementById('awd-gap')?.value)||30;
+  // Individual timing offsets (minutes before performance)
+  const offArrival =parseInt(document.getElementById('off-arrival')?.value)||120;
+  const offDress   =parseInt(document.getElementById('off-dress')?.value)||45;   // after arrival
+  const offWarmup  =parseInt(document.getElementById('off-warmup')?.value)||60;
+  const offTravel  =parseInt(document.getElementById('off-travel')?.value)||30;
+  const offGate    =parseInt(document.getElementById('off-gate')?.value)||20;
   const finCnt  =parseInt(document.getElementById('fin-count')?.value)||10;
   const finBrk  =parseInt(document.getElementById('fin-brk')?.value)||5;
   const finStart=parseT(document.getElementById('fin-start')?.value||'19:00');
@@ -1047,11 +1058,11 @@ function rebuild(){
         const perf=cur;
         rows.push({
           t:'band',draw:bi+1,band:b.name||'TBD',dir:b.dir||'',area,
-          arrival:fmt(addM(perf,-lead)),
-          dress:  fmt(addM(perf,-lead+45)),
-          warmup: fmt(addM(perf,-30)),
-          travel: fmt(addM(perf,-10)),
-          gate:   fmt(addM(perf,-5)),
+          arrival:fmt(addM(perf,-offArrival)),
+          dress:  fmt(addM(perf,-offArrival+offDress)),
+          warmup: fmt(addM(perf,-offWarmup)),
+          travel: fmt(addM(perf,-offTravel)),
+          gate:   fmt(addM(perf,-offGate)),
           perform:fmt(perf), performMins:perf,
         });
         cur=addM(cur,gap);
@@ -1070,13 +1081,21 @@ function rebuild(){
     if(finBrk>0&&i===finBrk+1){ rows.push({t:'brk',time:fmt(fc),len:brkLen}); fc=addM(fc,brkLen); }
     const fa=areas[faIdx%2]; faIdx++;
     rows.push({t:'fin-band',draw:i,band:'—',dir:'',area:fa,
-      arrival:fmt(addM(fc,-lead)),dress:fmt(addM(fc,-60)),warmup:fmt(addM(fc,-30)),
-      travel:fmt(addM(fc,-10)),gate:fmt(addM(fc,-5)),perform:fmt(fc)});
+      arrival:'',
+      dress:  fmt(addM(fc,-offWarmup-15)),
+      warmup: fmt(addM(fc,-offWarmup)),
+      travel: fmt(addM(fc,-offTravel)),
+      gate:   fmt(addM(fc,-offGate)),
+      perform:fmt(fc)});
     fc=addM(fc,gap);
   }
   rows.push({t:'fin-band',draw:'HOST',band:host,dir:hostDir,area:'B',host:true,
-    arrival:'—',dress:fmt(addM(fc,-60)),warmup:fmt(addM(fc,-30)),
-    travel:fmt(addM(fc,-10)),gate:fmt(addM(fc,-5)),perform:fmt(fc)});
+    arrival:'',
+    dress:  fmt(addM(fc,-offWarmup-15)),
+    warmup: fmt(addM(fc,-offWarmup)),
+    travel: fmt(addM(fc,-offTravel)),
+    gate:   fmt(addM(fc,-offGate)),
+    perform:fmt(fc)});
   fc=addM(fc,gap);
   rows.push({t:'awd',label:'FINALS AWARDS',time:fmt(addM(fc-gap,awdGap))});
 
@@ -1956,7 +1975,7 @@ function printSchedule() {
           '<td class="draw">'+r.draw+'</td>' +
           '<td class="band">'+escHtml(r.band)+'</td>' +
           '<td class="dir">'+escHtml(r.dir||'')+'</td>' +
-          '<td>'+r.arrival+'</td>' +
+          '<td>'+(r.t==='fin-band'?'<span style="color:#bbb;font-style:italic;">On-site</span>':r.arrival)+'</td>' +
           '<td>'+r.dress+'</td>' +
           '<td>'+r.warmup+'</td>' +
           '<td class="area">'+r.area+'</td>' +
