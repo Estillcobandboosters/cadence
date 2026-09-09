@@ -197,17 +197,30 @@ table.sch tr:hover td{background:#f8f9ff;}
     width: 100% !important;
     max-width: 100% !important;
     border-right: none !important;
-    border-bottom: 1px solid #e0e0e0;
-    padding: 12px;
+    padding: 0 !important;
     max-height: none !important;
     overflow: visible !important;
+    border-bottom: none !important;
   }
-  /* Collapsible sidebar on mobile */
-  .sidebar-toggle { display: flex !important; }
+  /* Collapsible sidebar on mobile — toggle is just a small pill */
+  .sidebar-toggle {
+    display: flex !important;
+    background: #f0f4ff;
+    border: 1px solid #c7d7f5;
+    border-radius: 20px;
+    padding: 5px 12px !important;
+    margin: 8px 12px 0 !important;
+    width: fit-content !important;
+  }
   .sidebar-content { display: none !important; }
-  .sidebar-content.open { display: block !important; }
+  .sidebar-content.open {
+    display: block !important;
+    padding: 12px;
+    border-bottom: 1px solid #e0e0e0;
+    background: white;
+  }
 
-  .canvas { width: 100% !important; overflow-x: auto !important; }
+  .canvas { width: 100% !important; overflow-x: auto !important; padding: 12px !important; }
   .full-canvas { width: 100% !important; }
 
   .canvas, .full-canvas {
@@ -280,9 +293,10 @@ table.sch tr:hover td{background:#f8f9ff;}
 <div class="page active" id="page-schedule">
 <div class="sb-layout">
 <div class="sidebar">
-  <div class="sidebar-toggle" style="display:none;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:8px;" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.tog-icon').textContent=this.nextElementSibling.classList.contains('open')?'▲':'▼';">
-    <span style="font-size:13px;font-weight:700;color:#1565C0;">⚙ Settings &amp; controls</span>
-    <span class="tog-icon" style="color:#1565C0;font-size:14px;">▼</span>
+  <div class="sidebar-toggle" style="display:none;align-items:center;gap:6px;cursor:pointer;" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.tog-icon').textContent=this.nextElementSibling.classList.contains('open')?'▲':'▼';">
+    <span style="font-size:13px;color:#1565C0;">⚙</span>
+    <span style="font-size:12px;font-weight:600;color:#1565C0;">Settings</span>
+    <span class="tog-icon" style="color:#1565C0;font-size:11px;">▼</span>
   </div>
   <div class="sidebar-content">
   <div class="sb-h">Event settings</div>
