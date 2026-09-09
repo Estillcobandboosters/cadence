@@ -9,7 +9,7 @@
 body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;}
 
 /* ── Nav ── */
-.topnav{background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;display:flex;align-items:center;padding:0 20px;height:54px;box-shadow:0 2px 10px rgba(0,0,0,.2);gap:0;}
+.topnav{background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;display:flex;align-items:center;padding:0 20px;height:54px;box-shadow:0 2px 10px rgba(0,0,0,.2);gap:0;width:100%;box-sizing:border-box;}
 .topnav .brand{font-size:15px;font-weight:800;margin-right:24px;white-space:nowrap;}
 .topnav .brand span{opacity:.6;font-weight:400;font-size:12px;display:block;margin-top:-2px;}
 .nav-tabs{display:flex;gap:0;height:100%;}
@@ -30,7 +30,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;}
 .btn-xs{padding:2px 6px;font-size:10px;}
 
 /* ── Pages ── */
-.page{display:none;height:calc(100vh - 54px);overflow:hidden;}
+.page{display:none;min-height:calc(100vh - 54px);overflow:hidden;}
 .page.active{display:flex;}
 
 /* ── Sidebar / Canvas layout ── */
@@ -163,15 +163,31 @@ table.sch tr:hover td{background:#f8f9ff;}
 
 /* ── Mobile responsive ── */
 @media (max-width: 768px) {
-  .topnav { padding: 0 12px; height: auto; min-height: 54px; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
-  .brand { font-size: 13px; }
-  .brand span { display: none; }
-  .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-shrink: 0; width: 100%; order: 3; border-top: 1px solid rgba(255,255,255,.1); padding-top: 2px; }
-  .nav-tab { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .topnav { 
+    padding: 6px 10px; 
+    height: auto; 
+    min-height: 54px; 
+    flex-wrap: wrap; 
+    gap: 4px;
+    width: 100%;
+  }
+  .topnav > .brand { font-size: 13px; flex-shrink:0; }
+  .topnav > .brand span { display: none; }
+  .nav-tabs { 
+    overflow-x: auto; 
+    -webkit-overflow-scrolling: touch; 
+    flex-shrink: 0; 
+    width: 100%; 
+    order: 3; 
+    border-top: 1px solid rgba(255,255,255,.1); 
+    padding-top: 2px;
+    scrollbar-width: none;
+  }
   .nav-tabs::-webkit-scrollbar { display: none; }
-  .nav-actions { gap: 4px; }
-  .nav-actions span { display: none; }
-  .btn-outline { padding: 5px 9px; font-size: 11px; }
+  .nav-tab { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .nav-actions { gap: 4px; margin-left: auto; flex-shrink:0; }
+  .nav-actions #save-indicator { display: none; }
+  .btn-outline { padding: 5px 8px; font-size: 11px; }
 
   .page { height: auto !important; overflow: visible !important; }
   .app-body { display: block !important; }
@@ -2355,10 +2371,7 @@ function initMobileSidebars() {
     });
   }
 }
-window.addEventListener('resize', function(){
-  initMobileSidebars();
-  rebuild(); // re-render table in correct format for screen size
-});
+window.addEventListener('resize', initMobileSidebars);
 
 load().then(function(){
   renderSidebar();
