@@ -1082,7 +1082,7 @@ function rebuild(){
     const fa=areas[faIdx%2]; faIdx++;
     rows.push({t:'fin-band',draw:i,band:'—',dir:'',area:fa,
       arrival:'',
-      dress:  fmt(addM(fc,-(offWarmup+offDress))),
+      dress:  fmt(addM(fc,-(offWarmup+30))),
       warmup: fmt(addM(fc,-offWarmup)),
       travel: fmt(addM(fc,-offTravel)),
       gate:   fmt(addM(fc,-offGate)),

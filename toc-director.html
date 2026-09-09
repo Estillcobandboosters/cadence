@@ -478,27 +478,66 @@ function renderFullSchedule(rows, myBand) {
 function startCountdown(performMins) {
   if (_countTimer) clearInterval(_countTimer);
   function tick() {
-    const now   = nowM();
-    const diff  = performMins - now;
-    const card  = document.getElementById('countdown-card');
-    const lbl   = document.getElementById('countdown-label');
-    const timer = document.getElementById('countdown-time');
-    const sub   = document.getElementById('countdown-sub');
-
+    const now     = new Date();
+    const evDate  = (_data?.settings || {})['ev-date'] || '';
+    const card    = document.getElementById('countdown-card');
+    const lbl     = document.getElementById('countdown-label');
+    const timer   = document.getElementById('countdown-time');
+    const sub     = document.getElementById('countdown-sub');
     card.className = 'countdown-card';
-    if (diff < 0) {
+
+    if (!evDate) {
+      lbl.textContent   = 'Event date not set';
+      timer.textContent = '—';
+      sub.textContent   = '';
+      return;
+    }
+
+    // Build exact perform datetime
+    const eventDay  = new Date(evDate + 'T00:00:00');
+    const perfH     = Math.floor(performMins / 60);
+    const perfM     = performMins % 60;
+    const perfDate  = new Date(evDate + 'T00:00:00');
+    perfDate.setHours(perfH, perfM, 0, 0);
+
+    const diffMs    = perfDate - now;
+    const diffMins  = Math.floor(diffMs / 60000);
+    const diffDays  = Math.floor(diffMs / 86400000);
+
+    if (diffMs < 0) {
+      // Performance has passed
+      const minsAgo = Math.abs(diffMins);
+      const daysAgo = Math.abs(diffDays);
       card.classList.add('past');
-      lbl.textContent   = 'You performed at';
-      timer.textContent = fmt12(performMins);
-      sub.textContent   = Math.abs(diff) + ' minutes ago';
-    } else if (diff === 0) {
+      if (daysAgo >= 1) {
+        lbl.textContent   = 'Performance was';
+        timer.textContent = daysAgo + (daysAgo===1?' day':' days') + ' ago';
+        sub.textContent   = 'Performed at ' + fmt12(performMins) + ' on ' + eventDay.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      } else {
+        lbl.textContent   = 'You performed at';
+        timer.textContent = fmt12(performMins);
+        sub.textContent   = minsAgo + ' minutes ago';
+      }
+    } else if (diffMins === 0) {
       card.classList.add('soon');
       lbl.textContent   = '🎺 On the field NOW';
       timer.textContent = 'GO!';
       sub.textContent   = '';
+    } else if (diffMins <= 30) {
+      card.classList.add('soon');
+      const h = Math.floor(diffMins/60), m = diffMins%60;
+      lbl.textContent   = '⚠️ Performing soon!';
+      timer.textContent = h>0 ? h+'h '+m+'m' : m+' min';
+      sub.textContent   = 'Perform at ' + fmt12(performMins);
+    } else if (diffDays >= 1) {
+      // More than a day away — show days countdown
+      lbl.textContent   = 'Days until performance';
+      timer.textContent = diffDays + (diffDays===1?' day':' days');
+      const evFmt = eventDay.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+      sub.textContent   = evFmt + ' · ' + fmt12(performMins);
     } else {
-      if (diff <= 30) card.classList.add('soon');
-      const h = Math.floor(diff/60), m = diff%60;
+      // Same day, more than 30 min away
+      const h = Math.floor(diffMins/60), m = diffMins%60;
       lbl.textContent   = 'Time until performance';
       timer.textContent = h>0 ? h+'h '+m+'m' : m+' min';
       sub.textContent   = 'Perform at ' + fmt12(performMins);
