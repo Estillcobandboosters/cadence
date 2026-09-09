@@ -1,0 +1,2251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Tournament of Champions — Event Manager</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;}
+
+/* ── Nav ── */
+.topnav{background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;display:flex;align-items:center;padding:0 20px;height:54px;box-shadow:0 2px 10px rgba(0,0,0,.2);gap:0;}
+.topnav .brand{font-size:15px;font-weight:800;margin-right:24px;white-space:nowrap;}
+.topnav .brand span{opacity:.6;font-weight:400;font-size:12px;display:block;margin-top:-2px;}
+.nav-tabs{display:flex;gap:0;height:100%;}
+.nav-tab{padding:0 16px;height:100%;display:flex;align-items:center;font-size:13px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:rgba(255,255,255,.7);white-space:nowrap;transition:all .15s;user-select:none;}
+.nav-tab:hover{color:white;background:rgba(255,255,255,.08);}
+.nav-tab.active{color:white;border-bottom-color:white;}
+.nav-actions{margin-left:auto;display:flex;gap:8px;}
+.btn{padding:7px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12.5px;font-weight:600;font-family:inherit;transition:all .15s;}
+.btn-outline{background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);}
+.btn-outline:hover{background:rgba(255,255,255,.25);}
+.btn-blue{background:#1565C0;color:white;}
+.btn-blue:hover{background:#0D47A1;}
+.btn-green{background:#2E7D32;color:white;}
+.btn-green:hover{background:#1B5E20;}
+.btn-red{background:#c62828;color:white;}
+.btn-red:hover{background:#b71c1c;}
+.btn-sm{padding:4px 9px;font-size:11px;}
+.btn-xs{padding:2px 6px;font-size:10px;}
+
+/* ── Pages ── */
+.page{display:none;height:calc(100vh - 54px);overflow:hidden;}
+.page.active{display:flex;}
+
+/* ── Sidebar / Canvas layout ── */
+.sb-layout{display:grid;grid-template-columns:300px 1fr;height:100%;}
+.sidebar{background:white;border-right:1px solid #e0e0e0;padding:15px;overflow-y:auto;display:flex;flex-direction:column;gap:0;}
+.canvas{padding:20px;overflow-y:auto;flex:1;}
+.full-canvas{padding:20px;overflow-y:auto;width:100%;}
+
+.sb-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#aaa;margin:13px 0 7px;border-top:1px solid #f0f0f0;padding-top:11px;}
+.sb-h:first-of-type{border-top:none;padding-top:0;margin-top:0;}
+.ctrl{display:flex;flex-direction:column;gap:3px;margin-bottom:9px;}
+.ctrl label{font-size:11.5px;color:#555;font-weight:600;}
+.ctrl input,.ctrl select,.ctrl textarea{padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;font-family:inherit;color:#1a1a2e;}
+.ctrl input:focus,.ctrl select:focus,.ctrl textarea:focus{outline:none;border-color:#1565C0;}
+
+/* ── Cards ── */
+.card{background:white;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:16px;overflow:hidden;}
+.card-hdr{padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between;}
+.card-hdr h2{font-size:14px;font-weight:700;}
+.card-body{padding:14px 16px;}
+
+/* ── Stat grid ── */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.stat-box{background:white;border-radius:9px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.stat-box .v{font-size:22px;font-weight:800;color:#1565C0;}
+.stat-box .l{font-size:10.5px;color:#888;margin-top:2px;}
+
+/* ── Schedule table ── */
+table.sch{width:100%;border-collapse:collapse;background:white;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);font-size:12px;}
+table.sch th{background:#1565C0;color:white;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;}
+table.sch td{padding:7px 10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;}
+table.sch tr:last-child td{border-bottom:none;}
+table.sch tr:hover td{background:#f8f9ff;}
+.cls-hdr td{background:#E3F2FD;color:#0D47A1;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #BBDEFB!important;}
+.brk-row td{background:#FFF8E1;color:#E65100;font-weight:600;text-align:center;border-bottom:1px solid #FFE082!important;}
+.awd-row td{background:#E8F5E9;color:#1B5E20;font-weight:700;text-align:center;border-bottom:1px solid #A5D6A7!important;}
+.fin-row td{background:#fafafe;}
+.host-row td{background:#EDE7F6!important;}
+.ab{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;color:white;font-size:10px;font-weight:800;}
+.ab-A{background:#1565C0;}.ab-B{background:#6A1B9A;}
+
+/* ── Class cards (schedule editor) ── */
+.cls-card{background:#f8f9fa;border:1px solid #e2e6ea;border-radius:8px;padding:10px 11px;cursor:grab;margin-bottom:4px;}
+.cls-card:active{cursor:grabbing;opacity:.7;}
+.cls-card.drag-over{background:#dbeafe;border-color:#93c5fd;}
+.cls-label-row{font-weight:700;font-size:13px;color:#1565C0;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.band-tbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:6px;}
+.band-tbl th{color:#bbb;font-weight:600;font-size:10px;text-transform:uppercase;padding:2px 4px;text-align:left;}
+.band-tbl td{padding:2px 4px;border-bottom:1px solid #f0f0f0;}
+.band-tbl tr:last-child td{border-bottom:none;}
+.band-tbl input{width:100%;border:1px solid #e0e0e0;border-radius:4px;padding:3px 5px;font-size:11.5px;font-family:inherit;}
+.band-tbl input:focus{outline:none;border-color:#1565C0;}
+.brk-card{background:#FFF8E1;border:1px dashed #FFD54F;border-radius:6px;padding:7px 11px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#E65100;margin-bottom:4px;}
+
+/* ── Volunteers ── */
+.vol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.vol-card{background:white;border:1px solid #e5e7eb;border-radius:9px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.vol-card-hdr{padding:8px 12px;font-weight:700;font-size:12px;color:white;display:flex;justify-content:space-between;align-items:center;}
+.vol-card-body{padding:10px 12px;}
+.vol-slot{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f5f5f5;font-size:12.5px;}
+.vol-slot:last-child{border-bottom:none;}
+.vol-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.dot-filled{background:#2E7D32;}
+.dot-empty{background:#e0e0e0;}
+.vol-name{flex:1;min-width:0;}
+.vol-name input{width:100%;border:none;font-family:inherit;font-size:12px;color:#333;background:transparent;padding:1px 2px;}
+.vol-name input:focus{outline:none;border-bottom:1px solid #1565C0;}
+.vol-pos{color:#888;font-size:11px;flex-shrink:0;}
+
+/* ── Check-in ── */
+.checkin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+.ci-card{background:white;border:1px solid #e5e7eb;border-radius:9px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);position:relative;}
+.ci-card.arrived{border-color:#A5D6A7;background:#F1F8E9;}
+.ci-card.warmup{border-color:#90CAF9;background:#E3F2FD;}
+.ci-card.performed{border-color:#CE93D8;background:#F3E5F5;opacity:.7;}
+.ci-badge{position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;}
+.badge-sched{background:#f0f0f0;color:#888;}
+.badge-arrived{background:#C8E6C9;color:#1B5E20;}
+.badge-warmup{background:#BBDEFB;color:#0D47A1;}
+.badge-performed{background:#E1BEE7;color:#6A1B9A;}
+.ci-band{font-weight:700;font-size:13px;margin-bottom:2px;}
+.ci-class{font-size:10.5px;color:#aaa;margin-bottom:6px;}
+.ci-time{font-size:12px;color:#555;}
+.ci-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;}
+
+/* ── Dashboard ── */
+.dash-now{background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;border-radius:12px;padding:18px 22px;margin-bottom:18px;}
+.dash-now h2{font-size:13px;opacity:.7;margin-bottom:4px;}
+.dash-now .current{font-size:22px;font-weight:800;}
+.dash-now .next{font-size:13px;opacity:.8;margin-top:4px;}
+.timeline{display:flex;flex-direction:column;gap:4px;}
+.tl-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;font-size:13px;background:white;border:1px solid #e5e7eb;}
+.tl-row.tl-past{opacity:.45;}
+.tl-row.tl-now{background:#E3F2FD;border-color:#90CAF9;font-weight:700;}
+.tl-row.tl-break{background:#FFF8E1;border-color:#FFE082;}
+.tl-time{font-size:12px;color:#888;width:60px;flex-shrink:0;}
+.tl-band{flex:1;}
+.tl-status{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;}
+
+/* ── Badge print ── */
+.badges-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:900px;}
+.badge-card{border:2px solid #1565C0;border-radius:12px;padding:14px;text-align:center;background:white;position:relative;aspect-ratio:2.125/3.375;}
+.badge-card .b-logo{font-size:28px;margin-bottom:6px;}
+.badge-card .b-event{font-size:9px;font-weight:700;color:#1565C0;text-transform:uppercase;letter-spacing:.08em;}
+.badge-card .b-date{font-size:8px;color:#888;margin-bottom:8px;}
+.badge-card .b-role{font-size:10px;font-weight:700;color:white;padding:2px 10px;border-radius:10px;margin-bottom:8px;display:inline-block;}
+.badge-card .b-name{font-size:16px;font-weight:800;margin-bottom:2px;}
+.badge-card .b-school{font-size:12px;color:#555;margin-bottom:4px;}
+.badge-card .b-class{font-size:10px;color:#888;}
+.badge-card .b-perform{font-size:13px;font-weight:700;color:#1565C0;margin-top:4px;}
+.badge-card .b-hole{width:16px;height:16px;border-radius:50%;border:2px solid #ccc;margin:0 auto 8px;}
+.badge-type-director .b-role{background:#1565C0;}
+.badge-type-volunteer .b-role{background:#2E7D32;}
+.badge-type-staff .b-role{background:#7B1FA2;}
+.badge-type-official .b-role{background:#E65100;}
+
+/* ── Modal ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:white;border-radius:12px;padding:22px;width:440px;max-width:96vw;box-shadow:0 8px 40px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto;}
+.modal h2{font-size:16px;font-weight:700;margin-bottom:14px;}
+.modal input,.modal select,.modal textarea{width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;margin-bottom:10px;}
+.modal input:focus,.modal select:focus{outline:none;border-color:#1565C0;}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:4px;}
+
+/* ── Print ── */
+@media print{
+  .topnav,.sidebar,.nav-actions,.ci-actions,.vol-card-hdr button,.no-print{display:none!important;}
+  .page{display:block!important;height:auto!important;overflow:visible!important;}
+  .sb-layout{display:block;}
+  .canvas,.full-canvas{padding:0;}
+  body{background:white;}
+
+  /* Badge print */
+  .badges-print-layout{display:grid!important;grid-template-columns:repeat(3,2.125in);gap:.125in;padding:.25in;}
+  .badge-card{width:2.125in;height:3.375in;page-break-inside:avoid;border:1px solid #999;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Top nav ── -->
+<div class="topnav">
+  <div class="brand"><img src="data:image/png;base64,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" style="height:28px;width:auto;filter:brightness(0) invert(1);margin-right:8px;vertical-align:middle;"/> TOC Event Manager<span>Estill County Marching Engineers</span></div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showPage('schedule')">📋 Schedule</div>
+    <div class="nav-tab" onclick="showPage('volunteers')">🙋 Volunteers</div>
+    <div class="nav-tab" onclick="showPage('checkin')">✅ Check-in</div>
+    <div class="nav-tab" onclick="showPage('dashboard')">📡 Day-of</div>
+    <div class="nav-tab" onclick="showPage('badges')">🪪 Badges</div>
+    <div class="nav-tab" onclick="showPage('parking')">🚌 Parking</div>
+  </div>
+  <div class="nav-actions" style="display:flex;align-items:center;gap:10px;">
+    <span id="save-indicator" style="font-size:11px;color:rgba(255,255,255,.5);">✓ Saved</span>
+    <button class="btn btn-outline" onclick="manualSync()" title="Sync with Google Sheets">⟳ Sync</button>
+    <button class="btn btn-outline" onclick="exportCSV()">⬇ CSV</button>
+    <button class="btn btn-outline" onclick="printSchedule()">🖨 Print schedule</button>
+    <button class="btn btn-outline" onclick="clearAll()" style="opacity:.6;" title="Reset all data">↺ Reset</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 1: SCHEDULE BUILDER
+══════════════════════════════════════════════════ -->
+<div class="page active" id="page-schedule">
+<div class="sb-layout">
+<div class="sidebar">
+  <div class="sb-h">Event settings</div>
+  <div class="ctrl"><label>Event name</label><input id="ev-name" value="Estill County Tournament of Champions" oninput="save()" onchange="save()"/></div>
+  <div class="ctrl"><label>Event date</label><input type="date" id="ev-date" value="2026-09-26" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Host school</label><input id="ev-host" value="Estill County" oninput="save()" onchange="save()"/></div>
+  <div class="ctrl"><label>Host director</label><input id="ev-host-dir" value="Jason Bowles" oninput="save()" onchange="save()"/></div>
+  <div class="ctrl"><label>First performance time</label><input type="time" id="start" value="11:00" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Minutes between performances</label><input type="number" id="gap" value="15" min="10" max="30" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Break duration (minutes)</label><input type="number" id="brklen" value="15" min="5" max="30" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Lead time: arrival → perform</label>
+    <select id="lead" oninput="rebuild();save()" onchange="rebuild();save()">
+      <option value="90">90 min</option>
+      <option value="75">75 min</option>
+      <option value="60">60 min</option>
+    </select>
+  </div>
+
+  <div class="sb-h" style="display:flex;align-items:center;justify-content:space-between;">
+    Classes &amp; bands
+    <button class="btn btn-blue btn-sm" onclick="addClass()">+ Class</button>
+  </div>
+  <p style="font-size:11px;color:#bbb;margin-bottom:8px;">Drag to reorder. Edit inline. Click ⏸ to add a break.</p>
+  <div id="sec-list"></div>
+
+  <div class="sb-h">Finals</div>
+  <div class="ctrl"><label>Finals start time</label><input type="time" id="fin-start" value="19:00" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Finalist slots (TBD)</label><input type="number" id="fin-count" value="10" min="1" max="20" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Break after finalist # (0 = none)</label><input type="number" id="fin-brk" value="5" min="0" max="20" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Awards delay after last perform (min)</label><input type="number" id="awd-gap" value="30" min="10" max="60" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+
+  <div class="sb-h">Summary</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="s-bands" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Bands</div>
+    </div>
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="s-brks" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Breaks</div>
+    </div>
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="s-pend" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Prelims end</div>
+    </div>
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="s-fend" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Finals end</div>
+    </div>
+  </div>
+</div>
+
+<div class="canvas">
+  <div style="font-size:18px;font-weight:800;margin-bottom:2px;" id="sch-title-display">Estill County Tournament of Champions</div>
+  <div style="font-size:13px;color:#666;margin-bottom:18px;" id="disp-date"></div>
+  <div id="sch-output"></div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 2: VOLUNTEERS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-volunteers">
+<div class="full-canvas">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div>
+      <div style="font-size:18px;font-weight:800;">Volunteer Assignments</div>
+      <div style="font-size:13px;color:#888;" id="vol-summary">Loading…</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-blue" onclick="openAddGroup()">+ Add area</button>
+      <button class="btn btn-outline" style="color:#333;border-color:#ddd;background:white;" onclick="printVolunteers()">🖨 Print assignments</button>
+    </div>
+  </div>
+  <div class="vol-grid" id="vol-grid"></div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 3: CHECK-IN
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-checkin">
+<div class="full-canvas">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div>
+      <div style="font-size:18px;font-weight:800;">Band Check-in</div>
+      <div style="font-size:13px;color:#888;" id="ci-summary">—</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-outline" style="color:#333;border-color:#ddd;background:white;" onclick="ciFilter='all';renderCheckin()">All</button>
+      <button class="btn btn-outline" style="color:#333;border-color:#ddd;background:white;" onclick="ciFilter='scheduled';renderCheckin()">Scheduled</button>
+      <button class="btn btn-outline" style="color:#2E7D32;border-color:#A5D6A7;background:#F1F8E9;" onclick="ciFilter='arrived';renderCheckin()">Arrived</button>
+      <button class="btn btn-outline" style="color:#0D47A1;border-color:#90CAF9;background:#E3F2FD;" onclick="ciFilter='warmup';renderCheckin()">Warm-up</button>
+      <button class="btn btn-outline" style="color:#6A1B9A;border-color:#CE93D8;background:#F3E5F5;" onclick="ciFilter='performed';renderCheckin()">Performed</button>
+    </div>
+  </div>
+  <div class="checkin-grid" id="ci-grid"></div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 4: DAY-OF DASHBOARD
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-dashboard">
+<div class="full-canvas">
+  <div class="dash-now" id="dash-now">
+    <div style="font-size:13px;opacity:.7;margin-bottom:4px;">Current time</div>
+    <div id="dash-clock" style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;">—</div>
+    <div id="dash-current" style="font-size:14px;opacity:.85;margin-top:6px;">—</div>
+    <div id="dash-next" style="font-size:12px;opacity:.65;margin-top:3px;">—</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">
+    <div class="stat-box"><div class="v" id="d-total">—</div><div class="l">Total bands</div></div>
+    <div class="stat-box"><div class="v" id="d-arrived" style="color:#2E7D32;">—</div><div class="l">Arrived</div></div>
+    <div class="stat-box"><div class="v" id="d-warmup" style="color:#1565C0;">—</div><div class="l">In warm-up</div></div>
+    <div class="stat-box"><div class="v" id="d-performed" style="color:#7B1FA2;">—</div><div class="l">Performed</div></div>
+  </div>
+  <div class="card">
+    <div class="card-hdr"><h2>Full timeline — Prelims</h2></div>
+    <div class="card-body" style="padding:8px;">
+      <div class="timeline" id="dash-timeline"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 5: BADGES
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-badges">
+<div class="sb-layout">
+<div class="sidebar">
+  <div class="sb-h">Badge settings</div>
+  <div class="ctrl"><label>Event name on badge</label><input id="bdg-event" value="Tournament of Champions" oninput="renderBadges()"/></div>
+  <div class="ctrl"><label>Event date on badge</label><input id="bdg-date" value="Saturday, September 26, 2026" oninput="renderBadges()"/></div>
+  <div class="ctrl"><label>Badge style</label>
+    <select id="bdg-style" onchange="renderBadges()">
+      <option value="color">Color by role</option>
+      <option value="blue">All blue</option>
+      <option value="bw">Black & white (print)</option>
+    </select>
+  </div>
+
+  <div class="sb-h">
+    Director badges
+    <span style="font-size:10px;color:#aaa;font-weight:400;text-transform:none;"> — auto-filled from schedule</span>
+  </div>
+  <p style="font-size:11px;color:#bbb;margin-bottom:8px;">Director badges are generated from bands in your schedule. Add directors on the Schedule page.</p>
+  <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+    <button class="btn btn-blue btn-sm" id="btn-dir-toggle" onclick="showDirBadges=!showDirBadges;this.style.opacity=showDirBadges?'1':'.5';renderBadges()">✓ Director badges</button>
+    <button class="btn btn-green btn-sm" id="btn-vol-toggle" onclick="showVolBadges=!showVolBadges;this.style.opacity=showVolBadges?'1':'.5';renderBadges()">✓ Volunteer badges</button>
+  </div>
+
+  <div class="sb-h">
+    Volunteer / staff badges
+    <button class="btn btn-blue btn-sm" style="margin-left:6px;" onclick="openAddBadge()">+ Add</button>
+  </div>
+  <div id="extra-badge-list" style="font-size:12px;color:#888;"></div>
+
+  <div class="sb-h">Print tips</div>
+  <p style="font-size:11px;color:#888;line-height:1.6;">
+    • Use <strong>card stock</strong> for best results<br>
+    • Set margins to <strong>minimum</strong> in print dialog<br>
+    • Badge size: <strong>2.125" × 3.375"</strong> (CR80)<br>
+    • Fits standard lanyard badge holders<br>
+    • 3 per row, prints on letter paper
+  </p>
+</div>
+
+<div class="canvas">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div style="font-size:18px;font-weight:800;">Badge Preview</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-blue" onclick="window.print()">🖨 Print fronts</button>
+      <button class="btn btn-outline" style="color:#1565C0;border-color:#1565C0;background:white;" onclick="printBadgeBacks()">🖨 Print backs (schedule)</button>
+    </div>
+  </div>
+  <div class="badges-grid" id="badges-grid"></div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 6: PARKING & BUS ASSIGNMENT
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-parking">
+<div class="sb-layout">
+<div class="sidebar">
+  <div class="sb-h">Parking lots
+    <button class="btn btn-blue btn-sm" style="margin-left:6px;" onclick="openAddLot()">+ Lot</button>
+  </div>
+  <div id="lot-list"></div>
+
+  <div class="sb-h">Summary</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="parking-stats">
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="ps-trailers" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Trailers</div>
+    </div>
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="ps-pit" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Pit equipment</div>
+    </div>
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="ps-trucks" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Equip. trucks</div>
+    </div>
+    <div class="stat-box" style="margin:0;box-shadow:none;background:#f0f4ff;border-radius:7px;padding:8px;text-align:center;">
+      <div class="v" id="ps-bands" style="font-size:17px;font-weight:800;color:#1565C0;">—</div>
+      <div class="l" style="font-size:10px;color:#888;">Bands</div>
+    </div>
+  </div>
+
+  <div class="sb-h" style="margin-top:16px;">Print options</div>
+  <div style="display:flex;flex-direction:column;gap:6px;">
+    <button class="btn btn-blue btn-sm" onclick="printGuideCards()" style="text-align:left;">🖨 Guide cards (one per band)</button>
+    <button class="btn btn-blue btn-sm" onclick="printParkingSheet()" style="text-align:left;">🖨 Parking crew master sheet</button>
+    <button class="btn btn-blue btn-sm" onclick="printBandVehicleList()" style="text-align:left;">🖨 Band vehicle list</button>
+  </div>
+</div>
+
+<div class="canvas">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div style="font-size:18px;font-weight:800;">Parking & Bus Assignment</div>
+    <div style="font-size:13px;color:#888;" id="parking-subtitle"></div>
+  </div>
+  <div id="parking-output"></div>
+</div>
+</div>
+</div>
+
+<!-- ── Add band modal ── -->
+<div class="modal-bg" id="band-modal">
+  <div class="modal">
+    <h2>Add band</h2>
+    <label style="font-size:12px;color:#555;font-weight:600;">Band / school name</label>
+    <input id="m-band" placeholder="e.g. Estill County"/>
+    <label style="font-size:12px;color:#555;font-weight:600;">Director name</label>
+    <input id="m-dir" placeholder="e.g. Jason Bowles"/>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('band-modal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveBandModal()">Add band</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add volunteer group modal ── -->
+<div class="modal-bg" id="vol-group-modal">
+  <div class="modal">
+    <h2>Add volunteer area</h2>
+    <label style="font-size:12px;color:#555;font-weight:600;">Area name (e.g. Gate, Parking, Hospitality)</label>
+    <input id="m-vg-name" placeholder="e.g. Gate Crew"/>
+    <label style="font-size:12px;color:#555;font-weight:600;">Color</label>
+    <select id="m-vg-color">
+      <option value="#1565C0">Blue</option>
+      <option value="#2E7D32">Green</option>
+      <option value="#7B1FA2">Purple</option>
+      <option value="#E65100">Orange</option>
+      <option value="#c62828">Red</option>
+      <option value="#00695C">Teal</option>
+      <option value="#558B2F">Olive</option>
+      <option value="#37474F">Slate</option>
+    </select>
+    <label style="font-size:12px;color:#555;font-weight:600;margin-top:4px;">Positions (one per line)</label>
+    <textarea id="m-vg-slots" rows="5" placeholder="Gate 1&#10;Gate 2&#10;Gate 3"></textarea>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('vol-group-modal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveVolGroup()">Add area</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add lot modal ── -->
+<div class="modal-bg" id="lot-modal">
+  <div class="modal">
+    <h2 id="lot-modal-title">Add parking lot</h2>
+    <label style="font-size:12px;color:#555;font-weight:600;">Lot name</label>
+    <input id="m-lot-name" placeholder="e.g. Lot A, South Field, Bus Loop"/>
+    <label style="font-size:12px;color:#555;font-weight:600;">Band capacity (equipment vehicles)</label>
+    <input id="m-lot-cap" type="number" placeholder="e.g. 20" min="1"/>
+    <label style="font-size:12px;color:#555;font-weight:600;">Notes / location description</label>
+    <input id="m-lot-notes" placeholder="e.g. Behind gym, entrance on Oak St"/>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('lot-modal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveLot()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit band parking modal ── -->
+<div class="modal-bg" id="band-parking-modal">
+  <div class="modal">
+    <h2 id="bp-title">Band parking details</h2>
+    <div class="ctrl">
+      <label style="font-size:12px;color:#555;font-weight:600;">Assign to lot</label>
+      <select id="bp-lot" style="width:100%;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;"></select>
+    </div>
+    <label style="font-size:12px;color:#555;font-weight:600;margin-top:8px;display:block;">Equipment vehicles</label>
+    <textarea id="bp-notes" rows="3" placeholder="e.g. 1 Semi Trailer, 1 Equipment Bus, 2 Flatbed Trailers&#10;Describe everything they're bringing" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;margin-bottom:4px;resize:vertical;"></textarea>
+    <div style="font-size:11px;color:#aaa;margin-bottom:8px;">Include equipment buses here if applicable</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="bp-trailer" style="width:auto;margin:0;"/> Has trailer
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="bp-pit" style="width:auto;margin:0;"/> Pit equipment
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="bp-truck" style="width:auto;margin:0;"/> Equip. vehicle
+      </label>
+    </div>
+    <label style="font-size:12px;color:#555;font-weight:600;">Assigned spot / row (fill in on arrival)</label>
+    <input id="bp-spot" placeholder="e.g. Row 3, Spots 1-2"/>
+    <label style="font-size:12px;color:#555;font-weight:600;margin-top:8px;display:block;">Guide assigned</label>
+    <input id="bp-guide" placeholder="Volunteer name"/>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('band-parking-modal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveBandParking()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add badge modal ── -->
+<div class="modal-bg" id="badge-modal">
+  <div class="modal">
+    <h2>Add badge</h2>
+    <label style="font-size:12px;color:#555;font-weight:600;">Name</label>
+    <input id="m-bdg-name" placeholder="Full name"/>
+    <label style="font-size:12px;color:#555;font-weight:600;">Role / title</label>
+    <input id="m-bdg-role" placeholder="e.g. Gate Captain, Press Box, Official"/>
+    <label style="font-size:12px;color:#555;font-weight:600;">Badge type</label>
+    <select id="m-bdg-type">
+      <option value="volunteer">Volunteer (green)</option>
+      <option value="staff">Staff (purple)</option>
+      <option value="official">Official (orange)</option>
+      <option value="director">Director (blue)</option>
+    </select>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('badge-modal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveExtraBadge()">Add badge</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  ESTILL COUNTY LOGO
+// ════════════════════════════════════════════════════════
+const EC_LOGO = 'data:image/png;base64,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';
+
+// ════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════
+let sections = [
+  {type:'class',id:'A1',   label:'Class A-1',  bands:[{name:'Casey County',dir:''},{name:'Lewis County',dir:''},{name:'Powell County',dir:''}]},
+  {type:'class',id:'A2',   label:'Class A-2',  bands:[{name:'Paris',dir:''},{name:'Danville',dir:''},{name:'Williamstown',dir:''},{name:'Lee County',dir:''}]},
+  {type:'class',id:'AA',   label:'Class AA',   bands:[{name:'Pulaski County',dir:''},{name:'Owen County',dir:''}]},
+  {type:'class',id:'AAA1', label:'Class AAA-1',bands:[{name:'South Laurel',dir:''},{name:'Boyle County',dir:''},{name:'Mercer County',dir:''}]},
+  {type:'class',id:'AAA2', label:'Class AAA-2',bands:[{name:'Garrard County',dir:''},{name:'Bourbon County',dir:''},{name:'Madison Southern',dir:''}]},
+  {type:'class',id:'AAAAA',label:'Class AAAAA',bands:[{name:'Henry Clay',dir:''},{name:'Tates Creek',dir:''},{name:'Madison Central',dir:''}]},
+];
+let volunteers = [
+  {name:'Gate & Entry',color:'#1565C0',slots:[{pos:'Gate 1 - Main',vol:''},{pos:'Gate 2 - East',vol:''},{pos:'Gate 3 - West',vol:''},{pos:'Ticket booth 1',vol:''},{pos:'Ticket booth 2',vol:''}]},
+  {name:'Parking',color:'#E65100',slots:[{pos:'Lot A director',vol:''},{pos:'Lot B director',vol:''},{pos:'Lot C director',vol:''},{pos:'Traffic control',vol:''}]},
+  {name:'Hospitality',color:'#2E7D32',slots:[{pos:'Director hospitality',vol:''},{pos:'Food setup',vol:''},{pos:'Food service',vol:''},{pos:'Director escort 1',vol:''},{pos:'Director escort 2',vol:''}]},
+  {name:'Field & Pit',color:'#7B1FA2',slots:[{pos:'Field crew 1',vol:''},{pos:'Field crew 2',vol:''},{pos:'Field crew 3',vol:''},{pos:'Pit crew 1',vol:''},{pos:'Pit crew 2',vol:''}]},
+  {name:'Warm-up Areas',color:'#00695C',slots:[{pos:'Area A supervisor',vol:''},{pos:'Area A monitor',vol:''},{pos:'Area B supervisor',vol:''},{pos:'Area B monitor',vol:''}]},
+  {name:'Press Box',color:'#37474F',slots:[{pos:'Announcer',vol:''},{pos:'Scorekeeper',vol:''},{pos:'Music coordinator',vol:''},{pos:'Timer',vol:''}]},
+  {name:'Guides',color:'#558B2F',slots:[{pos:'Guide 1',vol:''},{pos:'Guide 2',vol:''},{pos:'Guide 3',vol:''},{pos:'Guide 4',vol:''},{pos:'Guide 5',vol:''},{pos:'Guide 6',vol:''}]},
+];
+let checkinStatus = {}; // band name -> 'scheduled'|'arrived'|'warmup'|'performed'
+let extraBadges   = [];
+let showDirBadges = true;
+let showVolBadges = true;
+// Default parking data — only used if nothing is saved yet
+const DEFAULT_PARKING_LOTS = [
+  {id:'lot1', name:'Lot A', capacity:20, notes:''},  
+  {id:'lot2', name:'Lot B', capacity:20, notes:''},
+  {id:'lot3', name:'Pit/Equipment Area', capacity:30, notes:'For trailers and equipment trucks'},
+];
+
+const DEFAULT_BAND_PARKING = {
+  'Williamstown':   {vehicles:'1 Semi Trailer', trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:'1 Semi Trailer'},
+  'Mercer County':  {vehicles:'3 Box Trailers, 3 Flatbed Trailers', trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:'3 Box Trailers, 3 Flatbed Trailers'},
+  'Paris':          {vehicles:'1 Box Trailer, 2 Flatbed Trailers, 1 Food Car', trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:'1 Box Trailer, 2 Flatbed Trailers, 1 Food Car'},
+  'South Laurel':   {vehicles:"1 Semi, 1 Trailer (24'), 1 Equipment Van, 2 Small Trailers", trailer:true, pit:true, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Pulaski County': {vehicles:'3 Trailers', trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Danville':       {vehicles:'1 Semi, 1 Trailer, 3 Support Vehicles', trailer:true, pit:false, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Casey County':   {vehicles:"2 Box Trailers (20')", trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Powell County':  {vehicles:"1 Equipment Bus, 1 Box Trailer, 1 Flatbed Trailer", trailer:true, pit:false, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Lee County':     {vehicles:'3 Trailers, 1 Equipment Van', trailer:true, pit:false, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Henry Clay':     {vehicles:'1 Semi, 1 Equipment Trailer', trailer:true, pit:true, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Boyle County':   {vehicles:"3 UHAULs (36'), 3 Trailers (45')", trailer:true, pit:true, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Bourbon County': {vehicles:"1 Semi, 2 Trailers (24'), 1 Trailer (16')", trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Lewis County':   {vehicles:'1 Semi Trailer', trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Owen County':    {vehicles:'2 Trailers, 3 Support Vehicles', trailer:true, pit:false, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Garrard County': {vehicles:'1 Semi, 2 Flatbed Trailers', trailer:true, pit:false, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Tates Creek':    {vehicles:'1 Semi, 1 Box Truck, 1 Personal Vehicle', trailer:true, pit:false, truck:true, lot:'', spot:'', guide:'', notes:''},
+  'Madison Central':{vehicles:"2 Box Trailers (26'), 1 Box Trailer (12'), 1 Flatbed", trailer:true, pit:true, truck:false, lot:'', spot:'', guide:'', notes:''},
+  'Madison Southern':{vehicles:"1 Semi, 1 Box Trailer (24'), 1 Utility Trailer, 2 Food Vehicles", trailer:true, pit:false, truck:true, lot:'', spot:'', guide:'', notes:''},
+};
+
+// Live state — populated from saved data, falls back to defaults if empty
+let parkingLots = [];
+let bandParking = {};
+
+// Director info
+const DIRECTORS = {
+  'Williamstown':   {name:'Jake McClain',      email:'jacob.mcclain@williamstown.kyschools.us'},
+  'Mercer County':  {name:'Erica Ashford',     email:'erica.ashford@mercer.kyschools.us'},
+  'Paris':          {name:'John Merz',         email:'john.merz@paris.kyschools.us'},
+  'South Laurel':   {name:'Alex Dietz',        email:'alexmdietz@gmail.com'},
+  'Pulaski County': {name:'James Sayers',      email:'james.sayers@pulaski.kyschools.us'},
+  'Danville':       {name:'Jeff Towns',        email:'jeff.towns@danville.kyschools.us'},
+  'Casey County':   {name:'Isaac Sparks',      email:'isaac.sparks@casey.kyschools.us'},
+  'Powell County':  {name:'Patrick Howell',    email:'patrick.howell@powell.kyschools.us'},
+  'Lee County':     {name:'Tony Barrett',      email:'tony.barrett@lee.kyschools.us'},
+  'Henry Clay':     {name:'William Kite',      email:'william.kite@fayette.kyschools.us'},
+  'Boyle County':   {name:'Gabe Holman',       email:'gabe.holman@boyle.kyschools.us'},
+  'Bourbon County': {name:'Eric Hale',         email:'eric.hale@bourbon.kyschools.us'},
+  'Lewis County':   {name:'Erin Choi',         email:'erin.choi@lewis.kyschools.us'},
+  'Owen County':    {name:'Cade Jenkins',      email:'cade.jenkins@owen.kyschools.us'},
+  'Garrard County': {name:'Jordan Humphress',  email:'jordan.humphress@garrard.kyschools.us'},
+  'Tates Creek':    {name:'Aaron Cunningham',  email:'aaron.cunningham@fayette.kyschools.us'},
+  'Madison Central':{name:'David Jaggie',      email:'robert.jaggie@madison.kyschools.us'},
+  'Madison Southern':{name:'Martina Sanders',  email:'martina.sanders@madison.kyschools.us'},
+};
+let ciFilter      = 'all';
+let _modalSec     = -1;
+let _scheduleRows = []; // cached for dashboard/checkin
+
+// ════════════════════════════════════════════════════════
+//  PERSISTENCE — Google Sheets via Cadence Apps Script
+// ════════════════════════════════════════════════════════
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec';
+
+let _saveTimer = null;
+let _saving = false;
+let _saveStatus = 'saved'; // 'saved'|'saving'|'unsaved'
+
+function setSaveStatus(s){
+  _saveStatus=s;
+  const el=document.getElementById('save-indicator');
+  if(!el) return;
+  if(s==='saving') { el.textContent='💾 Saving…'; el.style.color='rgba(255,255,255,.6)'; }
+  else if(s==='saved') { el.textContent='✓ Saved'; el.style.color='rgba(255,255,255,.5)'; }
+  else { el.textContent='● Unsaved'; el.style.color='#FFD54F'; }
+}
+
+async function apiCall(params){
+  const url=SCRIPT_URL+'?'+new URLSearchParams(params).toString();
+  const res=await fetch(url,{
+    method:'GET',
+    redirect:'follow'
+  });
+  const text=await res.text();
+  try{ return JSON.parse(text); }
+  catch(e){ console.error('API parse error:',text.substring(0,200)); throw new Error('Server response was not JSON'); }
+}
+
+function getSettings(){
+  const settings={};
+  ['ev-name','ev-date','ev-host','ev-host-dir','start','gap','brklen','lead','fin-start','fin-count','fin-brk','awd-gap'].forEach(id=>{
+    const el=document.getElementById(id); if(el) settings[id]=el.value;
+  });
+  return settings;
+}
+
+function save(){
+  // Also save to localStorage as fallback
+  try {
+    localStorage.setItem('toc_sections',   JSON.stringify(sections));
+    localStorage.setItem('toc_volunteers', JSON.stringify(volunteers));
+    localStorage.setItem('toc_checkin',    JSON.stringify(checkinStatus));
+    localStorage.setItem('toc_badges',     JSON.stringify(extraBadges));
+    localStorage.setItem('toc_settings',   JSON.stringify(getSettings()));
+    localStorage.setItem('toc_lots',       JSON.stringify(parkingLots));
+    localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
+  } catch(e){}
+
+  setSaveStatus('unsaved');
+  // Debounce — wait 1.5s after last change before saving to Sheets
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(pushToSheets, 1500);
+}
+
+async function manualSync(){
+  showToast('Syncing with Google Sheets…');
+  await load();
+  renderSidebar();
+  rebuild();
+  renderVolunteers();
+}
+
+async function pushToSheets(){
+  if(_saving) return;
+  _saving=true;
+  setSaveStatus('saving');
+  try {
+    await apiCall({
+      action:      'toc_save',
+      sections:    JSON.stringify(sections),
+      volunteers:  JSON.stringify(volunteers),
+      checkin:     JSON.stringify(checkinStatus),
+      badges:      JSON.stringify(extraBadges),
+      settings:    JSON.stringify(getSettings()),
+      lots:        JSON.stringify(parkingLots),
+      parking:     JSON.stringify(bandParking),
+    });
+    setSaveStatus('saved');
+  } catch(e){
+    setSaveStatus('unsaved');
+    console.warn('TOC save failed, using localStorage fallback:', e);
+  }
+  _saving=false;
+}
+
+async function load(){
+  showToast('Loading data…');
+  setSaveStatus('saving');
+  // Try Google Sheets first with timeout
+  try {
+    const fetchPromise = apiCall({action:'toc_load'});
+    const timeoutPromise = new Promise((_,reject) => setTimeout(()=>reject(new Error('timeout')), 12000));
+    const res = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if(res.success && res.data && Object.keys(res.data).length>0){
+      const d=res.data;
+      if(d.sections)   sections = Array.isArray(d.sections)   ? d.sections   : JSON.parse(d.sections);
+      if(d.volunteers) volunteers= Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
+      if(d.checkin)    checkinStatus = (typeof d.checkin==='object' && !Array.isArray(d.checkin)) ? d.checkin : JSON.parse(d.checkin||'{}');
+      if(d.badges)     extraBadges  = Array.isArray(d.badges)   ? d.badges     : JSON.parse(d.badges||'[]');
+      if(d.lots){
+        const l = Array.isArray(d.lots) ? d.lots : JSON.parse(d.lots||'[]');
+        parkingLots = l.length > 0 ? l : DEFAULT_PARKING_LOTS;
+      } else { parkingLots = DEFAULT_PARKING_LOTS; }
+      if(d.parking){
+        const p = (typeof d.parking==='object'&&!Array.isArray(d.parking)) ? d.parking : JSON.parse(d.parking||'{}');
+        bandParking = Object.keys(p).length > 0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING));
+      } else { bandParking = JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
+      if(d.settings){
+        const s = typeof d.settings==='object' ? d.settings : JSON.parse(d.settings||'{}');
+        Object.keys(s).forEach(id=>{
+          const el=document.getElementById(id); if(el) el.value=s[id];
+        });
+      }
+      // Also update localStorage as cache
+      try {
+        localStorage.setItem('toc_sections',   JSON.stringify(sections));
+        localStorage.setItem('toc_volunteers', JSON.stringify(volunteers));
+        localStorage.setItem('toc_checkin',    JSON.stringify(checkinStatus));
+        localStorage.setItem('toc_badges',     JSON.stringify(extraBadges));
+        if(d.settings) localStorage.setItem('toc_settings', JSON.stringify(typeof d.settings==='object'?d.settings:JSON.parse(d.settings)));
+      } catch(e){}
+      setSaveStatus('saved');
+      showToast('✓ Synced with Google Sheets');
+      return;
+    } else {
+      // Sheets returned empty — try localStorage
+      throw new Error('No data in Sheets');
+    }
+  } catch(e){
+    console.warn('Sheets load failed:', e.message);
+    showToast('Sheets unavailable — using local cache');
+    setSaveStatus('unsaved');
+  }
+
+  // Fall back to localStorage cache
+  try {
+    const sec=localStorage.getItem('toc_sections');    if(sec)  sections=JSON.parse(sec);
+    const vol=localStorage.getItem('toc_volunteers');  if(vol)  volunteers=JSON.parse(vol);
+    const ci =localStorage.getItem('toc_checkin');     if(ci)   checkinStatus=JSON.parse(ci);
+    const bdg=localStorage.getItem('toc_badges');      if(bdg)  extraBadges=JSON.parse(bdg);
+    const lts=localStorage.getItem('toc_lots');
+    if(lts){ const l=JSON.parse(lts); parkingLots = l.length>0 ? l : DEFAULT_PARKING_LOTS; }
+    else { parkingLots = DEFAULT_PARKING_LOTS; }
+    const prk=localStorage.getItem('toc_parking');
+    if(prk){ const p=JSON.parse(prk); bandParking = Object.keys(p).length>0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
+    else { bandParking = JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
+    const set=localStorage.getItem('toc_settings');
+    if(set){
+      const s=JSON.parse(set);
+      Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
+    }
+    if(sec) {
+      showToast('⚠ Using cached data — check your connection');
+    } else {
+      showToast('Starting fresh — no saved data found');
+    }
+  } catch(e){ console.warn('localStorage load failed:', e); }
+}
+
+async function clearAll(){
+  if(!confirm('Reset ALL event data? This cannot be undone.')) return;
+  sections=[]; volunteers=[]; checkinStatus={}; extraBadges={};
+  try { await apiCall({action:'toc_save',sections:'[]',volunteers:'[]',checkin:'{}',badges:'[]',settings:'{}'}); }catch(e){}
+  localStorage.clear();
+  location.reload();
+}
+
+function showToast(msg){
+  let t=document.getElementById('toc-toast');
+  if(!t){ t=document.createElement('div'); t.id='toc-toast';
+    t.style.cssText='position:fixed;bottom:20px;right:20px;background:#333;color:white;padding:10px 16px;border-radius:8px;font-size:13px;z-index:999;transition:opacity .3s;';
+    document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1';
+  setTimeout(()=>{ t.style.opacity='0'; },2500);
+}
+
+// ════════════════════════════════════════════════════════
+//  PAGE SWITCHING
+// ════════════════════════════════════════════════════════
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if(id==='volunteers') renderVolunteers();
+  if(id==='checkin')    renderCheckin();
+  if(id==='dashboard')  renderDashboard();
+  if(id==='badges')     renderBadges();
+  if(id==='parking')    renderParking();
+}
+
+// ════════════════════════════════════════════════════════
+//  TIME UTILS
+// ════════════════════════════════════════════════════════
+const parseT = s=>{ const [h,m]=s.split(':').map(Number); return h*60+m; };
+const addM   = (b,d)=>b+d;
+const fmt    = m=>{
+  const tot=((m%1440)+1440)%1440;
+  let h=Math.floor(tot/60),mn=tot%60;
+  const ap=h>=12?'PM':'AM';
+  if(h>12)h-=12; if(h===0)h=12;
+  return h+':'+String(mn).padStart(2,'0')+' '+ap;
+};
+const fmtDate=v=>{ try{ const d=new Date(v+'T12:00:00'); return d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }catch(e){return v;} };
+const nowMins=()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes(); };
+
+// ════════════════════════════════════════════════════════
+//  SCHEDULE SIDEBAR
+// ════════════════════════════════════════════════════════
+function renderSidebar(){
+  const el=document.getElementById('sec-list');
+  el.innerHTML='';
+  sections.forEach((sec,si)=>{
+    if(sec.type==='break'){
+      const d=document.createElement('div');
+      d.className='brk-card';
+      d.innerHTML='⏸ '+(document.getElementById('brklen')?.value||15)+'-min break'+
+        '<button class="btn btn-xs btn-red" onclick="rmSec('+si+')">×</button>';
+      el.appendChild(d);
+    } else {
+      const d=document.createElement('div');
+      d.className='cls-card';
+      d.draggable=true;
+      d.dataset.si=si;
+      let bt='';
+      sec.bands.forEach((b,bi)=>{
+        bt+=`<tr>
+          <td style="color:#bbb;width:16px;font-size:10px;">${bi+1}</td>
+          <td><input value="${escHtml(b.name)}" placeholder="Band" oninput="upBand(${si},${bi},'name',this.value);save()" onchange="upBand(${si},${bi},'name',this.value);save()" onblur="rebuild()"/></td>
+          <td><input value="${escHtml(b.dir)}" placeholder="Director" oninput="upBand(${si},${bi},'dir',this.value);save()" onchange="upBand(${si},${bi},'dir',this.value);save()" onblur="rebuild()"/></td>
+          <td><button class="btn btn-xs btn-red" onclick="rmBand(${si},${bi})">×</button></td>
+        </tr>`;
+      });
+      d.innerHTML=
+        '<div class="cls-label-row">'+
+          '<span style="color:#ccc;font-size:14px;cursor:grab;">⠿</span>'+
+          '<input value="'+escHtml(sec.label)+'" style="border:none;background:transparent;font-weight:700;font-size:13px;color:#1565C0;font-family:inherit;width:130px;padding:0;" oninput="upLabel('+si+',this.value);save()" onchange="upLabel('+si+',this.value);save()" onblur="rebuild()"/>'+
+          '<span style="margin-left:auto;display:flex;gap:4px;">'+
+            '<button class="btn btn-blue btn-xs" onclick="openAddBand('+si+')">+</button>'+
+            '<button class="btn btn-xs" style="background:#FFF8E1;color:#E65100;border:1px solid #FFD54F;" onclick="addBrk('+si+')" title="Add break after">⏸</button>'+
+            '<button class="btn btn-xs btn-red" onclick="rmSec('+si+')">×</button>'+
+          '</span>'+
+        '</div>'+
+        '<table class="band-tbl"><thead><tr><th>#</th><th>Band</th><th>Director</th><th></th></tr></thead><tbody>'+bt+'</tbody></table>';
+      d.addEventListener('dragstart',e=>{ e.dataTransfer.setData('si',''+si); d.style.opacity='.5'; });
+      d.addEventListener('dragend',  ()=>{ d.style.opacity='1'; });
+      d.addEventListener('dragover', e=>{ e.preventDefault(); d.classList.add('drag-over'); });
+      d.addEventListener('dragleave',()=>{ d.classList.remove('drag-over'); });
+      d.addEventListener('drop',     e=>{ e.preventDefault(); d.classList.remove('drag-over'); const f=parseInt(e.dataTransfer.getData('si')); if(f!==si)move(f,si); });
+      el.appendChild(d);
+    }
+  });
+}
+const escHtml=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function upLabel(si,v){ sections[si].label=v; }
+function upBand(si,bi,f,v){ sections[si].bands[bi][f]=v; }
+function rmBand(si,bi){ sections[si].bands.splice(bi,1); renderSidebar(); rebuild(); save(); }
+function addBrk(si){ sections.splice(si+1,0,{type:'break'}); renderSidebar(); rebuild(); save(); }
+function rmSec(si){ sections.splice(si,1); renderSidebar(); rebuild(); save(); }
+function move(f,t){ const x=sections.splice(f,1)[0]; sections.splice(t,0,x); renderSidebar(); rebuild(); save(); }
+function addClass(){ const l=prompt('Class label:','Class'); if(l){ sections.push({type:'class',id:'c'+Date.now(),label:l,bands:[]}); renderSidebar(); rebuild(); save(); } }
+let _msi=-1;
+function openAddBand(si){ _msi=si; document.getElementById('m-band').value=''; document.getElementById('m-dir').value=''; openModal('band-modal'); setTimeout(()=>document.getElementById('m-band').focus(),100); }
+function saveBandModal(){
+  const n=document.getElementById('m-band').value.trim();
+  const d=document.getElementById('m-dir').value.trim();
+  if(!n) return;
+  sections[_msi].bands.push({name:n,dir:d});
+  closeModal('band-modal'); renderSidebar(); rebuild(); save();
+}
+
+// ════════════════════════════════════════════════════════
+//  SCHEDULE BUILDER
+// ════════════════════════════════════════════════════════
+function rebuild(){
+  const start   =parseT(document.getElementById('start')?.value||'11:00');
+  const gap     =parseInt(document.getElementById('gap')?.value)||15;
+  const brkLen  =parseInt(document.getElementById('brklen')?.value)||15;
+  const lead    =parseInt(document.getElementById('lead')?.value)||90;
+  const awdGap  =parseInt(document.getElementById('awd-gap')?.value)||30;
+  const finCnt  =parseInt(document.getElementById('fin-count')?.value)||10;
+  const finBrk  =parseInt(document.getElementById('fin-brk')?.value)||5;
+  const finStart=parseT(document.getElementById('fin-start')?.value||'19:00');
+  const evDate  =document.getElementById('ev-date')?.value||'';
+  const evName  =document.getElementById('ev-name')?.value||'Tournament of Champions';
+  const host    =document.getElementById('ev-host')?.value||'Estill County';
+  const hostDir =document.getElementById('ev-host-dir')?.value||'';
+
+  const dEl=document.getElementById('disp-date');
+  if(dEl) dEl.textContent=fmtDate(evDate);
+  const tEl=document.getElementById('sch-title-display');
+  if(tEl) tEl.textContent=evName;
+
+  const areas=['A','B'];
+  let cur=start,aIdx=0,totalBands=0,totalBrks=0;
+  let rows=[];
+
+  rows.push({t:'sec-hdr',label:'PRELIMS', logo:true});
+  rows.push({t:'col-hdr'});
+
+  sections.forEach(sec=>{
+    if(sec.type==='break'){
+      rows.push({t:'brk',time:fmt(cur),len:brkLen,mins:cur});
+      cur=addM(cur,brkLen); totalBrks++;
+    } else {
+      if(!sec.bands?.length) return;
+      rows.push({t:'cls-hdr',label:sec.label,cls:sec.id});
+      sec.bands.forEach((b,bi)=>{
+        totalBands++;
+        const area=areas[aIdx%2]; aIdx++;
+        const perf=cur;
+        rows.push({
+          t:'band',draw:bi+1,band:b.name||'TBD',dir:b.dir||'',area,
+          arrival:fmt(addM(perf,-lead)),
+          dress:  fmt(addM(perf,-lead+45)),
+          warmup: fmt(addM(perf,-30)),
+          travel: fmt(addM(perf,-10)),
+          gate:   fmt(addM(perf,-5)),
+          perform:fmt(perf), performMins:perf,
+        });
+        cur=addM(cur,gap);
+      });
+    }
+  });
+
+  const prelEnd=addM(cur-gap,awdGap);
+  rows.push({t:'awd',label:'PRELIM AWARDS',time:fmt(prelEnd)});
+  rows.push({t:'spacer'});
+  rows.push({t:'sec-hdr',label:'FINALS'});
+  rows.push({t:'col-hdr-fin'});
+
+  let fc=finStart,faIdx=0;
+  for(let i=1;i<=finCnt;i++){
+    if(finBrk>0&&i===finBrk+1){ rows.push({t:'brk',time:fmt(fc),len:brkLen}); fc=addM(fc,brkLen); }
+    const fa=areas[faIdx%2]; faIdx++;
+    rows.push({t:'fin-band',draw:i,band:'—',dir:'',area:fa,
+      arrival:fmt(addM(fc,-lead)),dress:fmt(addM(fc,-60)),warmup:fmt(addM(fc,-30)),
+      travel:fmt(addM(fc,-10)),gate:fmt(addM(fc,-5)),perform:fmt(fc)});
+    fc=addM(fc,gap);
+  }
+  rows.push({t:'fin-band',draw:'HOST',band:host,dir:hostDir,area:'B',host:true,
+    arrival:'—',dress:fmt(addM(fc,-60)),warmup:fmt(addM(fc,-30)),
+    travel:fmt(addM(fc,-10)),gate:fmt(addM(fc,-5)),perform:fmt(fc)});
+  fc=addM(fc,gap);
+  rows.push({t:'awd',label:'FINALS AWARDS',time:fmt(addM(fc-gap,awdGap))});
+
+  _scheduleRows=rows;
+
+  const sbEl=document.getElementById('s-bands'); if(sbEl) sbEl.textContent=totalBands;
+  const brEl=document.getElementById('s-brks');  if(brEl) brEl.textContent=totalBrks;
+  const peEl=document.getElementById('s-pend');  if(peEl) peEl.textContent=fmt(prelEnd);
+  const feEl=document.getElementById('s-fend');  if(feEl) feEl.textContent=fmt(addM(fc-gap,awdGap));
+
+  renderTable(rows);
+}
+
+function renderTable(rows){
+  const C=['Draw','Band','Director','Arrival','Dress','Warm-up','Area','Travel','Gate','Perform'];
+  let h='<table class="sch">';
+  rows.forEach(r=>{
+    if(r.t==='sec-hdr'){
+      h+='<tr><td colspan="10" style="background:#1a1a2e;color:white;font-weight:800;font-size:14px;letter-spacing:.12em;text-align:center;padding:12px;">'+r.label+'</td></tr>';
+    }else if(r.t==='col-hdr'||r.t==='col-hdr-fin'){
+      h+='<tr>'+C.map(c=>'<th>'+c+'</th>').join('')+'</tr>';
+    }else if(r.t==='cls-hdr'){
+      h+='<tr class="cls-hdr"><td colspan="10">'+r.label+'</td></tr>';
+    }else if(r.t==='brk'){
+      h+='<tr class="brk-row"><td colspan="10">⏸ &nbsp;'+r.len+'-MINUTE BREAK &nbsp;–&nbsp; '+r.time+'</td></tr>';
+    }else if(r.t==='awd'){
+      h+='<tr class="awd-row"><td colspan="10"><img src="'+EC_LOGO+'" style="height:16px;width:auto;vertical-align:middle;margin-right:6px;filter:brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(400%) hue-rotate(188deg);"/>'+r.label+' &nbsp;–&nbsp; '+r.time+'</td></tr>';
+    }else if(r.t==='spacer'){
+      h+='<tr><td colspan="10" style="padding:0;height:8px;background:#f0f2f5;"></td></tr>';
+    }else if(r.t==='band'||r.t==='fin-band'){
+      const ab='<span class="ab ab-'+r.area+'">'+r.area+'</span>';
+      const tc=(r.t==='fin-band'?'fin-row':'')+(r.host?' host-row':'');
+      h+='<tr class="'+tc+'">'+
+        '<td style="font-weight:700;color:#1565C0;">'+r.draw+'</td>'+
+        '<td style="font-weight:600;">'+escHtml(r.band)+'</td>'+
+        '<td style="color:#777;font-size:11.5px;">'+escHtml(r.dir)+'</td>'+
+        '<td>'+r.arrival+'</td><td>'+r.dress+'</td><td>'+r.warmup+'</td>'+
+        '<td style="text-align:center;">'+ab+'</td>'+
+        '<td>'+r.travel+'</td><td>'+r.gate+'</td>'+
+        '<td style="font-weight:700;color:#1565C0;">'+r.perform+'</td>'+
+      '</tr>';
+    }
+  });
+  h+='</table>';
+  const out=document.getElementById('sch-output');
+  if(out) out.innerHTML=h;
+}
+
+// ════════════════════════════════════════════════════════
+//  VOLUNTEERS
+// ════════════════════════════════════════════════════════
+function renderVolunteers(){
+  const grid=document.getElementById('vol-grid');
+  if(!grid) return;
+  const total=volunteers.reduce((s,g)=>s+g.slots.length,0);
+  const filled=volunteers.reduce((s,g)=>s+g.slots.filter(s=>s.vol.trim()).length,0);
+  const sumEl=document.getElementById('vol-summary');
+  if(sumEl) sumEl.textContent=filled+' of '+total+' positions filled';
+
+  grid.innerHTML='';
+  volunteers.forEach((grp,gi)=>{
+    const card=document.createElement('div');
+    card.className='vol-card';
+    let slots='';
+    grp.slots.forEach((sl,si)=>{
+      const filled=sl.vol.trim().length>0;
+      slots+=`<div class="vol-slot">
+        <div class="vol-dot ${filled?'dot-filled':'dot-empty'}" id="vdot-${gi}-${si}"></div>
+        <div class="vol-name"><input value="${escHtml(sl.vol)}" placeholder="${escHtml(sl.pos)}"
+          oninput="volunteers[${gi}].slots[${si}].vol=this.value;save();updateVolDot(${gi},${si},this.value)"
+          onblur="renderVolunteers()"
+          style="font-size:12.5px;"/></div>
+        <div class="vol-pos">${escHtml(sl.pos)}</div>
+        <button class="btn btn-xs btn-red" onclick="rmVolSlot(${gi},${si})" style="margin-left:4px;">×</button>
+      </div>`;
+    });
+    card.innerHTML=
+      '<div class="vol-card-hdr" style="background:'+grp.color+';">'+
+        '<span>'+escHtml(grp.name)+'</span>'+
+        '<div style="display:flex;gap:5px;">'+
+          '<button class="btn btn-xs" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);" onclick="addVolSlot('+gi+')">+ slot</button>'+
+          '<button class="btn btn-xs btn-red" onclick="rmVolGroup('+gi+')" style="background:rgba(0,0,0,.2);border:none;">×</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="vol-card-body">'+slots+'</div>';
+    grid.appendChild(card);
+  });
+}
+function updateVolDot(gi,si,val){
+  // Update just the dot color without re-rendering the whole grid
+  var dot=document.getElementById('vdot-'+gi+'-'+si);
+  if(dot){ dot.className='vol-dot '+(val.trim()?'dot-filled':'dot-empty'); }
+}
+
+function addVolSlot(gi){
+  const pos=prompt('Position name:','');
+  if(pos!==null&&pos.trim()){ volunteers[gi].slots.push({pos:pos.trim(),vol:''}); save(); renderVolunteers(); }
+}
+function rmVolSlot(gi,si){ volunteers[gi].slots.splice(si,1); save(); renderVolunteers(); }
+function rmVolGroup(gi){ if(confirm('Remove this volunteer area?')){ volunteers.splice(gi,1); save(); renderVolunteers(); } }
+function openAddGroup(){ document.getElementById('m-vg-name').value=''; document.getElementById('m-vg-slots').value=''; openModal('vol-group-modal'); }
+function saveVolGroup(){
+  const name=document.getElementById('m-vg-name').value.trim();
+  const color=document.getElementById('m-vg-color').value;
+  const slots=document.getElementById('m-vg-slots').value.split('\n').map(s=>s.trim()).filter(Boolean).map(pos=>({pos,vol:''}));
+  if(!name) return;
+  volunteers.push({name,color,slots});
+  closeModal('vol-group-modal'); save(); renderVolunteers();
+}
+function printVolunteers(){
+  window.print();
+}
+
+// ════════════════════════════════════════════════════════
+//  CHECK-IN
+// ════════════════════════════════════════════════════════
+function getBands(){
+  const bands=[];
+  let cls='';
+  _scheduleRows.forEach(r=>{
+    if(r.t==='cls-hdr') cls=r.label;
+    if(r.t==='band') bands.push({...r,cls});
+  });
+  return bands;
+}
+function renderCheckin(){
+  const grid=document.getElementById('ci-grid');
+  if(!grid) return;
+  const bands=getBands();
+  const filtered=ciFilter==='all'?bands:bands.filter(b=>(checkinStatus[b.band]||'scheduled')===ciFilter);
+  const total=bands.length;
+  const arrived=bands.filter(b=>['arrived','warmup','performed'].includes(checkinStatus[b.band]||'')).length;
+  const warmup=bands.filter(b=>(checkinStatus[b.band]||'')==='warmup').length;
+  const performed=bands.filter(b=>(checkinStatus[b.band]||'')==='performed').length;
+  const sumEl=document.getElementById('ci-summary');
+  if(sumEl) sumEl.textContent=arrived+' arrived · '+warmup+' in warm-up · '+performed+' performed of '+total+' bands';
+  const dT=document.getElementById('d-total'),dA=document.getElementById('d-arrived'),dW=document.getElementById('d-warmup'),dP=document.getElementById('d-performed');
+  if(dT) dT.textContent=total;
+  if(dA) dA.textContent=arrived;
+  if(dW) dW.textContent=warmup;
+  if(dP) dP.textContent=performed;
+
+  grid.innerHTML='';
+  filtered.forEach(b=>{
+    const st=checkinStatus[b.band]||'scheduled';
+    const card=document.createElement('div');
+    card.className='ci-card'+(st!=='scheduled'?' '+st:'');
+    const badgeMap={scheduled:'badge-sched',arrived:'badge-arrived',warmup:'badge-warmup',performed:'badge-performed'};
+    const labelMap={scheduled:'Scheduled',arrived:'Arrived',warmup:'In warm-up',performed:'Performed'};
+    card.innerHTML=
+      '<span class="ci-badge '+badgeMap[st]+'">'+labelMap[st]+'</span>'+
+      '<div class="ci-band">'+escHtml(b.band)+'</div>'+
+      '<div class="ci-class">'+escHtml(b.cls)+' · Draw #'+b.draw+'</div>'+
+      '<div class="ci-time">Perform: <strong>'+b.perform+'</strong></div>'+
+      '<div class="ci-time" style="font-size:11px;color:#aaa;">Arrival: '+b.arrival+' · W/U: '+b.warmup+'</div>'+
+      '<div class="ci-actions">'+
+        (st==='scheduled'?'<button class="btn btn-sm btn-green" onclick="setStatus(\''+b.band+'\',\'arrived\')">✓ Arrived</button>':'')+
+        (st==='arrived'?'<button class="btn btn-sm btn-blue" onclick="setStatus(\''+b.band+'\',\'warmup\')">→ Warm-up</button>':'')+
+        (st==='warmup'?'<button class="btn btn-sm" style="background:#7B1FA2;color:white;" onclick="setStatus(\''+b.band+'\',\'performed\')">✓ Performed</button>':'')+
+        (st!=='scheduled'?'<button class="btn btn-sm" style="background:#f0f0f0;color:#888;" onclick="setStatus(\''+b.band+'\',\'scheduled\')">↺ Reset</button>':'')+
+      '</div>';
+    grid.appendChild(card);
+  });
+}
+function setStatus(band,status){ checkinStatus[band]=status; save(); renderCheckin(); renderDashboard(); }
+
+// ════════════════════════════════════════════════════════
+//  DASHBOARD
+// ════════════════════════════════════════════════════════
+function renderDashboard(){
+  const now=nowMins();
+  const clock=document.getElementById('dash-clock');
+  if(clock) clock.textContent=fmt(now);
+
+  const bands=getBands();
+  const total=bands.length;
+  const arrived=bands.filter(b=>['arrived','warmup','performed'].includes(checkinStatus[b.band]||'')).length;
+  const warmup=bands.filter(b=>(checkinStatus[b.band]||'')==='warmup').length;
+  const performed=bands.filter(b=>(checkinStatus[b.band]||'')==='performed').length;
+  const dT=document.getElementById('d-total'),dA=document.getElementById('d-arrived'),dW=document.getElementById('d-warmup'),dP=document.getElementById('d-performed');
+  if(dT) dT.textContent=total;
+  if(dA) dA.textContent=arrived;
+  if(dW) dW.textContent=warmup;
+  if(dP) dP.textContent=performed;
+
+  // Current / next
+  let currentBand=null,nextBand=null;
+  for(let i=0;i<bands.length;i++){
+    const pm=bands[i].performMins;
+    if(pm<=now&&now<pm+15){ currentBand=bands[i]; }
+    else if(pm>now&&!nextBand){ nextBand=bands[i]; }
+  }
+  const cur=document.getElementById('dash-current');
+  const nxt=document.getElementById('dash-next');
+  if(cur) cur.textContent=currentBand?'On field now: '+currentBand.band+' ('+currentBand.perform+')':'No band currently performing';
+  if(nxt) nxt.textContent=nextBand?'Up next: '+nextBand.band+' at '+nextBand.perform:'';
+
+  // Timeline
+  const tl=document.getElementById('dash-timeline');
+  if(!tl) return;
+  let tlHtml='';
+  _scheduleRows.forEach(r=>{
+    if(r.t==='band'){
+      const st=checkinStatus[r.band]||'scheduled';
+      const pm=r.performMins;
+      const isPast=now>pm+15,isNow=pm<=now&&now<pm+15;
+      const statusColors={scheduled:'#f0f0f0',arrived:'#E8F5E9',warmup:'#E3F2FD',performed:'#EDE7F6'};
+      tlHtml+=
+        '<div class="tl-row'+(isPast?' tl-past':'')+(isNow?' tl-now':'')+'">'+
+        '<div class="tl-time">'+r.perform+'</div>'+
+        '<div class="tl-band">'+
+          '<strong>'+escHtml(r.band)+'</strong>'+
+          (r.dir?' <span style="font-size:11px;color:#aaa;">– '+escHtml(r.dir)+'</span>':'')+
+          ' <span style="font-size:10.5px;color:#bbb;">· '+escHtml(r.cls||'')+'</span>'+
+        '</div>'+
+        '<div class="tl-status" style="background:'+statusColors[st]+';color:'+
+          (st==='scheduled'?'#888':st==='arrived'?'#2E7D32':st==='warmup'?'#0D47A1':'#6A1B9A')+';">'+
+          (st==='scheduled'?'Scheduled':st==='arrived'?'Arrived':st==='warmup'?'Warm-up':'Performed')+
+        '</div>'+
+        '</div>';
+    } else if(r.t==='cls-hdr'){
+      tlHtml+='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#aaa;padding:6px 12px 2px;">'+escHtml(r.label)+'</div>';
+    } else if(r.t==='brk'){
+      tlHtml+='<div class="tl-row tl-break"><div class="tl-time">'+r.time+'</div><div class="tl-band" style="color:#E65100;font-weight:600;">⏸ '+r.len+'-min break</div></div>';
+    }
+  });
+  tl.innerHTML=tlHtml;
+}
+
+// ════════════════════════════════════════════════════════
+//  BADGES
+// ════════════════════════════════════════════════════════
+function renderBadges(){
+  const grid=document.getElementById('badges-grid');
+  if(!grid) return;
+  const evtName=document.getElementById('bdg-event')?.value||'Tournament of Champions';
+  const evtDate=document.getElementById('bdg-date')?.value||'';
+  const style=document.getElementById('bdg-style')?.value||'color';
+
+  const roleColors={director:'#1565C0',volunteer:'#2E7D32',staff:'#7B1FA2',official:'#E65100'};
+  const bwColor='#333';
+
+  let badges=[];
+
+  // Director badges from schedule
+  if(showDirBadges){
+    let cls='';
+    _scheduleRows.forEach(r=>{
+      if(r.t==='cls-hdr') cls=r.label;
+      if(r.t==='band'){
+        badges.push({
+          type:'director', name:r.dir||'Director', school:r.band, cls,
+          draw:r.draw, arrival:r.arrival, dress:r.dress,
+          warmup:r.warmup, area:r.area, travel:r.travel,
+          gate:r.gate, perform:r.perform,
+        });
+      }
+    });
+  }
+
+  // Volunteer badges from volunteer assignments
+  if(showVolBadges){
+    volunteers.forEach(function(grp){
+      grp.slots.forEach(function(sl){
+        if(sl.vol && sl.vol.trim()){
+          badges.push({
+            type: 'volunteer',
+            name: sl.vol.trim(),
+            role: sl.pos,
+            area: grp.name,
+            areaColor: grp.color,
+          });
+        }
+      });
+    });
+  }
+
+  // Extra badges (volunteers/staff)
+  extraBadges.forEach(b=>{ badges.push({...b}); });
+
+  grid.innerHTML='';
+  badges.forEach(b=>{
+    const roleColor=style==='bw'?bwColor:(roleColors[b.type]||roleColors.director);
+    const borderColor=style==='bw'?'#333':roleColor;
+    const card=document.createElement('div');
+    card.className='badge-card badge-type-'+(b.type||'director');
+    card.style.borderColor=borderColor;
+    card.style.minHeight='3.6in';
+
+    // Use area color for volunteer badges
+    const badgeColor  = (b.type==='volunteer' && b.areaColor) ? b.areaColor : roleColor;
+    const badgeBorder = (b.type==='volunteer' && b.areaColor) ? b.areaColor : borderColor;
+    card.style.borderColor = badgeBorder;
+
+    let inner='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:6px;"></div>';
+    inner+='<img src="'+EC_LOGO+'" style="height:36px;width:auto;margin:0 auto 5px;display:block;"/>';
+    inner+='<div class="b-event" style="color:'+badgeColor+';">'+escHtml(evtName)+'</div>';
+    inner+='<div class="b-date">'+escHtml(evtDate)+'</div>';
+    inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(b.type?.toUpperCase()||'DIRECTOR')+'</div>';
+    if(b.name)    inner+='<div class="b-name">'+escHtml(b.name)+'</div>';
+    if(b.school)  inner+='<div class="b-school">'+escHtml(b.school)+'</div>';
+    if(b.cls)     inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
+    // Volunteer: show area name + position
+    if(b.type==='volunteer'){
+      if(b.area)  inner+='<div class="b-school" style="font-weight:700;color:'+badgeColor+';">'+escHtml(b.area)+'</div>';
+      if(b.role)  inner+='<div class="b-class">'+escHtml(b.role)+'</div>';
+    } else {
+      if(b.role)  inner+='<div class="b-class" style="color:#777;">'+escHtml(b.role)+'</div>';
+    }
+    // Schedule grid for director badges only
+    if(b.perform && b.type==='director'){
+      inner+='<div style="margin-top:6px;width:100%;border:1px solid '+borderColor+';border-radius:4px;overflow:hidden;font-size:8px;">';
+      const sched=[
+        {lbl:'Arrival',   val:b.arrival},
+        {lbl:'Dress',     val:b.dress},
+        {lbl:'Warm-up',   val:b.warmup+' / Area '+b.area},
+        {lbl:'Travel',    val:b.travel},
+        {lbl:'Gate',      val:b.gate},
+        {lbl:'Perform',   val:b.perform},
+      ];
+      sched.forEach(function(row,i){
+        var bg = row.lbl==='Perform' ? roleColor : (i%2===0?'#f8f9ff':'white');
+        var clr = row.lbl==='Perform' ? 'white' : '#333';
+        var wt  = row.lbl==='Perform' ? '800' : '400';
+        inner+='<div style="display:flex;justify-content:space-between;padding:2px 5px;background:'+bg+';color:'+clr+';font-weight:'+wt+';">'+
+          '<span>'+row.lbl+'</span><span>'+escHtml(row.val||'—')+'</span></div>';
+      });
+      inner+='</div>';
+    }
+
+    card.innerHTML=inner;
+    grid.appendChild(card);
+  });
+
+  // Extra badge list in sidebar
+  const list=document.getElementById('extra-badge-list');
+  if(list){
+    list.innerHTML=extraBadges.length===0?'<div style="color:#ccc;font-size:11px;">No extra badges yet.</div>':
+      extraBadges.map((b,i)=>'<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:12px;">'+
+        '<span style="flex:1;">'+escHtml(b.name)+' <span style="color:#aaa;">'+escHtml(b.role||'')+'</span></span>'+
+        '<button class="btn btn-xs btn-red" onclick="rmExtraBadge('+i+')">×</button>'+
+      '</div>').join('');
+  }
+}
+function openAddBadge(){ openModal('badge-modal'); setTimeout(()=>document.getElementById('m-bdg-name').focus(),100); }
+function saveExtraBadge(){
+  const n=document.getElementById('m-bdg-name').value.trim();
+  const r=document.getElementById('m-bdg-role').value.trim();
+  const t=document.getElementById('m-bdg-type').value;
+  if(!n) return;
+  extraBadges.push({name:n,role:r,type:t});
+  closeModal('badge-modal'); save(); renderBadges();
+}
+function rmExtraBadge(i){ extraBadges.splice(i,1); save(); renderBadges(); }
+
+// ════════════════════════════════════════════════════════
+//  MODALS
+// ════════════════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.addEventListener('click',e=>{ if(e.target.classList.contains('modal-bg')) e.target.classList.remove('open'); });
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') document.querySelectorAll('.modal-bg.open').forEach(m=>m.classList.remove('open'));
+  if(e.key==='Enter'&&document.getElementById('band-modal').classList.contains('open')) saveBandModal();
+  if(e.key==='Enter'&&document.getElementById('badge-modal').classList.contains('open')) saveExtraBadge();
+});
+
+// ════════════════════════════════════════════════════════
+//  EXPORT
+// ════════════════════════════════════════════════════════
+function exportCSV(){
+  const tbl=document.querySelector('table.sch');
+  if(!tbl){alert('Navigate to the Schedule page first.');return;}
+  let csv='';
+  tbl.querySelectorAll('tr').forEach(tr=>{
+    const cells=[...tr.querySelectorAll('th,td')].map(td=>'"'+td.innerText.replace(/"/g,'""').replace(/\n/g,' ')+'"');
+    csv+=cells.join(',')+'\n';
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='TOC-Schedule.csv'; a.click();
+}
+
+// ════════════════════════════════════════════════════════
+//  DASHBOARD CLOCK
+// ════════════════════════════════════════════════════════
+setInterval(()=>{
+  if(document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+  const c=document.getElementById('dash-clock');
+  if(c) c.textContent=fmt(nowMins());
+},30000);
+
+// Auto-save every 10s to catch any mobile input events that slipped through
+setInterval(()=>{
+  if(_saveStatus === 'unsaved') pushToSheets();
+}, 10000);
+
+// On mobile, inputs may commit on focus-out — catch with focusout on sidebar
+document.getElementById('sec-list')?.addEventListener('focusout', function(e){
+  if(e.target.tagName === 'INPUT'){
+    const si = e.target.closest('[data-si]')?.dataset?.si;
+    save();
+  }
+});
+
+
+// ════════════════════════════════════════════════════════
+//  PARKING & BUS ASSIGNMENT
+// ════════════════════════════════════════════════════════
+function renderParking() {
+  renderLotSidebar();
+  renderParkingMain();
+}
+
+function renderLotSidebar() {
+  const el = document.getElementById('lot-list');
+  if (!el) return;
+  if (parkingLots.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:#bbb;margin-bottom:8px;">No lots defined yet. Add one above.</div>';
+    return;
+  }
+  el.innerHTML = parkingLots.map((lot,i) => {
+    const assigned = Object.values(bandParking).filter(b => b.lot === lot.id).length;
+    return `<div style="background:#f8f9fa;border:1px solid #e2e6ea;border-radius:8px;padding:9px 11px;margin-bottom:5px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:700;font-size:13px;color:#1565C0;">${escHtml(lot.name)}</div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-xs" style="background:#f0f0f0;color:#555;" onclick="openEditLot(${i})">✏</button>
+          <button class="btn btn-xs btn-red" onclick="rmLot(${i})">×</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">${assigned} bands bands assigned · Capacity: ${lot.capacity}</div>
+      ${lot.notes ? `<div style="font-size:11px;color:#aaa;">${escHtml(lot.notes)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderParkingMain() {
+  const out = document.getElementById('parking-output');
+  if (!out) return;
+
+  // Get all bands from schedule
+  const bands = getBands();
+
+  // Stats
+  let totalTrailers = 0, totalPit = 0, totalTrucks = 0;
+  bands.forEach(b => {
+    const p = bandParking[b.band] || {};
+    if (p.trailer) totalTrailers++;
+    if (p.pit)     totalPit++;
+    if (p.truck)   totalTrucks++;
+  });
+  const pst = document.getElementById('ps-trailers');  if(pst) pst.textContent = totalTrailers;
+  const psp = document.getElementById('ps-pit');       if(psp) psp.textContent = totalPit;
+  const psk = document.getElementById('ps-trucks');    if(psk) psk.textContent = totalTrucks;
+  const psb = document.getElementById('ps-bands');     if(psb) psb.textContent = bands.length;
+  const sub = document.getElementById('parking-subtitle');
+  if(sub) sub.textContent = bands.length + ' bands · ' + totalTrailers + ' trailers/semis · equipment only';
+
+  // Build band table
+  let html = `<div class="card">
+    <div class="card-hdr">
+      <h2>Band vehicle profiles</h2>
+      <div style="font-size:12px;color:#888;">Click a row to assign lot &amp; spot</div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="sch">
+      <thead><tr>
+        <th>Draw</th><th>Band</th><th>Director</th><th>Perform</th>
+        <th>Vehicles / Equipment</th>
+        <th style="text-align:center;">Trailer</th>
+        <th style="text-align:center;">Pit</th>
+        <th style="text-align:center;">Equip truck</th>
+        <th>Lot</th><th>Spot</th><th>Guide</th>
+        <th></th>
+      </tr></thead><tbody>`;
+
+  let cls = '';
+  _scheduleRows.forEach(r => {
+    if (r.t === 'cls-hdr') {
+      cls = r.label;
+      html += `<tr class="cls-hdr"><td colspan="12">${escHtml(r.label)}</td></tr>`;
+    }
+    if (r.t !== 'band') return;
+    const p   = bandParking[r.band] || {};
+    const dir = DIRECTORS[r.band]   || {};
+    const lot = parkingLots.find(l => l.id === p.lot);
+    const chk = v => v ? '✓' : '—';
+    const spotBg = p.spot ? 'background:#E8F5E9;' : '';
+
+    html += `<tr style="cursor:pointer;${spotBg}" onclick="openBandParking('${r.band.replace(/'/g,"\\'")}')">
+      <td style="font-weight:700;color:#1565C0;">${r.draw}</td>
+      <td style="font-weight:600;">${escHtml(r.band)}</td>
+      <td style="font-size:11.5px;color:#666;">${escHtml(dir.name || p.director || '')}</td>
+      <td style="font-weight:700;color:#1565C0;">${r.perform}</td>
+      <td style="font-size:11.5px;max-width:200px;white-space:normal;">${escHtml(p.vehicles || '—')}</td>
+      <td style="text-align:center;color:${p.trailer?'#2E7D32':'#ccc'};">${chk(p.trailer)}</td>
+      <td style="text-align:center;color:${p.pit?'#1565C0':'#ccc'};">${chk(p.pit)}</td>
+      <td style="text-align:center;color:${p.truck?'#7B1FA2':'#ccc'};">${chk(p.truck)}</td>
+      <td style="font-weight:600;color:#1565C0;">${lot ? escHtml(lot.name) : '<span style="color:#ccc;">—</span>'}</td>
+      <td style="font-weight:600;color:#2E7D32;">${escHtml(p.spot || '') || '<span style="color:#ccc;">—</span>'}</td>
+      <td style="font-size:11.5px;">${escHtml(p.guide || '') || '<span style="color:#ccc;">—</span>'}</td>
+      <td><button class="btn btn-xs btn-blue" onclick="event.stopPropagation();openBandParking('${r.band.replace(/'/g,"\\'")}')">Edit</button></td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div></div>`;
+
+  // Lot capacity overview
+  if (parkingLots.length > 0) {
+    html += `<div class="card" style="margin-top:16px;"><div class="card-hdr"><h2>Lot overview</h2></div><div class="card-body">`;
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">`;
+    parkingLots.forEach(lot => {
+      const assigned = Object.values(bandParking).filter(b => b.lot === lot.id);
+      const pct = Math.round((assigned.length / (lot.capacity || 1)) * 100);
+      const barColor = pct > 90 ? '#e53935' : pct > 70 ? '#F57F17' : '#2E7D32';
+      html += `<div style="background:#f8f9fa;border:1px solid #e2e6ea;border-radius:8px;padding:12px;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">${escHtml(lot.name)}</div>
+        <div style="height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;margin-bottom:6px;">
+          <div style="height:8px;background:${barColor};border-radius:4px;width:${Math.min(100,pct)}%;"></div>
+        </div>
+        <div style="font-size:12px;color:#666;">${assigned.length} bands bands assigned · Capacity: ${lot.capacity}</div>
+        ${lot.notes ? `<div style="font-size:11px;color:#aaa;">${escHtml(lot.notes)}</div>` : ''}
+        ${assigned.length > 0 ? '<div style="margin-top:6px;font-size:11.5px;">'+assigned.map(b=>Object.keys(bandParking).find(k=>bandParking[k]===b)||'').filter(Boolean).map(n=>'<span style="background:#E3F2FD;color:#1565C0;padding:1px 6px;border-radius:10px;margin:1px;display:inline-block;">'+escHtml(n)+'</span>').join('')+'</div>' : ''}
+      </div>`;
+    });
+    html += `</div></div></div>`;
+  }
+
+  out.innerHTML = html;
+}
+
+// ── Lot CRUD ──────────────────────────────────────────
+let _editLotIdx = -1;
+function openAddLot() {
+  _editLotIdx = -1;
+  document.getElementById('lot-modal-title').textContent = 'Add parking lot';
+  document.getElementById('m-lot-name').value  = '';
+  document.getElementById('m-lot-cap').value   = '20';
+  document.getElementById('m-lot-notes').value = '';
+  openModal('lot-modal');
+}
+function openEditLot(i) {
+  _editLotIdx = i;
+  const lot = parkingLots[i];
+  document.getElementById('lot-modal-title').textContent = 'Edit lot';
+  document.getElementById('m-lot-name').value  = lot.name;
+  document.getElementById('m-lot-cap').value   = lot.capacity;
+  document.getElementById('m-lot-notes').value = lot.notes || '';
+  openModal('lot-modal');
+}
+function saveLot() {
+  const name  = document.getElementById('m-lot-name').value.trim();
+  const cap   = parseInt(document.getElementById('m-lot-cap').value) || 20;
+  const notes = document.getElementById('m-lot-notes').value.trim();
+  if (!name) return;
+  if (_editLotIdx >= 0) {
+    parkingLots[_editLotIdx] = { ...parkingLots[_editLotIdx], name, capacity: cap, notes };
+  } else {
+    parkingLots.push({ id: 'lot' + Date.now(), name, capacity: cap, notes });
+  }
+  closeModal('lot-modal'); save(); renderParking();
+}
+function rmLot(i) {
+  if (!confirm('Remove this lot? Bands assigned here will be unassigned.')) return;
+  const lid = parkingLots[i].id;
+  Object.keys(bandParking).forEach(k => { if (bandParking[k].lot === lid) bandParking[k].lot = ''; });
+  parkingLots.splice(i, 1);
+  save(); renderParking();
+}
+
+// ── Band parking edit ─────────────────────────────────
+let _editBandName = '';
+function openBandParking(bandName) {
+  _editBandName = bandName;
+  const p   = bandParking[bandName] || {};
+  const dir = DIRECTORS[bandName]   || {};
+  document.getElementById('bp-title').textContent = bandName + ' — Parking Details';
+  document.getElementById('bp-buses').value   = p.buses   || 2;
+  document.getElementById('bp-spot').value    = p.spot    || '';
+  document.getElementById('bp-guide').value   = p.guide   || '';
+  document.getElementById('bp-notes').value   = p.vehicles|| '';
+  document.getElementById('bp-trailer').checked = !!p.trailer;
+  document.getElementById('bp-pit').checked     = !!p.pit;
+  document.getElementById('bp-truck').checked   = !!p.truck;
+  // Populate lot dropdown
+  const lotSel = document.getElementById('bp-lot');
+  lotSel.innerHTML = '<option value="">— Not assigned —</option>' +
+    parkingLots.map(l => `<option value="${l.id}" ${p.lot===l.id?'selected':''}>${escHtml(l.name)}</option>`).join('');
+  openModal('band-parking-modal');
+}
+function saveBandParking() {
+  const p = bandParking[_editBandName] || {};
+  bandParking[_editBandName] = {
+    ...p,
+    lot:     document.getElementById('bp-lot').value,
+    spot:    document.getElementById('bp-spot').value.trim(),
+    guide:   document.getElementById('bp-guide').value.trim(),
+    vehicles:document.getElementById('bp-notes').value.trim(),
+    trailer: document.getElementById('bp-trailer').checked,
+    pit:     document.getElementById('bp-pit').checked,
+    truck:   document.getElementById('bp-truck').checked,
+  };
+  closeModal('band-parking-modal'); save(); renderParking();
+}
+
+// ── Print: Guide cards ────────────────────────────────
+function printGuideCards() {
+  const bands = getBands();
+  const evName = document.getElementById('ev-name')?.value || 'Tournament of Champions';
+  const evDate = document.getElementById('ev-date')?.value || '';
+  const dateStr = evDate ? (()=>{ try{ return new Date(evDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }catch(e){return evDate;} })() : '';
+
+  const cards = bands.map(b => {
+    const p   = bandParking[b.band] || {};
+    const dir = DIRECTORS[b.band]   || {};
+    const lot = parkingLots.find(l => l.id === p.lot);
+    return `<div class="guide-card">
+      <div class="gc-header">
+        <div class="gc-band">${escHtml(b.band)}</div>
+        <div class="gc-sub">${escHtml(b.cls)} · Draw #${b.draw}</div>
+      </div>
+      <div class="gc-body">
+        <div class="gc-row"><span class="gc-lbl">Director</span><span class="gc-val">${escHtml(dir.name||'—')}</span></div>
+        <div class="gc-row"><span class="gc-lbl">Email</span><span class="gc-val gc-small">${escHtml(dir.email||'—')}</span></div>
+        <div class="gc-row hi"><span class="gc-lbl">Perform</span><span class="gc-val">${b.perform}</span></div>
+        <div class="gc-row"><span class="gc-lbl">Arrival</span><span class="gc-val">${b.arrival}</span></div>
+        <div class="gc-row"><span class="gc-lbl">Warm-up</span><span class="gc-val">${b.warmup} / Area ${b.area}</span></div>
+        <div class="gc-divider"></div>
+        <div class="gc-row"><span class="gc-lbl">Equipment vehicles</span><span class="gc-val gc-small">${escHtml(p.vehicles||'—')}</span></div>
+        <div class="gc-row"><span class="gc-lbl">Parking lot</span><span class="gc-val hi-val">${lot?escHtml(lot.name):'Not assigned'}</span></div>
+        <div class="gc-row"><span class="gc-lbl">Spot</span><span class="gc-val hi-val">${escHtml(p.spot||'Assign on arrival')}</span></div>
+        <div class="gc-row"><span class="gc-lbl">Guide</span><span class="gc-val">${escHtml(p.guide||'—')}</span></div>
+        <div class="gc-flags">
+          ${p.trailer?'<span class="gc-flag">🚛 Trailer</span>':''}
+          ${p.pit?'<span class="gc-flag pit">🎹 Pit equip</span>':''}
+          ${p.truck?'<span class="gc-flag truck">🚐 Equip truck</span>':''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Guide Cards — ${escHtml(evName)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;background:white;}
+  .no-print{text-align:center;padding:12pt;border-bottom:1pt solid #eee;margin-bottom:8pt;}
+  .no-print button{padding:7pt 16pt;background:#1565C0;color:white;border:none;border-radius:5pt;font-size:10pt;cursor:pointer;margin:0 4pt;font-family:Arial;}
+  .no-print button.sec{background:#f0f0f0;color:#333;}
+  .cards-wrap{display:grid;grid-template-columns:repeat(2,3.5in);gap:.2in;padding:.3in .4in;}
+  .guide-card{border:2pt solid #1565C0;border-radius:8pt;overflow:hidden;break-inside:avoid;page-break-inside:avoid;}
+  .gc-header{background:#1565C0;color:white;padding:8pt 10pt;}
+  .gc-band{font-size:14pt;font-weight:800;line-height:1.1;}
+  .gc-sub{font-size:8pt;opacity:.8;margin-top:2pt;}
+  .gc-body{padding:8pt 10pt;}
+  .gc-row{display:flex;justify-content:space-between;align-items:baseline;padding:2pt 0;border-bottom:.3pt solid #f0f0f0;font-size:9pt;}
+  .gc-row.hi{background:#E3F2FD;margin:3pt -10pt;padding:3pt 10pt;border-bottom:none;}
+  .gc-lbl{color:#888;font-size:8pt;width:72pt;flex-shrink:0;}
+  .gc-val{font-weight:600;text-align:right;}
+  .gc-val.hi-val{color:#1565C0;font-weight:800;}
+  .gc-val.gc-small{font-size:8pt;font-weight:400;}
+  .gc-divider{border-top:1.5pt solid #1565C0;margin:5pt 0;}
+  .gc-flags{display:flex;gap:5pt;flex-wrap:wrap;margin-top:5pt;}
+  .gc-flag{background:#FFF3E0;color:#E65100;padding:2pt 6pt;border-radius:10pt;font-size:8pt;font-weight:600;}
+  .gc-flag.pit{background:#E3F2FD;color:#1565C0;}
+  .gc-flag.truck{background:#F3E5F5;color:#7B1FA2;}
+  @media print{
+    .no-print{display:none;}
+    .cards-wrap{padding:.2in .25in;gap:.15in;}
+    body{font-size:9pt;}
+  }
+</style></head><body>
+<div class="no-print">
+  <button onclick="window.print()">🖨 Print guide cards</button>
+  <button class="sec" onclick="window.close()">Close</button>
+  <p style="font-size:8pt;color:#888;margin-top:6pt;">2 cards per row · Print landscape for best fit</p>
+</div>
+<div class="cards-wrap">${cards}</div>
+</body></html>`;
+  const win = window.open('','_blank','width=900,height=700');
+  win.document.write(html); win.document.close();
+}
+
+// ── Print: Master parking sheet ───────────────────────
+function printParkingSheet() {
+  const bands = getBands();
+  const evName = document.getElementById('ev-name')?.value || 'Tournament of Champions';
+
+  let rows = '';
+  let cls  = '';
+  _scheduleRows.forEach(r => {
+    if (r.t === 'cls-hdr') {
+      cls = r.label;
+      rows += `<tr class="cls"><td colspan="10">${escHtml(r.label)}</td></tr>`;
+    }
+    if (r.t !== 'band') return;
+    const p   = bandParking[r.band] || {};
+    const dir = DIRECTORS[r.band]   || {};
+    const lot = parkingLots.find(l => l.id === p.lot);
+    rows += `<tr>
+      <td class="draw">${r.draw}</td>
+      <td class="band"><strong>${escHtml(r.band)}</strong><div style="font-size:8pt;color:#888;">${escHtml(dir.name||'')}</div></td>
+      <td style="font-size:8pt;">${escHtml(p.vehicles||'—')}</td>
+      <td style="text-align:center;">${p.trailer?'✓':''}</td>
+      <td style="text-align:center;">${p.pit?'✓':''}</td>
+      <td style="text-align:center;">${p.truck?'✓':''}</td>
+      <td style="font-weight:700;color:#1565C0;">${lot?escHtml(lot.name):'—'}</td>
+      <td style="font-weight:700;color:#2E7D32;">${escHtml(p.spot||'')}</td>
+      <td>${escHtml(p.guide||'')}</td>
+    </tr>`;
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Parking Master Sheet — ${escHtml(evName)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;font-size:9pt;}
+  .no-print{text-align:center;padding:10pt;border-bottom:1pt solid #eee;margin-bottom:8pt;}
+  .no-print button{padding:6pt 16pt;background:#1565C0;color:white;border:none;border-radius:5pt;font-size:10pt;cursor:pointer;margin:0 4pt;font-family:Arial;}
+  .no-print button.sec{background:#f0f0f0;color:#333;}
+  .page{padding:.3in .4in;}
+  h1{font-size:14pt;color:#1565C0;margin-bottom:2pt;}
+  .sub{font-size:9pt;color:#888;margin-bottom:12pt;}
+  table{width:100%;border-collapse:collapse;font-size:8.5pt;}
+  th{background:#1565C0;color:white;padding:4pt 6pt;text-align:left;font-size:7.5pt;text-transform:uppercase;letter-spacing:.04em;}
+  td{padding:4pt 6pt;border-bottom:.5pt solid #f0f0f0;}
+  tr.cls td{background:#D6E4F7;color:#0D47A1;font-weight:800;font-size:8pt;text-transform:uppercase;letter-spacing:.05em;}
+  tr:nth-child(even) td{background:#FAFAFA;}
+  tr.cls td{background:#D6E4F7!important;}
+  .draw{width:24pt;text-align:center;font-weight:700;color:#1565C0;}
+  .band{width:110pt;}
+  @media print{.no-print{display:none;}.page{padding:.2in .3in;}}
+</style></head><body>
+<div class="no-print">
+  <button onclick="window.print()">🖨 Print master sheet</button>
+  <button class="sec" onclick="window.close()">Close</button>
+</div>
+<div class="page">
+  <h1>${escHtml(evName)} — Parking Master Sheet</h1>
+  <div class="sub">For parking crew · All equipment vehicles</div>
+  <table>
+    <thead><tr>
+      <th>Draw</th><th>Band</th><th>Equipment vehicles</th>
+      <th>Trailer</th><th>Pit</th><th>Truck</th>
+      <th>Lot</th><th>Spot</th><th>Guide</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</div></body></html>`;
+  const win = window.open('','_blank','width=1000,height=700');
+  win.document.write(html); win.document.close();
+}
+
+// ── Print: Band vehicle list ──────────────────────────
+function printBandVehicleList() {
+  const evName = document.getElementById('ev-name')?.value || 'Tournament of Champions';
+  let rows = '';
+  _scheduleRows.forEach(r => {
+    if (r.t === 'cls-hdr') rows += `<tr class="cls"><td colspan="6">${escHtml(r.label)}</td></tr>`;
+    if (r.t !== 'band') return;
+    const p   = bandParking[r.band] || {};
+    const dir = DIRECTORS[r.band]   || {};
+    rows += `<tr>
+      <td class="draw">${r.draw}</td>
+      <td><strong>${escHtml(r.band)}</strong></td>
+      <td>${escHtml(dir.name||'—')}</td>
+      <td style="font-size:8pt;">${escHtml(p.vehicles||'—')}</td>
+      <td style="font-size:8pt;">${[p.trailer?'Trailer':'',p.pit?'Pit equip':'',p.truck?'Equip truck':''].filter(Boolean).join(', ')||'—'}</td>
+    </tr>`;
+  });
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Vehicle List — ${escHtml(evName)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;font-size:9pt;}
+  .no-print{text-align:center;padding:10pt;border-bottom:1pt solid #eee;margin-bottom:8pt;}
+  .no-print button{padding:6pt 14pt;background:#1565C0;color:white;border:none;border-radius:5pt;cursor:pointer;font-size:10pt;font-family:Arial;margin:0 4pt;}
+  .no-print button.sec{background:#f0f0f0;color:#333;}
+  .page{padding:.3in .4in;}
+  h1{font-size:14pt;color:#1565C0;margin-bottom:10pt;}
+  table{width:100%;border-collapse:collapse;}
+  th{background:#1565C0;color:white;padding:4pt 6pt;text-align:left;font-size:7.5pt;text-transform:uppercase;}
+  td{padding:4pt 6pt;border-bottom:.5pt solid #f0f0f0;}
+  tr.cls td{background:#D6E4F7;color:#0D47A1;font-weight:800;font-size:8pt;text-transform:uppercase;}
+  tr.cls td{background:#D6E4F7!important;}
+  .draw{width:24pt;text-align:center;font-weight:700;color:#1565C0;}
+  @media print{.no-print{display:none;}.page{padding:.2in .3in;}}
+</style></head><body>
+<div class="no-print">
+  <button onclick="window.print()">🖨 Print</button>
+  <button class="sec" onclick="window.close()">Close</button>
+</div>
+<div class="page">
+  <h1>${escHtml(evName)} — Band Vehicle List</h1>
+  <table>
+    <thead><tr><th>Draw</th><th>Band</th><th>Director</th><th>Equipment vehicles</th><th>Notes</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</div></body></html>`;
+  const win = window.open('','_blank','width=900,height=700');
+  win.document.write(html); win.document.close();
+}
+
+// ════════════════════════════════════════════════════════
+//  PRINT SCHEDULE
+// ════════════════════════════════════════════════════════
+function printSchedule() {
+  // Build print-optimized HTML matching 2023 format
+  const evName   = document.getElementById('ev-name')?.value  || 'Tournament of Champions';
+  const evDate   = document.getElementById('ev-date')?.value  || '';
+  const dateStr  = evDate ? (()=>{ try{ return new Date(evDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }catch(e){return evDate;} })() : '';
+
+  // Separate prelim and finals rows
+  let prelimRows = [], finalsRows = [], inFinals = false;
+  _scheduleRows.forEach(r => {
+    if (r.t === 'fin-hdr' || r.t === 'spacer') { inFinals = true; return; }
+    if (r.t === 'sec-hdr' && r.label === 'PRELIMS') return;
+    if (inFinals) finalsRows.push(r);
+    else prelimRows.push(r);
+  });
+
+  function buildSection(rows, isFinale) {
+    let html = '';
+    rows.forEach(r => {
+      if (r.t === 'col-hdr' || r.t === 'col-hdr-fin') {
+        html += '<tr class="col-hdr"><th>Draw</th><th>Band</th><th>Director</th>' +
+          '<th>Arrival</th><th>Dress</th><th>Warm-up</th><th>Area</th>' +
+          '<th>Travel</th><th>Gate</th><th>Perform</th></tr>';
+      } else if (r.t === 'cls-hdr') {
+        html += '<tr class="cls-hdr"><td colspan="10">'+escHtml(r.label)+'</td></tr>';
+      } else if (r.t === 'brk') {
+        html += '<tr class="brk-row"><td colspan="10">'+r.len+'-MINUTE BREAK &mdash; '+r.time+'</td></tr>';
+      } else if (r.t === 'awd') {
+        html += '<tr class="awd-row"><td colspan="10">'+escHtml(r.label)+' &mdash; '+r.time+'</td></tr>';
+      } else if (r.t === 'band' || r.t === 'fin-band') {
+        html += '<tr class="'+(r.host?'host-row':'')+'">' +
+          '<td class="draw">'+r.draw+'</td>' +
+          '<td class="band">'+escHtml(r.band)+'</td>' +
+          '<td class="dir">'+escHtml(r.dir||'')+'</td>' +
+          '<td>'+r.arrival+'</td>' +
+          '<td>'+r.dress+'</td>' +
+          '<td>'+r.warmup+'</td>' +
+          '<td class="area">'+r.area+'</td>' +
+          '<td>'+r.travel+'</td>' +
+          '<td>'+r.gate+'</td>' +
+          '<td class="perform">'+r.perform+'</td>' +
+        '</tr>';
+      } else if (r.t === 'sec-hdr') {
+        html += '<tr class="sec-hdr"><td colspan="10">'+r.label+'</td></tr>';
+      }
+    });
+    return html;
+  }
+
+  const logoTag = '<img src="'+EC_LOGO+'" style="height:48px;width:auto;"/>';
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>${evName} — Schedule</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #000;
+    background: white;
+  }
+  .page {
+    width: 10in;
+    margin: 0 auto;
+    padding: .35in .4in;
+  }
+  /* Header */
+  .doc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2.5pt solid #3B5BA5;
+    padding-bottom: 6pt;
+    margin-bottom: 10pt;
+  }
+  .doc-header .left { display:flex; align-items:center; gap:12pt; }
+  .doc-header h1 { font-size:13pt; font-weight:800; color:#3B5BA5; line-height:1.2; }
+  .doc-header .date { font-size:9pt; color:#555; margin-top:2pt; }
+  .doc-header .right { text-align:right; font-size:8pt; color:#777; }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 0;
+  }
+  td, th {
+    padding: 2.5pt 4pt;
+    border-bottom: .5pt solid #e8e8e8;
+    white-space: nowrap;
+  }
+  th {
+    padding: 3pt 4pt;
+  }
+  .col-hdr th {
+    background: #3B5BA5;
+    color: white;
+    font-size: 7pt;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 700;
+    border-bottom: none;
+  }
+  .cls-hdr td {
+    background: #D6E4F7;
+    color: #1a3a6b;
+    font-weight: 800;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 3pt 4pt;
+    border-bottom: 1pt solid #b0c8e8;
+  }
+  .sec-hdr td {
+    background: #1a1a2e;
+    color: white;
+    font-weight: 800;
+    font-size: 10pt;
+    letter-spacing: .12em;
+    text-align: center;
+    padding: 5pt 4pt;
+    border-bottom: none;
+  }
+  .brk-row td {
+    background: #FFF8E1;
+    color: #B45309;
+    font-weight: 700;
+    font-size: 7.5pt;
+    text-align: center;
+    border-top: .5pt solid #FFD54F;
+    border-bottom: .5pt solid #FFD54F;
+    padding: 2.5pt 4pt;
+  }
+  .awd-row td {
+    background: #E8F5E9;
+    color: #1B5E20;
+    font-weight: 800;
+    font-size: 8.5pt;
+    text-align: center;
+    border-top: 1pt solid #A5D6A7;
+    border-bottom: 1pt solid #A5D6A7;
+    padding: 3pt 4pt;
+  }
+  .host-row { background: #F3EEF9; }
+  .host-row td { border-bottom: .5pt solid #D8CAED; }
+  tr:nth-child(even) td { background: #FAFAFA; }
+  .cls-hdr td, .sec-hdr td, .brk-row td, .awd-row td { background: inherit !important; }
+  .host-row td { background: #F3EEF9 !important; }
+
+  /* Column widths */
+  .draw   { width: 28pt; text-align:center; font-weight:700; color:#3B5BA5; }
+  .band   { width: 110pt; font-weight:600; }
+  .dir    { width: 90pt; color:#555; font-size:7.5pt; }
+  .area   { width: 26pt; text-align:center; font-weight:700; color:#3B5BA5; }
+  .perform{ font-weight:700; color:#3B5BA5; }
+
+  /* Divider between prelims and finals */
+  .section-gap { height: 8pt; }
+
+  /* Print */
+  @media print {
+    body { font-size: 8.5pt; }
+    .page { padding: .25in .3in; width:100%; }
+    .no-print { display:none; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+    .finals-break { page-break-before: always; }
+  }
+
+  /* Screen preview button */
+  .no-print {
+    text-align:center;
+    padding: 12pt 0 8pt;
+    border-bottom: 1pt solid #eee;
+    margin-bottom: 12pt;
+  }
+  .no-print button {
+    padding: 7pt 18pt;
+    background: #3B5BA5;
+    color: white;
+    border: none;
+    border-radius: 5pt;
+    font-size: 10pt;
+    cursor: pointer;
+    margin: 0 5pt;
+    font-family: Arial;
+  }
+  .no-print button.sec {
+    background: #f0f0f0;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="no-print">
+    <button onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="sec" onclick="window.close()">Close</button>
+    <div style="font-size:8pt;color:#999;margin-top:6pt;">
+      Tip: In print dialog → set paper to <strong>Landscape</strong>, 
+      margins to <strong>Minimum</strong>, scale to <strong>Fit to page</strong>
+    </div>
+  </div>
+
+  <!-- Document header -->
+  <div class="doc-header">
+    <div class="left">
+      ${logoTag}
+      <div>
+        <div style="font-size:8pt;font-weight:700;color:#3B5BA5;text-transform:uppercase;letter-spacing:.06em;">Estill County Marching Engineers</div>
+        <h1>${evName}</h1>
+        <div class="date">${dateStr}</div>
+      </div>
+    </div>
+    <div class="right">
+      Schedule<br/>
+      Prelims &amp; Finals
+    </div>
+  </div>
+
+  <!-- PRELIMS -->
+  <table>
+    <tbody>
+      <tr class="sec-hdr"><td colspan="10">PRELIMS</td></tr>
+      ${buildSection(prelimRows, false)}
+    </tbody>
+  </table>
+
+  <!-- Gap + page break before finals -->
+  <div class="section-gap finals-break"></div>
+
+  <!-- FINALS -->
+  <table>
+    <tbody>
+      <tr class="sec-hdr"><td colspan="10">FINALS</td></tr>
+      ${buildSection(finalsRows, true)}
+    </tbody>
+  </table>
+
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  win.document.write(html);
+  win.document.close();
+}
+
+// ════════════════════════════════════════════════════════
+//  BADGE BACKS — SCHEDULE PRINT
+// ════════════════════════════════════════════════════════
+function printBadgeBacks() {
+  const evtName = document.getElementById('bdg-event')?.value || 'Tournament of Champions';
+  const evtDate = document.getElementById('bdg-date')?.value  || '';
+
+  // Collect all badges in same order as front
+  let badges = [];
+  if(showDirBadges){
+    let cls='';
+    _scheduleRows.forEach(r=>{
+      if(r.t==='cls-hdr') cls=r.label;
+      if(r.t==='band') badges.push({
+        type:'director', name:r.dir||'Director', school:r.band, cls,
+        draw:r.draw, arrival:r.arrival, dress:r.dress,
+        warmup:r.warmup, area:r.area, travel:r.travel,
+        gate:r.gate, perform:r.perform,
+      });
+    });
+  }
+  if(showVolBadges){
+    volunteers.forEach(function(grp){
+      grp.slots.forEach(function(sl){
+        if(sl.vol && sl.vol.trim()) badges.push({
+          type:'volunteer', name:sl.vol.trim(),
+          role:sl.pos, area:grp.name, areaColor:grp.color,
+        });
+      });
+    });
+  }
+  extraBadges.forEach(b=>{ badges.push({...b}); });
+
+  if(badges.length===0){ alert('No badges to print.'); return; }
+
+  // Build the prelims timeline (compact)
+  function buildTimeline(){
+    let rows='';
+    let cls='';
+    _scheduleRows.forEach(r=>{
+      if(r.t==='cls-hdr'){
+        cls=r.label;
+        rows+=`<tr class="cls"><td colspan="3">${escHtml(r.label)}</td></tr>`;
+      } else if(r.t==='band'){
+        rows+=`<tr>
+          <td class="draw">${r.draw}</td>
+          <td class="band">${escHtml(r.band)}</td>
+          <td class="time">${r.perform}</td>
+        </tr>`;
+      } else if(r.t==='brk'){
+        rows+=`<tr class="brk"><td colspan="3">— ${r.len}-MIN BREAK — ${r.time}</td></tr>`;
+      } else if(r.t==='awd'){
+        rows+=`<tr class="awd"><td colspan="3">${escHtml(r.label)} — ${r.time}</td></tr>`;
+      } else if(r.t==='sec-hdr' && r.label==='FINALS'){
+        rows+=`<tr class="fin-hdr"><td colspan="3">FINALS</td></tr>`;
+      }
+    });
+    return rows;
+  }
+
+  // For director badges: personal schedule card
+  function directorBack(b, color){
+    return `<div class="back-badge">
+      <div class="back-header" style="background:${color};">
+        <div class="back-name">${escHtml(b.name)}</div>
+        <div class="back-school">${escHtml(b.school)} &bull; ${escHtml(b.cls)}</div>
+      </div>
+      <div class="back-body">
+        <table class="sched-mini">
+          <tr><td class="lbl">Arrival</td><td class="val">${b.arrival||'—'}</td></tr>
+          <tr><td class="lbl">Dress</td><td class="val">${b.dress||'—'}</td></tr>
+          <tr class="hi"><td class="lbl">Warm-up</td><td class="val">${b.warmup||'—'} / Area ${b.area||'—'}</td></tr>
+          <tr><td class="lbl">Travel</td><td class="val">${b.travel||'—'}</td></tr>
+          <tr><td class="lbl">Gate</td><td class="val">${b.gate||'—'}</td></tr>
+          <tr class="perf"><td class="lbl">PERFORM</td><td class="val">${b.perform||'—'}</td></tr>
+        </table>
+        <div class="divider"></div>
+        <div class="tl-label">Full prelims schedule</div>
+        <table class="tl-mini">
+          <thead><tr><th>#</th><th>Band</th><th>Perf</th></tr></thead>
+          <tbody>${buildTimeline()}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // For volunteer/staff badges: just the full prelims schedule
+  function scheduleBack(b, color){
+    return `<div class="back-badge">
+      <div class="back-header" style="background:${color};">
+        <div class="back-name">${escHtml(b.name)}</div>
+        <div class="back-school">${escHtml(b.area||b.role||'')}${b.role&&b.area?' &bull; '+escHtml(b.role):''}</div>
+      </div>
+      <div class="back-body">
+        <div class="tl-label">Prelims performance schedule</div>
+        <table class="tl-mini">
+          <thead><tr><th>#</th><th>Band</th><th>Perf</th></tr></thead>
+          <tbody>${buildTimeline()}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  const roleColors={director:'#1565C0',volunteer:'#2E7D32',staff:'#7B1FA2',official:'#E65100'};
+
+  // Generate back HTML — reversed 3-per-row to align with fronts when flipped
+  // We reverse each row of 3 so left-to-right on back matches right-to-left flip
+  let backsHTML = '';
+  for(let i=0; i<badges.length; i+=3){
+    const rowBadges = badges.slice(i, i+3);
+    // Reverse the row so badge 1 is on right, badge 3 on left — aligns when sheet flipped
+    const reversed = [...rowBadges].reverse();
+    // Pad to 3
+    while(reversed.length < 3) reversed.unshift(null);
+    reversed.forEach(b=>{
+      if(!b){ backsHTML += '<div class="back-badge empty"></div>'; return; }
+      const color = (b.type==='volunteer'&&b.areaColor) ? b.areaColor : (roleColors[b.type]||'#1565C0');
+      if(b.type==='director'){
+        backsHTML += directorBack(b, color);
+      } else {
+        backsHTML += scheduleBack(b, color);
+      }
+    });
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Badge Backs — ${escHtml(evtName)}</title>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:Arial,Helvetica,sans-serif; background:white; }
+  .no-print{ text-align:center; padding:12pt; border-bottom:1pt solid #eee; margin-bottom:8pt; }
+  .no-print button{ padding:7pt 18pt; background:#1565C0; color:white; border:none; border-radius:5pt; font-size:10pt; cursor:pointer; margin:0 4pt; font-family:Arial; }
+  .no-print button.sec{ background:#f0f0f0; color:#333; }
+  .no-print p{ font-size:8pt; color:#888; margin-top:6pt; }
+  .badges-wrap{
+    display:grid;
+    grid-template-columns: repeat(3, 2.125in);
+    gap:.125in;
+    padding:.25in .4in;
+    width:fit-content;
+    margin:0 auto;
+  }
+  .back-badge{
+    width:2.125in; min-height:3.375in;
+    border:1.5pt solid #ccc; border-radius:8pt;
+    overflow:hidden; display:flex; flex-direction:column;
+    page-break-inside:avoid;
+  }
+  .back-badge.empty{ border:none; }
+  .back-header{
+    padding:6pt 7pt;
+    color:white;
+    flex-shrink:0;
+  }
+  .back-name{ font-size:9pt; font-weight:800; line-height:1.2; }
+  .back-school{ font-size:7pt; opacity:.85; margin-top:1pt; }
+  .back-body{ padding:5pt 6pt; flex:1; overflow:hidden; }
+  .sched-mini{ width:100%; border-collapse:collapse; font-size:7pt; margin-bottom:5pt; }
+  .sched-mini td{ padding:1.5pt 2pt; border-bottom:.5pt solid #f0f0f0; }
+  .sched-mini .lbl{ color:#666; width:46%; }
+  .sched-mini .val{ font-weight:600; color:#111; }
+  .sched-mini tr.hi .lbl,.sched-mini tr.hi .val{ color:#1565C0; }
+  .sched-mini tr.perf .lbl,.sched-mini tr.perf .val{
+    background:#1565C0; color:white; font-weight:800; font-size:7.5pt;
+  }
+  .sched-mini tr.perf td{ padding:2pt; }
+  .divider{ border-top:1pt solid #e0e0e0; margin:4pt 0 3pt; }
+  .tl-label{ font-size:6.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#888; margin-bottom:3pt; }
+  .tl-mini{ width:100%; border-collapse:collapse; font-size:6.5pt; }
+  .tl-mini th{ background:#1565C0; color:white; padding:1.5pt 2pt; font-size:6pt; text-transform:uppercase; text-align:left; }
+  .tl-mini td{ padding:1pt 2pt; border-bottom:.3pt solid #f0f0f0; }
+  .tl-mini .draw{ width:14pt; text-align:center; color:#1565C0; font-weight:700; }
+  .tl-mini .band{ }
+  .tl-mini .time{ width:36pt; text-align:right; font-weight:600; color:#333; }
+  .tl-mini tr.cls td{ background:#D6E4F7; color:#0D47A1; font-weight:700; font-size:6pt; text-transform:uppercase; letter-spacing:.04em; }
+  .tl-mini tr.brk td{ background:#FFF8E1; color:#B45309; font-weight:600; text-align:center; font-size:6pt; }
+  .tl-mini tr.awd td{ background:#E8F5E9; color:#1B5E20; font-weight:700; text-align:center; font-size:6pt; }
+  .tl-mini tr.fin-hdr td{ background:#1a1a2e; color:white; font-weight:800; text-align:center; font-size:6.5pt; letter-spacing:.08em; }
+  @media print{
+    .no-print{ display:none; }
+    body{ font-size:7pt; }
+    .badges-wrap{ padding:.2in .3in; gap:.1in; }
+    .back-badge{ min-height:3.375in; }
+  }
+</style>
+</head><body>
+<div class="no-print">
+  <button onclick="window.print()">🖨 Print backs</button>
+  <button class="sec" onclick="window.close()">Close</button>
+  <p>Print this page <strong>after</strong> printing the fronts — load the same sheet back into the printer face down.<br/>
+  Badges are reversed per row so they align when the sheet is flipped.</p>
+</div>
+<div class="badges-wrap">${backsHTML}</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=800');
+  win.document.write(html);
+  win.document.close();
+}
+
+// ════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════
+// Show loading state immediately
+document.getElementById('sch-output').innerHTML =
+  '<div style="padding:40px;text-align:center;color:#888;">' +
+  '<div style="font-size:24px;margin-bottom:12px;">⏳</div>' +
+  '<div style="font-size:14px;">Loading schedule data…</div></div>';
+
+load().then(function(){
+  renderSidebar();
+  rebuild();
+}).catch(function(e){
+  console.error('Load error:', e);
+  renderSidebar();
+  rebuild();
+  showToast('Load error: ' + e.message, 'error');
+});
+</script>
+</body>
+</html>
