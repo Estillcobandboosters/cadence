@@ -191,19 +191,24 @@ table.sch tr:hover td{background:#f8f9ff;}
 
   .page { height: auto !important; overflow: visible !important; }
   .app-body { display: block !important; }
-  .sb-layout { display: block !important; }
+  .sb-layout { display: block !important; grid-template-columns: 1fr !important; }
 
   .sidebar {
     width: 100% !important;
+    max-width: 100% !important;
     border-right: none !important;
     border-bottom: 1px solid #e0e0e0;
     padding: 12px;
     max-height: none !important;
+    overflow: visible !important;
   }
   /* Collapsible sidebar on mobile */
   .sidebar-toggle { display: flex !important; }
-  .sidebar-content { display: none; }
-  .sidebar-content.open { display: block; }
+  .sidebar-content { display: none !important; }
+  .sidebar-content.open { display: block !important; }
+
+  .canvas { width: 100% !important; overflow-x: auto !important; }
+  .full-canvas { width: 100% !important; }
 
   .canvas, .full-canvas {
     padding: 12px !important;
