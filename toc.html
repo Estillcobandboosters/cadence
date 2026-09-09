@@ -293,7 +293,7 @@ table.sch tr:hover td{background:#f8f9ff;}
 <div class="page active" id="page-schedule">
 <div class="sb-layout">
 <div class="sidebar">
-  <div class="sidebar-toggle" style="display:none;align-items:center;gap:6px;cursor:pointer;" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.tog-icon').textContent=this.nextElementSibling.classList.contains('open')?'▲':'▼';">
+  <div class="sidebar-toggle" style="display:none;align-items:center;gap:6px;cursor:pointer;" onclick="var sc=this.nextElementSibling;sc.classList.toggle('open');sc.style.display=sc.classList.contains('open')?'block':'none';this.querySelector('.tog-icon').textContent=sc.classList.contains('open')?'▲':'▼';">
     <span style="font-size:13px;color:#1565C0;">⚙</span>
     <span style="font-size:12px;font-weight:600;color:#1565C0;">Settings</span>
     <span class="tog-icon" style="color:#1565C0;font-size:11px;">▼</span>
@@ -2382,15 +2382,37 @@ document.getElementById('sch-output').innerHTML =
 
 // Mobile sidebar toggle init
 function initMobileSidebars() {
-  if (window.innerWidth <= 768) {
-    document.querySelectorAll('.sidebar-toggle').forEach(function(tog) {
-      tog.style.display = 'flex';
-    });
-  } else {
-    document.querySelectorAll('.sidebar-content').forEach(function(sc) {
+  var isMobile = window.innerWidth <= 768;
+  // Toggle mobile class on sb-layout elements
+  document.querySelectorAll('.sb-layout').forEach(function(el) {
+    if (isMobile) {
+      el.style.display = 'block';
+    } else {
+      el.style.display = '';
+    }
+  });
+  document.querySelectorAll('.sidebar').forEach(function(el) {
+    if (isMobile) {
+      el.style.width = '100%';
+      el.style.borderRight = 'none';
+      el.style.padding = '0';
+    } else {
+      el.style.width = '';
+      el.style.borderRight = '';
+      el.style.padding = '';
+    }
+  });
+  document.querySelectorAll('.sidebar-toggle').forEach(function(tog) {
+    tog.style.display = isMobile ? 'flex' : 'none';
+  });
+  document.querySelectorAll('.sidebar-content').forEach(function(sc) {
+    if (!isMobile) {
       sc.classList.add('open');
-    });
-  }
+      sc.style.display = 'block';
+    } else if (!sc.classList.contains('open')) {
+      sc.style.display = 'none';
+    }
+  });
 }
 window.addEventListener('resize', initMobileSidebars);
 
