@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TOC Director Portal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh;}
+
+/* ── Header ── */
+.header{background:linear-gradient(135deg,#1565C0,#0D47A1);padding:16px 20px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(0,0,0,.2);}
+.header-logo{height:44px;width:auto;background:white;border-radius:8px;padding:4px 6px;}
+.header-text{}
+.header-text h1{font-size:18px;font-weight:800;color:white;line-height:1.2;}
+.header-text p{font-size:11px;color:rgba(255,255,255,.7);margin-top:2px;}
+
+/* ── Login screen ── */
+.login-wrap{max-width:420px;margin:40px auto;padding:0 16px;}
+.login-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;}
+.login-card-header{background:linear-gradient(135deg,#1565C0,#0D47A1);padding:24px;text-align:center;color:white;}
+.login-card-header h2{font-size:20px;font-weight:800;margin-bottom:4px;}
+.login-card-header p{font-size:13px;opacity:.8;}
+.login-card-body{padding:24px;}
+.login-label{font-size:13px;font-weight:600;color:#555;margin-bottom:6px;display:block;}
+.school-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;}
+.school-btn{padding:12px 16px;border:1.5px solid #e2e6ea;border-radius:10px;background:white;text-align:left;cursor:pointer;font-family:inherit;transition:all .15s;display:flex;align-items:center;justify-content:space-between;}
+.school-btn:hover,.school-btn:active{border-color:#1565C0;background:#f0f7ff;}
+.school-btn .sname{font-size:14px;font-weight:600;color:#1a1a2e;}
+.school-btn .sclass{font-size:11px;color:#888;margin-top:1px;}
+.school-btn .arr{color:#1565C0;font-size:18px;}
+.school-divider{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#bbb;padding:6px 0 2px;}
+
+/* ── Director portal ── */
+.portal-wrap{max-width:500px;margin:0 auto;padding:16px;}
+
+/* Back button */
+.back-btn{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.8);font-size:13px;cursor:pointer;padding:0 20px 10px;background:none;border:none;font-family:inherit;}
+.back-btn:hover{color:white;}
+
+/* Hero card */
+.hero-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;margin-bottom:14px;}
+.hero-header{background:linear-gradient(135deg,#1565C0,#0D47A1);padding:20px;color:white;text-align:center;}
+.hero-school{font-size:22px;font-weight:800;margin-bottom:2px;}
+.hero-director{font-size:13px;opacity:.8;}
+.hero-class{font-size:11px;opacity:.65;margin-top:2px;}
+.hero-body{padding:0;}
+
+/* Schedule timeline */
+.sched-row{display:flex;align-items:center;padding:12px 18px;border-bottom:1px solid #f5f5f5;}
+.sched-row:last-child{border-bottom:none;}
+.sched-row.perform{background:linear-gradient(135deg,#E3F2FD,#BBDEFB);border-bottom:none;}
+.sched-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-right:12px;}
+.sched-label{font-size:12px;color:#888;flex:1;}
+.sched-time{font-size:16px;font-weight:700;color:#1a1a2e;}
+.sched-row.perform .sched-label{color:#0D47A1;font-weight:600;}
+.sched-row.perform .sched-time{color:#0D47A1;font-size:20px;}
+.area-badge{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:12px;font-weight:800;color:white;margin-left:8px;}
+.ab-A{background:#1565C0;}.ab-B{background:#6A1B9A;}
+
+/* Countdown */
+.countdown-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);padding:18px;margin-bottom:14px;text-align:center;}
+.countdown-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:6px;}
+.countdown-time{font-size:36px;font-weight:800;color:#1565C0;font-variant-numeric:tabular-nums;letter-spacing:-1px;}
+.countdown-sub{font-size:12px;color:#888;margin-top:4px;}
+.countdown-card.past .countdown-time{color:#2E7D32;}
+.countdown-card.soon .countdown-time{color:#E65100;}
+
+/* Parking card */
+.info-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;margin-bottom:14px;}
+.info-card-header{padding:12px 18px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:white;display:flex;align-items:center;gap:8px;}
+.info-card-body{padding:14px 18px;}
+.info-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid #f5f5f5;font-size:13px;}
+.info-row:last-child{border-bottom:none;}
+.info-lbl{color:#888;}
+.info-val{font-weight:600;color:#1a1a2e;text-align:right;}
+
+/* Full schedule */
+.full-sched-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;margin-bottom:14px;}
+.full-sched-header{background:#1a1a2e;color:white;padding:12px 18px;font-size:13px;font-weight:700;letter-spacing:.06em;}
+table.fst{width:100%;border-collapse:collapse;font-size:12px;}
+table.fst td{padding:7px 12px;border-bottom:1px solid #f5f5f5;}
+table.fst tr:last-child td{border-bottom:none;}
+table.fst tr.fst-cls td{background:#E3F2FD;color:#0D47A1;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:5px 12px;}
+table.fst tr.fst-brk td{background:#FFF8E1;color:#E65100;font-weight:600;text-align:center;font-size:11px;}
+table.fst tr.fst-awd td{background:#E8F5E9;color:#1B5E20;font-weight:700;text-align:center;font-size:12px;}
+table.fst tr.fst-me td{background:#E8EAF6;font-weight:700;}
+table.fst .fst-draw{width:24px;color:#1565C0;font-weight:700;}
+table.fst .fst-time{text-align:right;font-weight:600;color:#1565C0;white-space:nowrap;}
+table.fst tr.fst-past td{opacity:.4;}
+
+/* Announcements */
+.ann-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;margin-bottom:14px;}
+.ann-item{padding:14px 18px;border-bottom:1px solid #f5f5f5;}
+.ann-item:last-child{border-bottom:none;}
+.ann-title{font-size:14px;font-weight:700;margin-bottom:3px;}
+.ann-body{font-size:13px;color:#555;line-height:1.5;}
+.ann-time{font-size:11px;color:#aaa;margin-top:4px;}
+
+/* Check-in button */
+.checkin-btn{width:100%;padding:16px;border-radius:16px;border:none;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;}
+.checkin-btn.not-arrived{background:#1565C0;color:white;}
+.checkin-btn.arrived{background:#E8F5E9;color:#2E7D32;border:2px solid #A5D6A7;}
+.checkin-btn.warmup{background:#E3F2FD;color:#0D47A1;border:2px solid #90CAF9;}
+.checkin-btn.performed{background:#EDE7F6;color:#6A1B9A;border:2px solid #CE93D8;}
+
+/* Live indicator */
+.live-dot{width:8px;height:8px;border-radius:50%;background:#2E7D32;display:inline-block;animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;white-space:nowrap;}
+.toast.show{opacity:1;}
+
+/* Responsive */
+@media(max-width:480px){
+  .portal-wrap{padding:12px;}
+  .hero-school{font-size:18px;}
+  .countdown-time{font-size:28px;}
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <img id="header-logo" class="header-logo" src="" alt=""/>
+  <div class="header-text">
+    <h1 id="header-event">Tournament of Champions</h1>
+    <p id="header-date">Estill County Marching Engineers</p>
+  </div>
+</div>
+
+<!-- Back button (hidden on login screen) -->
+<button class="back-btn" id="back-btn" style="display:none;" onclick="showLogin()">← Back to school list</button>
+
+<!-- Login screen -->
+<div id="login-screen">
+  <div class="login-wrap">
+    <div style="text-align:center;margin:24px 0 16px;">
+      <div style="font-size:28px;">🏆</div>
+      <div style="font-size:13px;color:#888;margin-top:6px;">Select your school to view your schedule</div>
+    </div>
+    <div class="login-card">
+      <div class="login-card-body">
+        <div id="school-list" class="school-list"></div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:#bbb;">
+      <span class="live-dot"></span> Live data — updates automatically
+    </div>
+  </div>
+</div>
+
+<!-- Director portal -->
+<div id="director-screen" style="display:none;">
+  <div class="portal-wrap">
+
+    <!-- Check-in button -->
+    <button class="checkin-btn not-arrived" id="checkin-btn" onclick="toggleCheckin()">
+      <span id="checkin-icon">✓</span>
+      <span id="checkin-label">Tap to check in on arrival</span>
+    </button>
+
+    <!-- Hero schedule card -->
+    <div class="hero-card">
+      <div class="hero-header">
+        <div class="hero-school" id="d-school"></div>
+        <div class="hero-director" id="d-director"></div>
+        <div class="hero-class" id="d-class"></div>
+      </div>
+      <div class="hero-body">
+        <div class="sched-row">
+          <div class="sched-icon" style="background:#E3F2FD;">🚌</div>
+          <div class="sched-label">Arrival</div>
+          <div class="sched-time" id="d-arrival"></div>
+        </div>
+        <div class="sched-row">
+          <div class="sched-icon" style="background:#F3E5F5;">👔</div>
+          <div class="sched-label">Dress</div>
+          <div class="sched-time" id="d-dress"></div>
+        </div>
+        <div class="sched-row">
+          <div class="sched-icon" style="background:#E8F5E9;">🎵</div>
+          <div class="sched-label">Warm-up time</div>
+          <div class="sched-time" id="d-warmup"></div>
+          <div class="area-badge" id="d-area"></div>
+        </div>
+        <div class="sched-row">
+          <div class="sched-icon" style="background:#FFF8E1;">🚶</div>
+          <div class="sched-label">Travel to gate</div>
+          <div class="sched-time" id="d-travel"></div>
+        </div>
+        <div class="sched-row">
+          <div class="sched-icon" style="background:#FFF3E0;">🚪</div>
+          <div class="sched-label">Gate</div>
+          <div class="sched-time" id="d-gate"></div>
+        </div>
+        <div class="sched-row perform">
+          <div class="sched-icon" style="background:#1565C0;">🎺</div>
+          <div class="sched-label">PERFORM — Draw #<span id="d-draw"></span></div>
+          <div class="sched-time" id="d-perform"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Countdown -->
+    <div class="countdown-card" id="countdown-card">
+      <div class="countdown-label" id="countdown-label">Time until performance</div>
+      <div class="countdown-time" id="countdown-time">—</div>
+      <div class="countdown-sub" id="countdown-sub"></div>
+    </div>
+
+    <!-- Parking / equipment -->
+    <div class="info-card" id="parking-card" style="display:none;">
+      <div class="info-card-header" style="background:#E65100;">🚛 Equipment parking</div>
+      <div class="info-card-body">
+        <div class="info-row"><span class="info-lbl">Lot assigned</span><span class="info-val" id="d-lot">—</span></div>
+        <div class="info-row"><span class="info-lbl">Spot</span><span class="info-val" id="d-spot">—</span></div>
+        <div class="info-row"><span class="info-lbl">Guide</span><span class="info-val" id="d-guide">—</span></div>
+        <div class="info-row"><span class="info-lbl">Your equipment</span><span class="info-val" id="d-vehicles">—</span></div>
+      </div>
+    </div>
+
+    <!-- Announcements -->
+    <div class="info-card" id="ann-card" style="display:none;">
+      <div class="info-card-header" style="background:#7B1FA2;">📢 Announcements</div>
+      <div id="ann-list"></div>
+    </div>
+
+    <!-- Full prelims schedule -->
+    <div class="full-sched-card">
+      <div class="full-sched-header"><span class="live-dot"></span> &nbsp;Prelims performance order</div>
+      <table class="fst"><tbody id="full-sched-body"></tbody></table>
+    </div>
+
+    <div style="text-align:center;font-size:11px;color:#bbb;padding-bottom:24px;">
+      Data updates automatically · <span id="last-sync">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec';
+
+// ── State ────────────────────────────────────────────
+let _data       = null;   // loaded from sheets
+let _band       = null;   // selected band row
+let _bandName   = '';
+let _checkinSt  = 'scheduled';
+let _countTimer = null;
+
+// ── Time utils ───────────────────────────────────────
+const parseT = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
+const nowM   = () => { const n=new Date(); return n.getHours()*60+n.getMinutes(); };
+const fmt12  = m => {
+  const tot=((m%1440)+1440)%1440;
+  let h=Math.floor(tot/60),mn=tot%60;
+  const ap=h>=12?'PM':'AM';
+  if(h>12)h-=12; if(h===0)h=12;
+  return h+':'+String(mn).padStart(2,'0')+' '+ap;
+};
+const fmtDate = v => {
+  try { return new Date(v+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
+  catch(e) { return v; }
+};
+
+// ── Load data from Sheets ─────────────────────────────
+async function loadData() {
+  try {
+    const res  = await fetch(SCRIPT_URL+'?action=toc_load', {method:'GET',redirect:'follow'});
+    const text = await res.text();
+    const json = JSON.parse(text);
+    if (json.success && json.data) {
+      _data = json.data;
+      applySettings();
+      return true;
+    }
+  } catch(e) {
+    console.warn('Load failed:', e);
+  }
+  return false;
+}
+
+function applySettings() {
+  if (!_data) return;
+  const s = _data.settings || {};
+  const evName = s['ev-name'] || 'Tournament of Champions';
+  const evDate = s['ev-date'] || '';
+  document.getElementById('header-event').textContent = evName;
+  document.getElementById('header-date').textContent = evDate ? fmtDate(evDate) : 'Estill County Marching Engineers';
+  document.title = evName + ' — Director Portal';
+}
+
+// ── Build schedule rows from saved sections/settings ──
+function buildScheduleRows() {
+  if (!_data) return [];
+  const sections  = _data.sections  || [];
+  const settings  = _data.settings  || {};
+  const start     = parseT(settings['start']  || '11:00');
+  const gap       = parseInt(settings['gap']   || 15);
+  const brkLen    = parseInt(settings['brklen']|| 15);
+  const lead      = parseInt(settings['lead']  || 90);
+  const finStart  = parseT(settings['fin-start'] || '19:00');
+  const finCnt    = parseInt(settings['fin-count']|| 10);
+  const finBrk    = parseInt(settings['fin-brk']  || 5);
+  const host      = settings['ev-host']     || 'Estill County';
+  const hostDir   = settings['ev-host-dir'] || '';
+  const areas     = ['A','B'];
+
+  let cur=start, aIdx=0, rows=[];
+
+  sections.forEach(sec => {
+    if (sec.type==='break') {
+      rows.push({t:'brk', time:fmt12(cur), len:brkLen});
+      cur += brkLen;
+    } else {
+      if (!sec.bands?.length) return;
+      rows.push({t:'cls', label:sec.label});
+      sec.bands.forEach((b,bi) => {
+        const area = areas[aIdx%2]; aIdx++;
+        const perf = cur;
+        rows.push({
+          t:'band', draw:bi+1, band:b.name||'TBD', dir:b.dir||'',
+          area, perform:fmt12(perf), performMins:perf,
+          arrival:fmt12(perf-lead), dress:fmt12(perf-lead+45),
+          warmup:fmt12(perf-30), travel:fmt12(perf-10), gate:fmt12(perf-5),
+        });
+        cur += gap;
+      });
+    }
+  });
+
+  rows.push({t:'awd', label:'PRELIM AWARDS', time:fmt12(cur-gap+30)});
+  return rows;
+}
+
+// ── Render school list ────────────────────────────────
+function renderSchoolList(rows) {
+  const list = document.getElementById('school-list');
+  let html = '';
+  let cls  = '';
+  rows.forEach(r => {
+    if (r.t==='cls') {
+      cls = r.label;
+      html += `<div class="school-divider">${cls}</div>`;
+    }
+    if (r.t==='band') {
+      html += `<button class="school-btn" onclick="selectSchool('${r.band.replace(/'/g,"\\'")}')">
+        <div>
+          <div class="sname">${r.band}</div>
+          <div class="sclass">${cls} · Draw #${r.draw} · Performs ${r.perform}</div>
+        </div>
+        <div class="arr">›</div>
+      </button>`;
+    }
+  });
+  list.innerHTML = html;
+}
+
+// ── Select school ─────────────────────────────────────
+function selectSchool(bandName) {
+  const rows     = buildScheduleRows();
+  const band     = rows.find(r => r.t==='band' && r.band===bandName);
+  if (!band) { showToast('School not found'); return; }
+
+  _bandName = bandName;
+  _band     = band;
+
+  // Load check-in status
+  const ci = _data.checkin || {};
+  _checkinSt = ci[bandName] || 'scheduled';
+
+  // Show portal
+  document.getElementById('login-screen').style.display    = 'none';
+  document.getElementById('director-screen').style.display = 'block';
+  document.getElementById('back-btn').style.display        = 'flex';
+
+  // Find class label
+  let cls = '';
+  rows.forEach(r => { if(r.t==='cls') cls=r.label; if(r.t==='band'&&r.band===bandName) return; });
+  // Re-find class properly
+  let foundCls = '';
+  for (let i=0;i<rows.length;i++) {
+    if (rows[i].t==='cls') foundCls=rows[i].label;
+    if (rows[i].t==='band'&&rows[i].band===bandName) break;
+  }
+
+  // Director info
+  const dirs = _data.DIRECTORS_DATA || {};
+  const dir  = dirs[bandName] || {};
+
+  // Populate hero
+  document.getElementById('d-school').textContent   = bandName;
+  document.getElementById('d-director').textContent = dir.name || band.dir || 'Director';
+  document.getElementById('d-class').textContent    = foundCls + ' · Draw #' + band.draw;
+  document.getElementById('d-arrival').textContent  = band.arrival;
+  document.getElementById('d-dress').textContent    = band.dress;
+  document.getElementById('d-warmup').textContent   = band.warmup;
+  document.getElementById('d-travel').textContent   = band.travel;
+  document.getElementById('d-gate').textContent     = band.gate;
+  document.getElementById('d-perform').textContent  = band.perform;
+  document.getElementById('d-draw').textContent     = band.draw;
+  const ab = document.getElementById('d-area');
+  ab.textContent = band.area;
+  ab.className   = 'area-badge ab-'+band.area;
+
+  // Parking
+  const parking = _data.parking || {};
+  const lots    = _data.lots    || [];
+  const p       = parking[bandName] || {};
+  const lot     = lots.find(l=>l.id===p.lot);
+  if (lot || p.spot || p.guide || p.vehicles) {
+    document.getElementById('parking-card').style.display = 'block';
+    document.getElementById('d-lot').textContent      = lot ? lot.name : '—';
+    document.getElementById('d-spot').textContent     = p.spot || 'Will be assigned on arrival';
+    document.getElementById('d-guide').textContent    = p.guide || '—';
+    document.getElementById('d-vehicles').textContent = p.vehicles || '—';
+  }
+
+  // Check-in button
+  updateCheckinBtn();
+
+  // Full schedule
+  renderFullSchedule(rows, bandName);
+
+  // Countdown
+  startCountdown(band.performMins);
+
+  // Scroll to top
+  window.scrollTo(0,0);
+}
+
+// ── Full schedule table ───────────────────────────────
+function renderFullSchedule(rows, myBand) {
+  const now = nowM();
+  let html  = '';
+  rows.forEach(r => {
+    if (r.t==='cls') {
+      html += `<tr class="fst-cls"><td colspan="3">${r.label}</td></tr>`;
+    } else if (r.t==='band') {
+      const isMe   = r.band===myBand;
+      const isPast = now > r.performMins + 15;
+      html += `<tr class="${isMe?'fst-me':''}${isPast?' fst-past':''}">
+        <td class="fst-draw">${r.draw}</td>
+        <td>${r.band}${isMe?' ←':''}${r.dir?'<div style="font-size:10px;color:#aaa;">'+r.dir+'</div>':''}</td>
+        <td class="fst-time">${r.perform}</td>
+      </tr>`;
+    } else if (r.t==='brk') {
+      html += `<tr class="fst-brk"><td colspan="3">⏸ ${r.len}-min break — ${r.time}</td></tr>`;
+    } else if (r.t==='awd') {
+      html += `<tr class="fst-awd"><td colspan="3">🏆 ${r.label} — ${r.time}</td></tr>`;
+    }
+  });
+  document.getElementById('full-sched-body').innerHTML = html;
+}
+
+// ── Countdown ─────────────────────────────────────────
+function startCountdown(performMins) {
+  if (_countTimer) clearInterval(_countTimer);
+  function tick() {
+    const now   = nowM();
+    const diff  = performMins - now;
+    const card  = document.getElementById('countdown-card');
+    const lbl   = document.getElementById('countdown-label');
+    const timer = document.getElementById('countdown-time');
+    const sub   = document.getElementById('countdown-sub');
+
+    card.className = 'countdown-card';
+    if (diff < 0) {
+      card.classList.add('past');
+      lbl.textContent   = 'You performed at';
+      timer.textContent = fmt12(performMins);
+      sub.textContent   = Math.abs(diff) + ' minutes ago';
+    } else if (diff === 0) {
+      card.classList.add('soon');
+      lbl.textContent   = '🎺 On the field NOW';
+      timer.textContent = 'GO!';
+      sub.textContent   = '';
+    } else {
+      if (diff <= 30) card.classList.add('soon');
+      const h = Math.floor(diff/60), m = diff%60;
+      lbl.textContent   = 'Time until performance';
+      timer.textContent = h>0 ? h+'h '+m+'m' : m+' min';
+      sub.textContent   = 'Perform at ' + fmt12(performMins);
+    }
+  }
+  tick();
+  _countTimer = setInterval(tick, 30000);
+}
+
+// ── Check-in ──────────────────────────────────────────
+function updateCheckinBtn() {
+  const btn  = document.getElementById('checkin-btn');
+  const icon = document.getElementById('checkin-icon');
+  const lbl  = document.getElementById('checkin-label');
+  btn.className = 'checkin-btn ' + (_checkinSt==='scheduled'?'not-arrived':_checkinSt);
+  const map = {
+    scheduled: {icon:'✓', lbl:'Tap to check in on arrival'},
+    arrived:   {icon:'✅', lbl:'Checked in — arrived'},
+    warmup:    {icon:'🎵', lbl:'In warm-up'},
+    performed: {icon:'🏆', lbl:'Performance complete'},
+  };
+  const s = map[_checkinSt] || map.scheduled;
+  icon.textContent = s.icon;
+  lbl.textContent  = s.lbl;
+}
+
+async function toggleCheckin() {
+  const next = {scheduled:'arrived', arrived:'warmup', warmup:'performed', performed:'scheduled'};
+  _checkinSt = next[_checkinSt] || 'arrived';
+  updateCheckinBtn();
+  // Save to sheets
+  try {
+    const ci = _data.checkin || {};
+    ci[_bandName] = _checkinSt;
+    _data.checkin = ci;
+    await fetch(SCRIPT_URL+'?action=toc_save&checkin='+encodeURIComponent(JSON.stringify(ci)), {method:'GET',redirect:'follow'});
+    showToast('Status updated!');
+  } catch(e) { showToast('Could not sync — will retry'); }
+}
+
+// ── Back to login ─────────────────────────────────────
+function showLogin() {
+  if (_countTimer) clearInterval(_countTimer);
+  document.getElementById('director-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display    = 'block';
+  document.getElementById('back-btn').style.display        = 'none';
+  document.getElementById('parking-card').style.display    = 'none';
+}
+
+// ── Toast ─────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+// ── Auto-refresh every 60s ────────────────────────────
+async function refresh() {
+  await loadData();
+  const syncEl = document.getElementById('last-sync');
+  if (syncEl) syncEl.textContent = 'Last sync: ' + new Date().toLocaleTimeString();
+  // If director screen is showing, refresh their data
+  if (_bandName && document.getElementById('director-screen').style.display!=='none') {
+    selectSchool(_bandName);
+  }
+}
+
+// ── Logo ──────────────────────────────────────────────
+const EC_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEoAAAB4CAYAAABVYmTXAAAcp0lEQVR42u19a5hcVZnu+6219q6qvgEiKDKMFxjwaUUcEQhJOpXoMKKOXEx2p69g1AAjgSEe8a6VOhGvxyMzRjHINUmnu2sn4nhhcGRIV7o7xAh4lCGCI54zgBgBBfpWVXuvtb7zY1d1VzfdSXdXdbi5f+TJ08/Tu2u/+/ve7/aur4C/XFMuJoApefHN8aZO/3yACcwk/gLMZJA8zxcAsbX1t8KaVwPEyeV98i9Ala5USgCA7zebps4dNwmhml3h7gCA7PI++xeAAHheRgLA6Zdsdpo6/K5zLuvjpe29d0T4RQC+7C0qmdqlfL/ZnH3hlmPrcsf8RDqJtrAwYkHidgDU17f85Q4Uk+dlZDa9Qje1dp3p1NcNCuWuMOFYaMK8sUL/GACX3E68fF2N2PebTdNFOy8lpyZLJE4Kg5FAOgmHYfbu2dL6MFIpgXTaAoB6uRG2t/9N5PvN5uyOLcc6VH+tVG6rDsdgjbUgSBISYOoBgGTfcpHFywsoSiZ3yWx6hfYBNHXsWCmE+IZQ7glhMGwIJIiIiKTQ+ZFRQuE2AMhmJ6KdeHm4GTibXaHPbtv22mWdO7dLJ7YDwAlhYdgQhASIGGykk2CAb+/v6vxD9HvpcaDUS9fLWKSxAX662TR6KfeV8dPWgfAZqWKvCAsjlkAgEnKC2yHYGmKIzdPdT730AEqJ/fvfROk0GQBo6vze+UTYIJ34W00whjAYNpMAAsCAkU5c6DD3n8cF1Acw+X70+y85oCYAajYAkOz83lImfFZI513MFmF+yBCRiFxt6mUhpEOsC9/0/WaTTO5S2Sz0JJJ7KbjY/v0++X4JIP/tIPlxEDwSDnQwZgGAaIa6lmGFVGSt/oMo4JSs740WoeGXhEV5XkY2NnqcTpMFgKUX33a6ZP4oM7dI5QodjDIbbYlIHjTtBFvhJJTND1+b9ZtHImtaoZ8TNl9sYd7zMsL3PVt648s6v3c2Cb6KLVZJJy50MAoGDAHy0Mk5LEXWdCDgwhv3dXUMT2dNL6L0ICo3AHDkYsTJzh1/l7zoez8AYY+QsWZmI8Jg2BTfvpzVXWFZOnEi8DX7ujqHksk+OR1ILwKLYkomN8hsNq1L7nagRlxATFeQUEkiCROOMoPsbMEZvzOzlU6MTFh46LiATmtsfECn02mOguCLJT1IpUSyDyKbJZ3NQie9TB3iqvWP4I9I4b4VYOggxyCyBJJzBSkyEWIiKUC03vebg6LFzth3ohcaQKVaDADe0fKvrzKOWcOEtVLF3mCthgnzFkQ8L3DGrckaJ9Ygw8JQ70BXS4vnZWTpb76ggXpOiO/InMSkLgVwsXTjx1hdgDEFAyaaMczPGiVYkgrM9s9OGLz5rlMeehIASl2CmS71fAMUfcYoxC/p2HmaJFrHxK3SideaMIcwP6yjolXIarxWJlilXKWDkcvu6mn742ys6XmzqKkALe/4/llW2KuYeZVy4kqHY2BrNREkQFX7jMxWu/EjVCE39O3B7asvnylnev6BmsJBSy/esURa8T+Y+EKp4ohyIGsIQlT7szGzdtxapcOxvWM1b1j2hqd/Z8vzsRcIUNEYaJyD2ncugqCPg3ChkC50OAoGLwhARVoyUsYls31MB/mz9vS0PV7evXwhAEXJZGo8D1rWljkVjvMpMLdK5UIH88uB5povCekIEA2Fhdzyu3vafjFbXjosQJV/mEUXZY53WX4SRGulisV0MLLgAE2ApASRzGmde89gV2tfMplSpRf3PAM14WZlDbNPSid+jC6MlDhILrizwxopY5IZY1aPnT+wvf3OuZD3ggJVbkXLOjLnkFBfEU78b02Qg7VaFyv5BedFZtbKSSjL5k8mGLtgsLt9oBKQqglUsapvNqe3dr2y1ol/kYRaCwAmzFc9zB8yusXqlNGFB60ZXTnQ1bm/UpAAVC7SKOZE7PvNZln7zvNqnZp7pJNYa8OCNWHeEpE6HCAxswWY3XiDMjr/o9zQ8NIIpFSFIDGV/pn3VSLG5MU3x9k2fE1IZx2zgdGBjgA6TMkHs5ZOTLG1zGxS/Vu9jVOpYP4gESdTu5SYP0i7VDab1kvbtzYyH9Gv3Jp1WueN0aE9XCAxYADAjTcoZvuADfWK/q3exkiZwlQJSJGnEJ994ZZj9W8OfHY+QFHJnJe0Zy4Usn5QSPX2ID+kCZBEC98MZGbLgFFOQpJQ2oS5rz7z+MhZA93N2WRyl4oSydll3DMFpXSa7CLv6wlVk7idAEtzNcVS6G9qz1wtnfhXrQ1hbXhYQj4YlmFZqrgUQsGY4E6Y4NO7u1p+Xh1Xm6CTM9u3NsQR/yFILgvt2OtoLiClUqB0muzSDv8bbqzuqjAYMbBMWGgrGgcoJoWMwejCfzKbL/RvXdVb9nBmpu7k3OhkhW5afdMJUPW3ufEjT8+PPrl7sKctKeZiSek02aaOzI1uvP6qoDCkwVYsJEiRi1kjlCOcWINkax82Ye7ymiceeXv/1lW9YKZUikUx0+ZKSHucTpq3LiLVMEgkTzdh3gqIO2bbjypzN/8mJ16/JswNhUTkLChJM5N04kIIBaOD39gwt4ny5uas3zwy7mZEJl2hFUXuSiabhV7SlvmQILkJhLjRBc3CCgv7g1klnCVzXNqe+aabaFgX5oZCEJwFMSBYSyAhnRoCADbhLyzRt8b+9ET3vT+6dKyMh2ylbhZZUZ/MZlfopJepMw59Q6nYh7XOAdaG0kk4JszdO9DTegaYD25R4z7b1vMpJ16/LswvAEjMzIAhIZTj1EurC7AmvBPgb78qZ34w3ppJplQ2u8FM1QRUakVNbT3LLMR1yok3RhIgCCYQCQVm9ADg5IY+RYeq25a0db/fidXt1GFeE2zVShFmtiBmIVwpnThMmBslop3WmM3927w9Uz5HFSxocuMw6W2qM86rPk9EHyMSZHShlCQziABGgaw9ub+39VGkUoKmv19KpNNpu6x1x9/AEfeCuZatQTWIu8Q/yokLEgomzD8KIW7VzLfs2fL+h6c8UHUAmjIfXNaeOY8hvyKd2Bt1YYSZmUtDCwa049TIMBj918Ge1gtLBqOmu+n+/T4lU7uUefjJLiVj9TocfY5UZn78I6RyaiTYwtrwHrJ2s5s3/p3+ymdL1lPSE/hVavlEAEXzwaXtmUYB+p8knJVgGw0uiBRRmZcwC2ZLgug75XdSz3W5KMItae/dEIs3nBHkhzSRUBUQ0Dj/mDDHbIIfMXDd7i0r/21Skrcc1k83GywAQGe1bH+VI92PEXC5UG4iLIyWFC5qKh1IFSMd5varPzz4H+U6KZpa36TTZJMdO9/MQtzHbATYzqOPHQEkhFTSrYEJc6MA9Vii6wZuvfDeyfzjVVRuHMzFzmzf2hDnxGVMWC9V/NXR8MLMWEUwrHHcBhkGI5cNdrdsLm/PTEJ0/36fAMBw+M9K1jk6LBiCoDkDJJVSTkKZIPdnHeZuVqDrdhX5p3zYWWm5MZMFJb1NdcY9bo0ArxdO/PVG5xAWhjURyYOUWlYKV+hg5PdKiy6AKZuFeY7rlUhrWceO9wkn/g4djs2lfmNmNkJIpWI1ygT5J02Q2xyQ+c7eLc2/n+CfB8b1TFVKLSi5fAKgM9u3Nrgc/4AlXKlU7ESr8wgLRaXdIToaDLZCxZUNhv/3dDqp8V/2Gx9gz8vIP7DZKNjw7KOYNQQpo65i/s9GF75NQn8re2vzgYXhn7KoSGSygE62dr3SitgagD8incTrrCkgDIYMsaBZBSGGldKROhh5TGp5/VRrGueokjU1dfrnS5X4fmRNB5+QMLMlgFSsjowu5ABsJsNfz3atfGwiWV1uqsc/z9UoNK3uPoEdZy0sf1g5ieOszsPYwBCLORXqJW4KgpG1e7pbbphuUqMAoLHxAQYAtuZjAPMhvQxslVMjmS1MmO8Ggo27t7b+ujyDzmZJVwsgz8tIv8xtl7ZnGgH6RzA6lIwfaTiHMBjWxHPXKDDYKJWQujD8f4438uZiQDPTDQUia2rf+TaSdA9bzZhBicdsjRCOlE4CRuf3suXP9G9bedc4QH0bDKhqFjQ+sCj9oKnDXwwWlwN2lVQJ14RjsGx0ZP3zqxgYMFLGpA7zy/b0tvbP1NMSTzQeExWgMGukEycG25nqMSdWL0H0lNZjV+ze8ssl/dtW3uV5GYlUKmp1VAWkqOWBcRki0NSeeW9T+45/A9OgVG4bW+OGwbBmNkyY//Ai0iPUS6tz1x8MpHGOWuRlEsrFf0npHG9NaMv9m9kaIV0ppAOrg24Ogk/097Y+OlVPUO0cqNHLuEfHpAfLVwipzgIRTDjGDFiKpkdUWcBkK5VL1uhHAlH/lnef9O6RdBo8E6cqAFAuLVZu/HgdjNkJoRYzg6wTq5dGB4+xzn9091bPnyBq0r4PUz2AohC/+Lwb6kXDkR1ksU4Kp5HJQIc5CwLPW4Y43R8VwgJCsbUf2Nf9nqHXehkJNM+Yuqgolef3CKEYBAtAMGAESamchDS60FMI8lf9rCS6yng2S9Ug6il1WFvXUQKxD1rgciVjr7cIEYajBozKVXbPJSbtxOqdIPf05wd72/uSyV3K9w8++yMw09JO/x6l4m/TYc4CsMpNKDZ62Fq7vn/bqhur1bifmtwCQBGgtZawTqn4CfMN8bN3OaudWIPSwchtA90t7y8mlofst9Pi1d0nSkfeD6I4W2uceL0yYf4eE+Q/MNjT9kA167FygJJeps644hKAr1IqcYLReVgbamJasD48M2vl1iqj8/cNifyyC098OJdOb+DZPJsSSpwppJOwOrROrE6ZMPdd+u+hKweza/KzMcnZZtIpbEA6TcbzPHnA9dZYFp9QKn6S0fmoDgMkEamFknCMCzdM4XfW6vf9avtFo79KpcRsDUAB9Dap4mC2VgdjV/Zv875V1kmoFKRISJZO6zTSaGrJvPeAFBukir3dmqCYJBYBWshpVxEktvpRo/Xf7+lte9zzMnIuZRUt7ei9Vzm1rw8KIyv3bG/ZVa3So9zNzm7d8UYlcI0Q6v0AQ+vcgnHQdJyk3FplTfC7MMi9a69/0W/nw7cKTM/kR55I7vU/eH8ytUtl0yuqYkW+36wbvZR7tHPqx0H4pFRu7UTDrDpS6FkllLEGpcPcfUEuf/6+2y56bL5BSegA/7DX/+D9pR0AlXIRwMhm03pJa9fSV8ZOvVu68Y3MpjYMRkrtjsOiTQDDuvEGZcLc9+3Is8v33db5WCWRm8YfcA4K2elHW0UJUDKl+K/enGKITwshhH4ehGRSOgpCwppw48D25s9X4xmppAGqDKSoybXY23qKdGtulE58iS4MMTP4cFhQaXoBYo5qt/yjbIJ/7O9p+3E0UZpdCjBTYgwQV/iWJ+q9pS3bVwkVu56EOkoHY4dRSBa1n6VyFQkFq8NtgX36Yz/rWfvHyiWJE0ZEFfFR8U0tae3doFQsdVglQKXuKkmp3FqYMPdfFvyJwa7m26pSSRRdNZm8OW5eE/+orOwmUH+9+PJbnFjdlTocM7CWiIQ4LACBhOPWCWY7bE3wVTsydPGeHZ2/9LyM3L8/g/373zxvPvK8jNz/7XUWSIkTlv7VD9laTfMF6S0dW2obbHyn49a+K8wPL5RwYyoNRUNUtxZa5zUxbQlD+6W9fvNvq1WPjvPteTfUy/oje6WKvVvrZ95E8wFp8Xk31Iu6hh8rt6ZJ54dDLKAEKGr3wBBIRS6WtxDUS5q/trvH+0V5+7nCoBTtb8mu0Iu8LScpJ9EbSxz5tvzoU3cP9rQsobkRG7DI8+NK4Q7l1izThQUEiWGZ2AqSSjo1MGGuAEIGENf2d628r7yXXmlqU174L2nteZ8Q6iYieqUQrg3Dkc8Mdrd+Wc0WJM/zhZ/xrGqzvorVL9P5oQUBKVK5gKV0pFBxYXTuaa1zXSC+bqCreX85QJWPwCKNlO+v0KefvtmpOSWzkaTzCbYaxmhtrYGRcseso964mKyl+ztO/IhLw/yz1QaJGWyJiaQTEyQUdJj/vwS6SVDulmxX52MlgKIharriIeqkWrS95wwJtUk58TN1fsQCMNJNODocu2uwu/WdqRQfWnwxrm1c3bVOxRsuDQvVtKQJ/nGcWmnZwFpzN4y5Xoa8I+t7I9W1oMlbgJLepjrrHPspQFwthHJK6hYGM5EAsbgBAPr6+g6uKxgfZbV2nQkZ38PWAGxExeUIwzJZFsKRUiVgdC4A4wdM+M5Al/cfk1/ShuoMUaeePm3fuYqYvyCd+Ck6GIkGukRiYldL+IeEDE/+6baLxgA+mOtFvPRQLB8/wsTuI+mebHTeVlKSTPCPG8mgw9wTALYx8Y0l/sE0a0WqCVDTan8xK/F5KdW72OrScZTxU18M1o5br3RhZONAT8vnS7SjZramok5qdfcXVaLu5EgnNb+yhMEGjEhlRxLGFB7UOv9dI3Lb7t520RMl6wWihaHV6M2Pj9/TzcYHsKS55zThOB8HuE1KVdwCRFM1UixISh2MjWpXbAZA2eV9FtkZ5NMTLpc5k6S8IlpORXJ+ABEpNyHBgDX6Z0x6k1QjO7K3rslXm38mE35xRUBzz2lSqfUMbpPKdXQwwtqG024BYrBRTo3S+eGte7e0/r68CzotUI2NHgNMlruvVRQj5gA0B14atyA30iewDu8yTNcOdq/64VT+qYbKt6w4t+Mc1OGfRSyuZLbNwokpHYxG28ggZpoNMkEKHeby5MivAkx+4wae3I+a1pp6Vkq3ZkcYjMy6yI3OzAHKSQgGg43+KQnxtd3bVv50yv2rI2Id10dNKE+WdmTOhaV1RHjvXFYElLgpKAxt2tPTdsXUcug5FuX7kU7qcTYpsoZnlWoxMxNb6SQkkYDVYR9Yf7m/u+UnpQfymiPOqyr/FPVR53Rsqc1zYhWYLhMkF0EJmHAM0UueaV3b5AcQpIQOxp4xwBemWtNzgCp1KQ843ecrVXuqDkcNgQ6lk9JCOkqpmDS68Auw/kL/du97kyIOkfFR8fg9iobl/NOZ+Wth6eI84wNSxd/AVkOH+TmP3xkwyq1ROvfMxp/1tv/R85T00+mZlwEuXw6bzQLWYr04hE4qWuhA0onVK6Pzv9c698Xcg09/9957Lw3HOaMYcSovMyL3KucfwWItG+tJJ9FgdQFhMDKv8XtRH6V0YeiXuSNGvllGDZgWqJIieFlb5lQGNZkwh+mtaUJIZo02Jsxt4pCvGfCbn5zgIDIVCzjG85/oKEajl3Ff4crzCPZSMP2dUC5MWC4go/lMdphIMFtrCfKSe6+/NHxDcfPZjED19fUJANZY2+nE6kQYDOtIezS5YSZISeXUSKsLu2Ht1f3dzfvK3LZiDpqa/5zdsfNYydxBjA8JqRoBFPknKPLP/KfLzNa4sSNUIf/sxj09bfuSyZTy/WY98xSm+P/TL9ms4kP1v5YqfqLVQZlOKqrJlFOrrA6GGPy5ge3ev1SzzJi6BXFxe+YUyXQJgE7pJI6xJoh2SAE4FG/OtkuqnDppwrH+d568enlRGzpjNFblKUF89IjTpXJOtLrAKJ0NYbZEQjhurdI69xMYfeVAb+tvyk6EaiBdWRVflnA2tWbOhJDrmK0nnUT8Oe5VpVaOVDFpTfDHQIRt6TQxUikcLGVRAPDEE5E8EZbPFW4MxgSGABXN7OPKWpvXYe7TA9u9b0y0XUhHCrX5ulhKoCjcAIClrZmkEGI9g8+PFtyMRQABshL3mg6l4iru0Ogxb19vcTB6iMpAAcUvX8gCBLGC2YxHg2JE+yVz4UMD29vvTaVSIg2goolykaSjVbVpLFndvVwo92oieg8JBRuOZ9BiKkdWpasjpJXSlaYw2r4n09k/W8XO+AD0jM5bj45p92FA1gMM5dYIE+ZuevbJ/77yVz+9erQaazsmrUhq7zmD4XyaiC4gIWGCMWaCrQb/HBQkFZc6HL5ssLt981yeSUU1EkxMqzeTUA0AEYFCHYysG+huvW6Cw+YPUokDs9m0Tq7ufh0r97PMvEYqJ1pVS7DROZWFWZPEzJaEICndeYEEAKoknwZEo5t4BQVjTz+iTdCxp7e1v/LCdWKSfNK5/xw77ujj11vgE1K5R+pgFGEYmoUEqFQ5SOUqgAKj8xcPdrf3zMc7ymTSeKcujD5QyOWWRCDtKh5zmF/Yn/QFEC2Zdxx39PF7pRP/EtgeGQYjulph/lAgOW6tAuPxMBg7Z6C7pWe+FEKlEsG85o1X6j+N3LL339f+udJBYunDvOWcr9UecczrriEh/ynSiR8eZUuxvBJOrJ5MmLvLBKNrBv2LH6nCoq0yRUtF8phJoo2zSMa+K534qbowbJkZC69siQQbxSVbBmy/0N/lpQFwpS+fysM2KpHHTBJtdK+TMvZ1ELmRFS24smX8vKB0a2DD/D7W4fr+3tY9ABNSG6jSIWlVXGD8iG0ypczxjdcpp/bDOhhlZrvQ+qgyPUIdjM4/xcCX5GP3/0tJ1DafxX8LAlTJpJe2dR1FiPnKTbwzKAxVdOJpLvPASI9QyBPhRkLuy6VhaenlVesvUjVAWtxyw2ukOOJ26cRP04WRBdQjMDPBRHqEBIzOBwB1WRN8fbCn7YHy5mO1/zRV6m6LvFuOd9zaO4WMvVEHIxUc/T9EL760dUPFYcLcEBNtZ8ObBnu8ByZeWjVPvFcDqGJkPOOCW4+O1yayQsbeVH05Ipf0CEI6cYq2bhQeYeBWacKbsr2t/6+8+4Aq6BGqDFTp6x8hDyi+S7o1S6Kj8tWxpKJo1Zbcy5oAzPZuAm7II79jX1fn0OEEaN5AlZK2Ja3dW91YQ0dYHfkPM9iCQVLFhJAujM49S0zfZ+Cm/u2rdk8agCyHPVwAzQuoElEuWd31T27iyGvDwnAIVCBJLJIzQSjlJMBsYay+n4Ct0GFPdNI0+pxV1SMsJFClCHd2y/a/dWTsZ5aNmK+yZSo563CsQCR+TAI30iP3/3v5t3YAkR4Bz/M124ckz8uI3x31tEgMNeyTTuKtWufMXIva0qi9tJJN6/yjgNjmQN66q+uChyZZbnVPvB8eoMaTypbtH3fiR3xlrsqWqEhFtJKNGdboe0C0ORYY/06/+dlSunGoBv8LG6hiDbfI81/jOPg1QLXMmmbjcqUhqXJqYE0IZr4DZDf1dzXfXgLj+SLnuV6HtApv/5vIB1kluz8nnfr66eZ9M1mQ49RKYwpsdLCTgWsHtq8anGylns1mSSOLF/xFs0gseWlb1+sBZz8YTnEbLM1I0gCUWyOsCQHAh7X/qzQknap+ezFdB9+a2AeRBTSsvFLFamIzW1OURUsnIQkEa4LbQbimtNSv+ivZXlAWFTXzlrZ1HQUWvyWhjmKrMZWbGMV9LSoBo/P3AHZDf1fzj6cChBf5pWZOLvtkNgtNLFdKt/YVJbVauZsRCE6sXpow/4QJxja+WuM63282U4ebL4VrRqCWL++z2SzAQHu0Fbt8sSBrqWIq6oMXbjI2/NyenrbHS1ZUGm6+lC46WHcgubr7dUaIBwHEAAZzxOQqXidMWHiQjVk/0NN8x0L2gV4ol5iexKNvpDckzlFuTYxhdfT1IUoIJyZMkP+mGX76zIGe5juiMoPppQzSjK537LFPRhvKiP8+CmjQTqw+bnXwqDX5jwxsb/1RecaOl8FFM/yMz73i9tjwk88+JKTzWqliMGH+B/lw5NKf+2sOLMT+uhed66VSKQKAZ596+vVSua8lktBB7rP9273zf+6vOeB5GRkNEV8+IE0LVF+RnwQ5S4Rwn2FTOHegu/maVIoFUinxcnG1Q3JUiZ/IsgjzT717MLNm7+mXbHbSaQrxMr7+P2JeT9S5anhGAAAAAElFTkSuQmCC';
+function loadLogo() {
+  const img = document.getElementById('header-logo');
+  img.src = EC_LOGO;
+  img.style.display = 'block';
+  // Also set as login screen icon
+  const loginIcon = document.querySelector('#login-screen .login-wrap div div');
+  if (loginIcon) {
+    loginIcon.innerHTML = '<img src="'+EC_LOGO+'" style="height:60px;width:auto;"/>';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────
+(async function init() {
+  loadLogo();
+  await loadData();
+  const rows = buildScheduleRows();
+  renderSchoolList(rows);
+  setInterval(refresh, 60000);
+})();
+</script>
+</body>
+</html>
