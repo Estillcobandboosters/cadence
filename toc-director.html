@@ -234,6 +234,57 @@ table.fst tr.fst-past td{opacity:.4;}
       <table class="fst"><tbody id="full-sched-body"></tbody></table>
     </div>
 
+    <!-- Announcements -->
+    <div class="info-card" id="ann-card-dir">
+      <div class="info-card-header" style="background:#7B1FA2;">📢 Announcements from event staff</div>
+      <div id="ann-list-dir" style="padding:8px 14px;">
+        <div style="color:#bbb;font-size:13px;padding:8px 0;">No announcements yet.</div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div style="background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;margin-bottom:14px;">
+      <div style="background:linear-gradient(135deg,#1565C0,#0D47A1);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="color:white;font-weight:800;font-size:15px;">💬 Director chat</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="live-dot" style="width:8px;height:8px;border-radius:50%;background:#90EE90;animation:pulse 1.5s infinite;display:inline-block;"></span>
+          <span style="color:rgba(255,255,255,.7);font-size:11px;">Live</span>
+        </div>
+      </div>
+      <!-- Message list -->
+      <div id="chat-messages" style="max-height:40vh;overflow-y:auto;padding:10px 12px;background:#f9fafb;">
+        <div style="color:#bbb;font-size:13px;text-align:center;padding:20px 0;">Loading messages…</div>
+      </div>
+      <!-- Compose — only shown after PIN verified -->
+      <div id="chat-compose-locked" style="padding:14px 18px;border-top:1px solid #f0f0f0;text-align:center;">
+        <div style="font-size:13px;color:#888;margin-bottom:8px;">Verify your school PIN to send messages</div>
+        <button onclick="showPinVerify()" style="padding:9px 20px;background:#1565C0;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔑 Enter PIN to chat</button>
+      </div>
+      <div id="chat-compose" style="display:none;padding:12px;border-top:1px solid #f0f0f0;background:white;">
+        <div style="display:flex;align-items:flex-end;gap:8px;">
+          <div style="flex:1;">
+            <div style="font-size:11px;color:#888;margin-bottom:3px;">Sending as <strong id="chat-as-label" style="color:#1565C0;"></strong></div>
+            <textarea id="chat-input" rows="2" placeholder="Type a message…" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;resize:none;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+          </div>
+          <button onclick="sendChat()" style="padding:10px 16px;background:#1565C0;color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer;flex-shrink:0;font-weight:700;">→</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIN verify modal -->
+    <div id="pin-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center;">
+      <div style="background:white;border-radius:16px;padding:24px;width:320px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+        <h2 style="font-size:16px;font-weight:800;margin-bottom:6px;">Enter your school's PIN</h2>
+        <p style="font-size:12px;color:#888;margin-bottom:14px;">Your director PIN was provided by the event coordinator.</p>
+        <input id="pin-input" type="number" maxlength="4" placeholder="4-digit PIN" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:20px;font-family:monospace;text-align:center;letter-spacing:6px;margin-bottom:6px;" oninput="if(this.value.length>4)this.value=this.value.slice(0,4);" onkeydown="if(event.key==='Enter')verifyPin();"/>
+        <div id="pin-error" style="color:#e53935;font-size:12px;min-height:16px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="closePinVerify()" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;background:white;color:#555;font-size:13px;cursor:pointer;font-family:inherit;">Cancel</button>
+          <button onclick="verifyPin()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1565C0;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Verify</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Print options -->
     <div style="background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);padding:16px;margin-bottom:14px;">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:10px;">Print options</div>
@@ -285,6 +336,10 @@ async function loadData() {
     const json = JSON.parse(text);
     if (json.success && json.data) {
       _data = json.data;
+      // Parse nested JSON strings from Sheets
+      if (_data.pins && typeof _data.pins === 'string') {
+        try { _data.pins = JSON.parse(_data.pins); } catch(e) {}
+      }
       applySettings();
       return true;
     }
@@ -446,6 +501,11 @@ function selectSchool(bandName) {
   // Countdown
   startCountdown(band.performMins);
 
+  // Load chat & announcements
+  loadChatDir();
+  if (_chatTimer) clearInterval(_chatTimer);
+  _chatTimer = setInterval(loadChatDir, 30000);
+
   // Scroll to top
   window.scrollTo(0,0);
 }
@@ -598,11 +658,13 @@ function showToast(msg) {
 // ── Auto-refresh every 60s ────────────────────────────
 async function refresh() {
   await loadData();
-  const syncEl = document.getElementById('last-sync');
-  if (syncEl) syncEl.textContent = 'Last sync: ' + new Date().toLocaleTimeString();
-  // If director screen is showing, refresh their data
+  // If director screen is showing, refresh schedule data (not full re-render which resets chat scroll)
   if (_bandName && document.getElementById('director-screen').style.display!=='none') {
-    selectSchool(_bandName);
+    const rows = buildScheduleRows();
+    renderFullSchedule(rows, _bandName);
+    startCountdown(_band.performMins);
+    const syncEl = document.getElementById('last-sync');
+    if (syncEl) syncEl.textContent = 'Last sync: ' + new Date().toLocaleTimeString();
   }
 }
 
@@ -706,6 +768,117 @@ function printFullSchedule() {
   const w=window.open('','_blank','width=700,height=700');
   w.document.write(html); w.document.close();
 }
+
+// ── Chat & Announcements ─────────────────────────────────────────────────────
+let _dirVerified = false;
+let _chatTimer   = null;
+
+function showPinVerify() {
+  document.getElementById('pin-overlay').style.display = 'flex';
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').textContent = '';
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+}
+function closePinVerify() {
+  document.getElementById('pin-overlay').style.display = 'none';
+}
+
+function verifyPin() {
+  const entered = document.getElementById('pin-input').value.trim();
+  const expected = (_data?.pins || {})[_bandName];
+  if (!expected) {
+    document.getElementById('pin-error').textContent = 'No PIN found for your school. Contact event staff.';
+    return;
+  }
+  if (entered !== String(expected)) {
+    document.getElementById('pin-error').textContent = 'Incorrect PIN. Try again or contact event staff.';
+    return;
+  }
+  _dirVerified = true;
+  closePinVerify();
+  document.getElementById('chat-compose-locked').style.display = 'none';
+  document.getElementById('chat-compose').style.display = 'block';
+  document.getElementById('chat-as-label').textContent = _bandName;
+  showToast('PIN verified! You can now send messages.');
+}
+
+async function sendChat() {
+  const msg = document.getElementById('chat-input').value.trim();
+  if (!msg || !_dirVerified) return;
+  document.getElementById('chat-input').value = '';
+  try {
+    await fetch(SCRIPT_URL + '?' + new URLSearchParams({
+      action: 'toc_chat_post',
+      school:  _bandName,
+      name:    _bandName,
+      message: msg,
+      isStaff: 'false'
+    }).toString(), {method:'GET', redirect:'follow'});
+    loadChatDir();
+  } catch(e) { showToast('Failed to send'); }
+}
+
+async function loadChatDir() {
+  try {
+    const [chatRes, annRes] = await Promise.all([
+      fetch(SCRIPT_URL + '?action=toc_chat_load', {method:'GET',redirect:'follow'}).then(r=>r.json()),
+      fetch(SCRIPT_URL + '?action=toc_ann_load',  {method:'GET',redirect:'follow'}).then(r=>r.json()),
+    ]);
+    if (chatRes.success) renderChatDir(chatRes.messages || []);
+    if (annRes.success)  renderAnnsDir(annRes.announcements || []);
+    const syncEl = document.getElementById('last-sync');
+    if (syncEl) syncEl.textContent = 'Last sync: ' + new Date().toLocaleTimeString();
+  } catch(e) { console.warn('Chat load failed:', e); }
+}
+
+function renderChatDir(messages) {
+  const el = document.getElementById('chat-messages');
+  if (!el) return;
+  if (messages.length === 0) {
+    el.innerHTML = '<div style="color:#bbb;font-size:13px;text-align:center;padding:20px 0;">No messages yet. Be the first!</div>';
+    return;
+  }
+  const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  el.innerHTML = messages.map(m => {
+    const isMe   = m.school === _bandName && !m.isStaff;
+    const isStaff = m.isStaff;
+    const ts = new Date(m.timestamp).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const bg    = isMe ? '#E3F2FD' : isStaff ? '#E8F5E9' : 'white';
+    const align = isMe ? 'flex-end' : 'flex-start';
+    const nameColor = isStaff ? '#2E7D32' : '#1565C0';
+    const name  = isStaff ? '⭐ Event Staff' : m.school;
+    return `<div style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">
+      <div style="font-size:10px;color:#aaa;margin-bottom:2px;">${isMe?'':name+' · '}${ts}</div>
+      <div style="background:${bg};border:1px solid ${isMe?'#90CAF9':isStaff?'#A5D6A7':'#e5e7eb'};border-radius:12px;padding:8px 12px;max-width:85%;font-size:13px;line-height:1.4;">
+        ${!isMe?'<div style="font-size:10px;font-weight:700;color:'+nameColor+';margin-bottom:2px;">'+name+'</div>':''}
+        ${escHtmlDir(m.message)}
+      </div>
+    </div>`;
+  }).join('');
+  if (isAtBottom) el.scrollTop = el.scrollHeight;
+}
+
+function renderAnnsDir(anns) {
+  const el = document.getElementById('ann-list-dir');
+  if (!el) return;
+  if (anns.length === 0) {
+    el.innerHTML = '<div style="color:#bbb;font-size:13px;padding:8px 0;">No announcements yet.</div>';
+    return;
+  }
+  const colors  = {urgent:'#FFEBEE',info:'#E3F2FD',good:'#E8F5E9'};
+  const borders = {urgent:'#EF9A9A',info:'#90CAF9',good:'#A5D6A7'};
+  const icons   = {urgent:'🚨',info:'ℹ️',good:'✅'};
+  el.innerHTML = anns.reverse().map(a => {
+    const ts = new Date(a.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    return `<div style="background:${colors[a.priority]||colors.info};border-left:4px solid ${borders[a.priority]||borders.info};border-radius:6px;padding:10px 12px;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:3px;">${icons[a.priority]||'ℹ️'} ${escHtmlDir(a.title)}</div>
+      <div style="font-size:12px;color:#555;line-height:1.4;">${escHtmlDir(a.body)}</div>
+      <div style="font-size:10px;color:#aaa;margin-top:4px;">${ts}</div>
+    </div>`;
+  }).join('');
+}
+
+const escHtmlDir = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 // ── Init ──────────────────────────────────────────────
 (async function init() {

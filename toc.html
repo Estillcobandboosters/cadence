@@ -277,6 +277,7 @@ table.sch tr:hover td{background:#f8f9ff;}
     <div class="nav-tab" onclick="showPage('dashboard')">📡 Day-of</div>
     <div class="nav-tab" onclick="showPage('badges')">🪪 Badges</div>
     <div class="nav-tab" onclick="showPage('parking')">🚌 Parking</div>
+    <div class="nav-tab" onclick="showPage('comms')">💬 Comms</div>
   </div>
   <div class="nav-actions" style="display:flex;align-items:center;gap:10px;">
     <span id="save-indicator" style="font-size:11px;color:rgba(255,255,255,.5);">✓ Saved</span>
@@ -538,6 +539,64 @@ table.sch tr:hover td{background:#f8f9ff;}
 </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════
+     PAGE 7: COMMUNICATIONS (Chat & Announcements)
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-comms">
+<div class="sb-layout">
+<div class="sidebar">
+  <div class="sb-h">Post announcement</div>
+  <div class="ctrl"><label>Title</label><input id="ann-title" placeholder="e.g. Gate change notice"/></div>
+  <div class="ctrl"><label>Message</label><textarea id="ann-body" rows="3" style="width:100%;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;font-family:inherit;resize:vertical;"></textarea></div>
+  <div class="ctrl"><label>Priority</label>
+    <select id="ann-priority" style="padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;font-family:inherit;width:100%;">
+      <option value="info">ℹ Info (blue)</option>
+      <option value="urgent">🚨 Urgent (red)</option>
+      <option value="good">✅ Good news (green)</option>
+    </select>
+  </div>
+  <button class="btn btn-blue" onclick="postAnnouncement()" style="width:100%;margin-bottom:16px;">Post announcement</button>
+
+  <div class="sb-h">Chat as staff</div>
+  <div class="ctrl"><textarea id="staff-msg" rows="3" placeholder="Message to all directors…" style="width:100%;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;font-family:inherit;resize:vertical;"></textarea></div>
+  <button class="btn btn-blue" onclick="postStaffChat()" style="width:100%;">Send as Event Staff</button>
+
+  <div class="sb-h" style="margin-top:16px;">PIN management</div>
+  <p style="font-size:11px;color:#888;margin-bottom:8px;">Each school has a 4-digit PIN directors use to verify their identity before chatting.</p>
+  <button class="btn btn-sm" style="background:#f0f0f0;color:#333;width:100%;" onclick="showPins()">View / reset PINs</button>
+</div>
+
+<div class="canvas">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+    <div style="font-size:18px;font-weight:800;">Communications</div>
+    <div style="font-size:12px;color:#888;"><span class="live-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2E7D32;animation:pulse 1.5s infinite;"></span> Auto-refreshes every 30s</div>
+  </div>
+
+  <!-- Announcements -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-hdr" style="background:linear-gradient(135deg,#7B1FA2,#6A1B9A);color:white;border-radius:0;">
+      <h2 style="color:white;">📢 Announcements</h2>
+      <span style="font-size:12px;opacity:.7;">Visible to all directors</span>
+    </div>
+    <div id="ann-list-admin" style="padding:8px;">
+      <div style="color:#ccc;font-size:13px;padding:12px;">No announcements yet.</div>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div class="card">
+    <div class="card-hdr" style="background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;border-radius:0;">
+      <h2 style="color:white;">💬 Director chat</h2>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);" onclick="loadComms()">↺ Refresh</button>
+    </div>
+    <div id="chat-list-admin" style="padding:8px;max-height:60vh;overflow-y:auto;">
+      <div style="color:#ccc;font-size:13px;padding:12px;">No messages yet.</div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
 <!-- ── Add band modal ── -->
 <div class="modal-bg" id="band-modal">
   <div class="modal">
@@ -575,6 +634,19 @@ table.sch tr:hover td{background:#f8f9ff;}
     <div class="modal-footer">
       <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('vol-group-modal')">Cancel</button>
       <button class="btn btn-blue" onclick="saveVolGroup()">Add area</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PIN viewer modal ── -->
+<div class="modal-bg" id="pin-modal">
+  <div class="modal">
+    <h2>School PINs</h2>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;">Share each school's PIN with their director before the event. Directors enter this to verify their school before chatting.</p>
+    <div id="pin-list" style="max-height:50vh;overflow-y:auto;font-size:13px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-blue btn-sm" onclick="regeneratePins()">🔄 Regenerate all PINs</button>
+      <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('pin-modal')">Close</button>
     </div>
   </div>
 </div>
@@ -744,6 +816,8 @@ let _scheduleRows = []; // cached for dashboard/checkin
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec';
 
 let _saveTimer = null;
+let schoolPins   = {};   // {bandName: '1234'}
+let _commsTimer  = null;
 let _saving = false;
 let _saveStatus = 'saved'; // 'saved'|'saving'|'unsaved'
 
@@ -784,6 +858,7 @@ function save(){
     localStorage.setItem('toc_badges',     JSON.stringify(extraBadges));
     localStorage.setItem('toc_settings',   JSON.stringify(getSettings()));
     localStorage.setItem('toc_lots',       JSON.stringify(parkingLots));
+    localStorage.setItem('toc_pins',       JSON.stringify(schoolPins));
     localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
   } catch(e){}
 
@@ -814,6 +889,7 @@ async function pushToSheets(){
       badges:      JSON.stringify(extraBadges),
       settings:    JSON.stringify(getSettings()),
       lots:        JSON.stringify(parkingLots),
+      pins:        JSON.stringify(schoolPins),
       parking:     JSON.stringify(bandParking),
     });
     setSaveStatus('saved');
@@ -839,6 +915,10 @@ async function load(){
       if(d.volunteers) volunteers= Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
       if(d.checkin)    checkinStatus = (typeof d.checkin==='object' && !Array.isArray(d.checkin)) ? d.checkin : JSON.parse(d.checkin||'{}');
       if(d.badges)     extraBadges  = Array.isArray(d.badges)   ? d.badges     : JSON.parse(d.badges||'[]');
+      if(d.pins){
+        const p = typeof d.pins==='object'&&!Array.isArray(d.pins) ? d.pins : JSON.parse(d.pins||'{}');
+        if(Object.keys(p).length > 0) schoolPins = p;
+      }
       if(d.lots){
         const l = Array.isArray(d.lots) ? d.lots : JSON.parse(d.lots||'[]');
         parkingLots = l.length > 0 ? l : DEFAULT_PARKING_LOTS;
@@ -929,6 +1009,8 @@ function showPage(id){
   if(id==='dashboard')  renderDashboard();
   if(id==='badges')     renderBadges();
   if(id==='parking')    renderParking();
+  if(id==='comms')      { loadComms(); startCommsRefresh(); }
+  else                  { stopCommsRefresh(); }
 }
 
 // ════════════════════════════════════════════════════════
@@ -2188,6 +2270,174 @@ function printSchedule() {
   const win = window.open('', '_blank', 'width=1100,height=800');
   win.document.write(html);
   win.document.close();
+}
+
+// ════════════════════════════════════════════════════════
+//  COMMUNICATIONS — CHAT & ANNOUNCEMENTS
+// ════════════════════════════════════════════════════════
+
+function generatePin() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function ensurePins() {
+  // Generate PINs for any band that doesn't have one
+  const bands = getBands();
+  let changed = false;
+  bands.forEach(b => {
+    if (!schoolPins[b.band]) {
+      schoolPins[b.band] = generatePin();
+      changed = true;
+    }
+  });
+  if (changed) save();
+}
+
+function showPins() {
+  ensurePins();
+  const bands = getBands();
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<tr style="background:#f0f0f0;"><th style="padding:5px 8px;text-align:left;">School</th><th style="padding:5px 8px;text-align:center;">PIN</th><th></th></tr>';
+  bands.forEach(b => {
+    html += `<tr style="border-bottom:1px solid #f5f5f5;">
+      <td style="padding:6px 8px;font-weight:600;">${escHtml(b.band)}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:16px;font-weight:800;font-family:monospace;color:#1565C0;letter-spacing:3px;">${schoolPins[b.band]||'—'}</td>
+      <td style="padding:6px 8px;"><button class="btn btn-xs" style="background:#f0f0f0;color:#555;" onclick="resetPin('${b.band.replace(/'/g,"\'")}')">↺</button></td>
+    </tr>`;
+  });
+  html += '</table>';
+  document.getElementById('pin-list').innerHTML = html;
+  openModal('pin-modal');
+}
+
+function resetPin(band) {
+  schoolPins[band] = generatePin();
+  save();
+  showPins();
+}
+
+function regeneratePins() {
+  if (!confirm('Regenerate all PINs? Directors will need the new ones to chat.')) return;
+  const bands = getBands();
+  bands.forEach(b => { schoolPins[b.band] = generatePin(); });
+  save();
+  showPins();
+}
+
+async function apiCallComms(params) {
+  const url = SCRIPT_URL + '?' + new URLSearchParams(params).toString();
+  const res  = await fetch(url, {method:'GET', redirect:'follow'});
+  return res.json();
+}
+
+async function loadComms() {
+  try {
+    const [chatRes, annRes] = await Promise.all([
+      apiCallComms({action:'toc_chat_load'}),
+      apiCallComms({action:'toc_ann_load'})
+    ]);
+    if (chatRes.success) renderChatAdmin(chatRes.messages || []);
+    if (annRes.success)  renderAnnsAdmin(annRes.announcements || []);
+  } catch(e) { console.warn('Comms load failed:', e); }
+}
+
+function renderChatAdmin(messages) {
+  const el = document.getElementById('chat-list-admin');
+  if (!el) return;
+  if (messages.length === 0) {
+    el.innerHTML = '<div style="color:#ccc;font-size:13px;padding:12px;">No messages yet.</div>';
+    return;
+  }
+  el.innerHTML = messages.map(m => {
+    const ts = new Date(m.timestamp).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const bg = m.isStaff ? '#E8F5E9' : 'white';
+    const nameColor = m.isStaff ? '#2E7D32' : '#1565C0';
+    return `<div style="background:${bg};border:1px solid #f0f0f0;border-radius:8px;padding:9px 12px;margin-bottom:6px;position:relative;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-weight:700;font-size:12px;color:${nameColor};">${m.isStaff?'⭐ Event Staff':escHtml(m.school)}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:10px;color:#aaa;">${ts}</span>
+          <button class="btn btn-xs btn-red" onclick="deleteChat('${m.id}')" style="padding:1px 5px;font-size:10px;">×</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:#333;line-height:1.4;">${escHtml(m.message)}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderAnnsAdmin(anns) {
+  const el = document.getElementById('ann-list-admin');
+  if (!el) return;
+  if (anns.length === 0) {
+    el.innerHTML = '<div style="color:#ccc;font-size:13px;padding:12px;">No announcements yet.</div>';
+    return;
+  }
+  const colors = {urgent:'#FFEBEE',info:'#E3F2FD',good:'#E8F5E9'};
+  const borders = {urgent:'#EF9A9A',info:'#90CAF9',good:'#A5D6A7'};
+  const icons   = {urgent:'🚨',info:'ℹ️',good:'✅'};
+  el.innerHTML = anns.map(a => {
+    const ts = new Date(a.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    return `<div style="background:${colors[a.priority]||colors.info};border:1px solid ${borders[a.priority]||borders.info};border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-weight:700;font-size:13px;">${icons[a.priority]||'ℹ️'} ${escHtml(a.title)}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:10px;color:#888;">${ts}</span>
+          <button class="btn btn-xs btn-red" onclick="deleteAnn('${a.id}')" style="padding:1px 5px;font-size:10px;">×</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#555;">${escHtml(a.body)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function postAnnouncement() {
+  const title    = document.getElementById('ann-title').value.trim();
+  const body     = document.getElementById('ann-body').value.trim();
+  const priority = document.getElementById('ann-priority').value;
+  if (!title || !body) { showToast('Enter a title and message'); return; }
+  try {
+    await apiCallComms({action:'toc_ann_save', title, body, priority});
+    document.getElementById('ann-title').value = '';
+    document.getElementById('ann-body').value  = '';
+    showToast('Announcement posted!');
+    loadComms();
+  } catch(e) { showToast('Failed to post: ' + e.message); }
+}
+
+async function postStaffChat() {
+  const msg = document.getElementById('staff-msg').value.trim();
+  if (!msg) return;
+  try {
+    await apiCallComms({action:'toc_chat_post', school:'Event Staff', name:'Event Staff', message:msg, isStaff:'true'});
+    document.getElementById('staff-msg').value = '';
+    showToast('Message sent!');
+    loadComms();
+  } catch(e) { showToast('Failed to send: ' + e.message); }
+}
+
+async function deleteChat(id) {
+  if (!confirm('Delete this message?')) return;
+  try {
+    await apiCallComms({action:'toc_chat_delete', id});
+    loadComms();
+  } catch(e) { showToast('Delete failed'); }
+}
+
+async function deleteAnn(id) {
+  if (!confirm('Delete this announcement?')) return;
+  try {
+    await apiCallComms({action:'toc_ann_delete', id});
+    loadComms();
+  } catch(e) { showToast('Delete failed'); }
+}
+
+function startCommsRefresh() {
+  stopCommsRefresh();
+  _commsTimer = setInterval(loadComms, 30000);
+}
+function stopCommsRefresh() {
+  if (_commsTimer) { clearInterval(_commsTimer); _commsTimer = null; }
 }
 
 // ════════════════════════════════════════════════════════
