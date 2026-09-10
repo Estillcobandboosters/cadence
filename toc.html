@@ -569,7 +569,10 @@ table.sch tr:hover td{background:#f8f9ff;}
 <div class="canvas">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
     <div style="font-size:18px;font-weight:800;">Communications</div>
-    <div style="font-size:12px;color:#888;"><span class="live-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2E7D32;animation:pulse 1.5s infinite;"></span> Auto-refreshes every 30s</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn btn-sm" style="background:white;border:1px solid #ddd;color:#555;" onclick="loadComms()">↺ Refresh now</button>
+      <div style="font-size:12px;color:#888;"><span class="live-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2E7D32;animation:pulse 1.5s infinite;"></span> Auto every 30s</div>
+    </div>
   </div>
 
   <!-- Announcements -->
@@ -2433,6 +2436,14 @@ async function apiCallComms(params) {
 
 async function loadComms() {
   populatePrivSchoolDropdown();
+  // Show loading state immediately
+  const loadingHtml = '<div style="color:#aaa;font-size:12px;padding:12px;text-align:center;">⏳ Loading…</div>';
+  const chatEl = document.getElementById('chat-list-admin');
+  const annEl  = document.getElementById('ann-list-admin');
+  const privEl = document.getElementById('priv-list-admin');
+  if (chatEl && chatEl.innerHTML.includes('No messages')) chatEl.innerHTML = loadingHtml;
+  if (annEl  && annEl.innerHTML.includes('No announcements')) annEl.innerHTML = loadingHtml;
+  if (privEl && privEl.innerHTML.includes('No private')) privEl.innerHTML = loadingHtml;
   try {
     const [chatRes, annRes, privRes] = await Promise.all([
       apiCallComms({action:'toc_chat_load'}),
@@ -2442,7 +2453,11 @@ async function loadComms() {
     if (chatRes.success) renderChatAdmin(chatRes.messages || []);
     if (annRes.success)  renderAnnsAdmin(annRes.announcements || []);
     if (privRes.success) renderPrivAdmin(privRes.messages || []);
-  } catch(e) { console.warn('Comms load failed:', e); }
+  } catch(e) {
+    console.warn('Comms load failed:', e);
+    const errHtml = '<div style="color:#e53935;font-size:12px;padding:12px;text-align:center;">⚠️ Could not load — check connection</div>';
+    if (chatEl) chatEl.innerHTML = errHtml;
+  }
 }
 
 function renderChatAdmin(messages) {
