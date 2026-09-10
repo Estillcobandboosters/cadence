@@ -583,13 +583,24 @@ table.sch tr:hover td{background:#f8f9ff;}
     </div>
   </div>
 
+  <!-- Private messages (staff only view) -->
+  <div class="card" style="margin-bottom:16px;border:2px solid #CE93D8;">
+    <div class="card-hdr" style="background:linear-gradient(135deg,#7B1FA2,#6A1B9A);color:white;border-radius:0;">
+      <h2 style="color:white;">🔒 Private messages (staff only)</h2>
+      <span style="font-size:12px;opacity:.7;">Not visible to other directors</span>
+    </div>
+    <div id="priv-list-admin" style="padding:8px;max-height:30vh;overflow-y:auto;">
+      <div style="color:#ccc;font-size:13px;padding:12px;">No private messages yet.</div>
+    </div>
+  </div>
+
   <!-- Chat -->
   <div class="card">
     <div class="card-hdr" style="background:linear-gradient(135deg,#1565C0,#0D47A1);color:white;border-radius:0;">
-      <h2 style="color:white;">💬 Director chat</h2>
+      <h2 style="color:white;">💬 Director chat (public)</h2>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);" onclick="loadComms()">↺ Refresh</button>
     </div>
-    <div id="chat-list-admin" style="padding:8px;max-height:60vh;overflow-y:auto;">
+    <div id="chat-list-admin" style="padding:8px;max-height:40vh;overflow-y:auto;">
       <div style="color:#ccc;font-size:13px;padding:12px;">No messages yet.</div>
     </div>
   </div>
@@ -2332,12 +2343,14 @@ async function apiCallComms(params) {
 
 async function loadComms() {
   try {
-    const [chatRes, annRes] = await Promise.all([
+    const [chatRes, annRes, privRes] = await Promise.all([
       apiCallComms({action:'toc_chat_load'}),
-      apiCallComms({action:'toc_ann_load'})
+      apiCallComms({action:'toc_ann_load'}),
+      apiCallComms({action:'toc_priv_load', admin:'true'}),
     ]);
     if (chatRes.success) renderChatAdmin(chatRes.messages || []);
     if (annRes.success)  renderAnnsAdmin(annRes.announcements || []);
+    if (privRes.success) renderPrivAdmin(privRes.messages || []);
   } catch(e) { console.warn('Comms load failed:', e); }
 }
 
@@ -2389,6 +2402,26 @@ function renderAnnsAdmin(anns) {
       <div style="font-size:12px;color:#555;">${escHtml(a.body)}</div>
     </div>`;
   }).join('');
+}
+
+function renderPrivAdmin(messages) {
+  const el = document.getElementById('priv-list-admin');
+  if (!el) return;
+  if (messages.length === 0) {
+    el.innerHTML = '<div style="color:#ccc;font-size:13px;padding:12px;">No private messages yet.</div>';
+    return;
+  }
+  el.innerHTML = messages.map(m => {
+    const ts = new Date(m.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    return `<div style="background:#F3E5F5;border:1px solid #CE93D8;border-radius:8px;padding:9px 12px;margin-bottom:6px;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-weight:700;font-size:12px;color:#7B1FA2;">🔒 ${escHtml(m.school)}</span>
+        <span style="font-size:10px;color:#aaa;">${ts}</span>
+      </div>
+      <div style="font-size:13px;color:#333;line-height:1.4;">${escHtml(m.message)}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
 }
 
 async function postAnnouncement() {
