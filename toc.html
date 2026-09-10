@@ -989,6 +989,7 @@ async function load(){
         localStorage.setItem('toc_badges',     JSON.stringify(extraBadges));
         if(d.settings) localStorage.setItem('toc_settings', JSON.stringify(typeof d.settings==='object'?d.settings:JSON.parse(d.settings)));
       } catch(e){}
+      loadLogosLocal();  // logos stored locally only (too large for Sheets)
       setSaveStatus('saved');
       showToast('✓ Synced with Google Sheets');
       return;
@@ -1014,6 +1015,7 @@ async function load(){
     const prk=localStorage.getItem('toc_parking');
     if(prk){ const p=JSON.parse(prk); bandParking = Object.keys(p).length>0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
     else { bandParking = JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
+    loadLogosLocal();  // merge logos (stored separately due to size)
     const set=localStorage.getItem('toc_settings');
     if(set){
       const s=JSON.parse(set);
@@ -1807,6 +1809,36 @@ function renderParkingMain() {
 }
 
 // ── Band logo upload ──────────────────────────────────
+// Logos stay local only — too large for Sheets transport
+function stripLogos(parking) {
+  const out = {};
+  Object.keys(parking).forEach(k => {
+    const { logo, ...rest } = parking[k];
+    out[k] = rest;
+  });
+  return out;
+}
+
+function saveLogosLocal() {
+  // Save just the logo data separately in localStorage
+  const logos = {};
+  Object.keys(bandParking).forEach(k => {
+    if (bandParking[k].logo) logos[k] = bandParking[k].logo;
+  });
+  try { localStorage.setItem('toc_logos', JSON.stringify(logos)); } catch(e) {}
+}
+
+function loadLogosLocal() {
+  try {
+    const raw = localStorage.getItem('toc_logos');
+    if (!raw) return;
+    const logos = JSON.parse(raw);
+    Object.keys(logos).forEach(k => {
+      if (!bandParking[k]) bandParking[k] = {};
+      bandParking[k].logo = logos[k];
+    });
+  } catch(e) {}
+}
 function previewLogo(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
@@ -1919,7 +1951,7 @@ function saveBandParking() {
     truck:   document.getElementById('bp-truck').checked,
     logo:    newLogo || p.logo || '',
   };
-  closeModal('band-parking-modal'); save(); renderParking();
+  closeModal('band-parking-modal'); saveLogosLocal(); save(); renderParking();
 }
 
 // ── Print: Guide cards ────────────────────────────────

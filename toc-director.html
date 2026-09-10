@@ -165,10 +165,7 @@ table.fst tr.fst-past td{opacity:.4;}
     <!-- Hero schedule card -->
     <div class="hero-card">
       <div class="hero-header" id="d-hero-header">
-        <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:6px;">
-          <img id="d-band-logo" src="" alt="" style="display:none;height:56px;width:auto;max-width:80px;object-fit:contain;background:rgba(255,255,255,.15);border-radius:8px;padding:4px;"/>
-          <img src="" id="d-ec-logo" style="height:44px;width:auto;opacity:.8;"/>
-        </div>
+        <img src="" id="d-ec-logo" style="height:44px;width:auto;opacity:.8;margin-bottom:6px;display:block;margin-left:auto;margin-right:auto;"/>
         <div class="hero-school" id="d-school"></div>
         <div class="hero-director" id="d-director"></div>
         <div class="hero-class" id="d-class"></div>
@@ -442,18 +439,10 @@ function renderSchoolList(rows) {
       html += `<div class="school-divider">${cls}</div>`;
     }
     if (r.t==='band') {
-      const p    = getParkingFor(r.band);
-      const logo = p.logo || '';
-      const logoEl = logo
-        ? `<img src="${logo}" style="height:36px;width:36px;object-fit:contain;border-radius:6px;flex-shrink:0;background:#f0f4ff;padding:2px;"/>`
-        : `<div style="width:36px;height:36px;border-radius:6px;background:#f0f4ff;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🎺</div>`;
       html += `<button class="school-btn" onclick="selectSchool('${r.band.replace(/'/g,"\'")}')">
-        <div style="display:flex;align-items:center;gap:12px;">
-          ${logoEl}
-          <div>
-            <div class="sname">${r.band}</div>
-            <div class="sclass">${cls} · Draw #${r.draw} · Performs ${r.perform}</div>
-          </div>
+        <div>
+          <div class="sname">${r.band}</div>
+          <div class="sclass">${cls} · Draw #${r.draw} · Performs ${r.perform}</div>
         </div>
         <div class="arr">›</div>
       </button>`;
@@ -509,18 +498,8 @@ function selectSchool(bandName) {
   ab.textContent = band.area;
   ab.className   = 'area-badge ab-'+band.area;
 
-  // Band logo
-  const _pObj       = getParkingFor(bandName);
-  const bandLogoUrl = _pObj.logo || '';
-  const bandLogoEl = document.getElementById('d-band-logo');
-  if (bandLogoEl) {
-    if (bandLogoUrl) {
-      bandLogoEl.src = bandLogoUrl;
-      bandLogoEl.style.display = 'block';
-    } else {
-      bandLogoEl.style.display = 'none';
-    }
-  }
+  // Parking data
+  const _pObj = getParkingFor(bandName);
 
   // Parking
   const lots    = _data.lots    || [];
@@ -736,7 +715,7 @@ function printMySchedule() {
   const spot = document.getElementById('d-spot')?.textContent || '—';
   const guide= document.getElementById('d-guide')?.textContent || '—';
   const vehs = document.getElementById('d-vehicles')?.textContent || '—';
-  const bandLogoUrl = document.getElementById('d-band-logo')?.src || '';
+  const bandLogoUrl = '';  // logos not available on director portal
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Schedule — '+_bandName+'</title>'+
     '<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;padding:.4in;font-size:11pt;}'+
     '.hdr{border-bottom:3pt solid #1565C0;padding-bottom:10pt;margin-bottom:14pt;display:flex;justify-content:space-between;align-items:flex-end;}'+
