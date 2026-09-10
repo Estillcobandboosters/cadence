@@ -498,13 +498,11 @@ function selectSchool(bandName) {
   ab.textContent = band.area;
   ab.className   = 'area-badge ab-'+band.area;
 
-  // Parking data
-  const _pObj = getParkingFor(bandName);
-
-  // Parking
-  const lots    = _data.lots    || [];
-  const p       = parking[bandName] || {};
-  const lot     = lots.find(l=>l.id===p.lot);
+  // Parking data (already parsed by getParkingFor)
+  const p    = getParkingFor(bandName);
+  const rawLots = _data.lots || [];
+  const lots = rawLots.map(l => typeof l==='string' ? JSON.parse(l) : l);
+  const lot  = lots.find(l => l.id === p.lot);
   if (lot || p.spot || p.guide || p.vehicles) {
     document.getElementById('parking-card').style.display = 'block';
     document.getElementById('d-lot').textContent      = lot ? lot.name : '—';
@@ -516,19 +514,19 @@ function selectSchool(bandName) {
   // Check-in button
   updateCheckinBtn();
 
-  // Full schedule
+  // Full schedule & countdown — instant, built from already-loaded _data
   renderFullSchedule(rows, bandName);
-
-  // Countdown
   startCountdown(band.performMins);
 
-  // Load chat & announcements
-  loadChatDir();
-  if (_chatTimer) clearInterval(_chatTimer);
-  _chatTimer = setInterval(loadChatDir, 30000);
-
-  // Scroll to top
+  // Scroll to top immediately
   window.scrollTo(0,0);
+
+  // Load chat & announcements AFTER page is visible (non-blocking)
+  setTimeout(() => {
+    loadChatDir();
+    if (_chatTimer) clearInterval(_chatTimer);
+    _chatTimer = setInterval(loadChatDir, 30000);
+  }, 100);
 }
 
 // ── Full schedule table ───────────────────────────────
@@ -871,30 +869,51 @@ async function sendChat() {
   } catch(e) { showToast('Failed to send'); }
 }
 
+async function fetchWithTimeout(url, ms=8000) {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), ms);
+  try {
+    const r = await fetch(url, {method:'GET', redirect:'follow', signal:controller.signal});
+    clearTimeout(tid);
+    return r.json();
+  } catch(e) {
+    clearTimeout(tid);
+    throw e;
+  }
+}
+
 async function loadChatDir() {
   if (!_bandName) return;
-  // Show loading state on first load (when still showing spinner text)
   const chatEl = document.getElementById('chat-messages');
   const annEl  = document.getElementById('ann-list-dir');
-  if (chatEl && chatEl.innerHTML.includes('⏳')) {
-    chatEl.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px 0;">⏳ Loading messages…</div>';
-  }
+
   try {
-    const [chatRes, annRes, privRes] = await Promise.all([
-      fetch(SCRIPT_URL + '?action=toc_chat_load', {method:'GET',redirect:'follow'}).then(r=>r.json()),
-      fetch(SCRIPT_URL + '?action=toc_ann_load',  {method:'GET',redirect:'follow'}).then(r=>r.json()),
-      fetch(SCRIPT_URL + '?' + new URLSearchParams({action:'toc_priv_load', school:_bandName}).toString(), {method:'GET',redirect:'follow'}).then(r=>r.json()),
-    ]);
-    if (chatRes.success) renderChatDir(chatRes.messages || []);
-    else if (chatEl) chatEl.innerHTML = '<div style="color:#e53935;font-size:12px;text-align:center;padding:12px;">⚠️ Could not load messages</div>';
-    if (annRes.success)  renderAnnsDir(annRes.announcements || []);
-    if (privRes.success) renderPrivDir(privRes.messages || []);
-    const syncEl = document.getElementById('last-sync');
-    if (syncEl) syncEl.textContent = 'Last sync: ' + new Date().toLocaleTimeString();
+    // Load announcements first — most important, fastest
+    const annRes = await fetchWithTimeout(SCRIPT_URL + '?action=toc_ann_load');
+    if (annRes.success) renderAnnsDir(annRes.announcements || []);
   } catch(e) {
-    console.warn('Chat load failed:', e);
-    if (chatEl) chatEl.innerHTML = '<div style="color:#e53935;font-size:12px;text-align:center;padding:12px;">⚠️ No connection — tap ↺ Refresh to try again</div>';
+    if (annEl) annEl.innerHTML = '<div style="color:#aaa;font-size:12px;padding:8px;">Announcements unavailable</div>';
   }
+
+  try {
+    // Then load chat
+    const chatRes = await fetchWithTimeout(SCRIPT_URL + '?action=toc_chat_load');
+    if (chatRes.success) renderChatDir(chatRes.messages || []);
+    else if (chatEl) chatEl.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:12px;">No messages yet</div>';
+  } catch(e) {
+    if (chatEl) chatEl.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:12px;">Chat unavailable — tap ↺ to retry</div>';
+  }
+
+  try {
+    // Load private messages last
+    const privRes = await fetchWithTimeout(
+      SCRIPT_URL + '?' + new URLSearchParams({action:'toc_priv_load', school:_bandName}).toString()
+    );
+    if (privRes.success) renderPrivDir(privRes.messages || []);
+  } catch(e) { /* private messages optional */ }
+
+  const syncEl = document.getElementById('last-sync');
+  if (syncEl) syncEl.textContent = 'Last sync: ' + new Date().toLocaleTimeString();
 }
 
 function renderChatDir(messages) {
