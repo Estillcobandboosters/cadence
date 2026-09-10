@@ -1764,7 +1764,11 @@ function renderParkingMain() {
 
     html += `<tr style="cursor:pointer;${spotBg}" onclick="openBandParking('${r.band.replace(/'/g,"\\'")}')">
       <td style="font-weight:700;color:#1565C0;">${r.draw}</td>
-      <td style="font-weight:600;">${escHtml(r.band)}</td>
+      <td style="font-weight:600;">
+        ${p.logo
+          ? '<img src="'+p.logo+'" style="height:22px;width:22px;object-fit:contain;border-radius:3px;vertical-align:middle;margin-right:6px;"/>'
+          : '<span style="display:inline-block;width:20px;height:20px;border-radius:3px;background:#f0f4ff;text-align:center;line-height:20px;font-size:10px;vertical-align:middle;margin-right:5px;">🎺</span>'
+        }${escHtml(r.band)}</td>
       <td style="font-size:11.5px;color:#666;">${escHtml(dir.name || p.director || '')}</td>
       <td style="font-weight:700;color:#1565C0;">${r.perform}</td>
       <td style="font-size:11.5px;max-width:200px;white-space:normal;">${escHtml(p.vehicles || '—')}</td>
@@ -1882,7 +1886,6 @@ function openBandParking(bandName) {
   const p   = bandParking[bandName] || {};
   const dir = DIRECTORS[bandName]   || {};
   document.getElementById('bp-title').textContent = bandName + ' — Parking Details';
-  document.getElementById('bp-buses').value   = p.buses   || 2;
   document.getElementById('bp-spot').value    = p.spot    || '';
   document.getElementById('bp-guide').value   = p.guide   || '';
   document.getElementById('bp-notes').value   = p.vehicles|| '';

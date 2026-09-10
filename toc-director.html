@@ -492,11 +492,10 @@ function selectSchool(bandName) {
   ab.textContent = band.area;
   ab.className   = 'area-badge ab-'+band.area;
 
-  // Band logo
-  const parking = _data.parking || {};
-  const bLogo = parking[bandName]?.logo || (typeof parking[bandName] === 'string' ? null : null);
-  const parsedParking = typeof parking[bandName] === 'string' ? JSON.parse(parking[bandName]||'{}') : (parking[bandName]||{});
-  const bandLogoUrl = parsedParking.logo || '';
+  // Band logo — parking values may be raw objects or JSON strings from Sheets
+  const _pRaw = (_data.parking || {})[bandName];
+  const _pObj = _pRaw ? (typeof _pRaw==='string' ? JSON.parse(_pRaw) : _pRaw) : {};
+  const bandLogoUrl = _pObj.logo || '';
   const bandLogoEl = document.getElementById('d-band-logo');
   if (bandLogoEl) {
     if (bandLogoUrl) {
