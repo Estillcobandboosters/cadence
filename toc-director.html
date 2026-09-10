@@ -351,9 +351,17 @@ async function loadData() {
     if (json.success && json.data) {
       _data = json.data;
       // Parse nested JSON strings from Sheets
-      if (_data.pins && typeof _data.pins === 'string') {
-        try { _data.pins = JSON.parse(_data.pins); } catch(e) {}
-      }
+      const _parseKey = k => {
+        if (_data[k] && typeof _data[k] === 'string') {
+          try { _data[k] = JSON.parse(_data[k]); } catch(e) {}
+        }
+      };
+      _parseKey('pins');
+      _parseKey('parking');
+      _parseKey('lots');
+      _parseKey('sections');
+      _parseKey('settings');
+      _parseKey('checkin');
       applySettings();
       return true;
     }
