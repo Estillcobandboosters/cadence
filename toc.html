@@ -592,6 +592,27 @@ table.sch tr:hover td{background:#f8f9ff;}
     <div id="priv-list-admin" style="padding:8px;max-height:30vh;overflow-y:auto;">
       <div style="color:#ccc;font-size:13px;padding:12px;">No private messages yet.</div>
     </div>
+    <!-- Staff reply compose -->
+    <div id="priv-reply-box" style="display:none;padding:12px;border-top:2px solid #CE93D8;background:#faf5ff;">
+      <input type="hidden" id="priv-reply-to"/>
+      <div style="font-size:12px;font-weight:700;color:#7B1FA2;margin-bottom:6px;" id="priv-reply-label">Replying privately to:</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <textarea id="priv-reply-msg" rows="2" placeholder="Private reply — only this director will see it…" style="flex:1;padding:7px 9px;border:1px solid #CE93D8;border-radius:7px;font-size:12.5px;font-family:inherit;resize:none;"></textarea>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="btn btn-sm" style="background:#7B1FA2;color:white;" onclick="sendPrivReply()">Send 🔒</button>
+          <button class="btn btn-sm" style="background:#f0f0f0;color:#555;" onclick="document.getElementById('priv-reply-box').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <!-- Proactive staff→director private message -->
+    <div style="padding:10px 12px;border-top:1px solid #f0f0f0;background:#fafafa;">
+      <div style="font-size:11px;color:#888;margin-bottom:6px;">Send private message to a specific director:</div>
+      <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+        <select id="priv-to-school" style="padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;flex-shrink:0;" onchange="document.getElementById('priv-to-school-wrap').innerHTML=''"></select>
+        <textarea id="priv-new-msg" rows="2" placeholder="Private message…" style="flex:1;min-width:150px;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;resize:none;"></textarea>
+        <button class="btn btn-sm" style="background:#7B1FA2;color:white;flex-shrink:0;" onclick="sendPrivNew()">Send 🔒</button>
+      </div>
+    </div>
   </div>
 
   <!-- Chat -->
@@ -705,6 +726,19 @@ table.sch tr:hover td{background:#f8f9ff;}
     <input id="bp-spot" placeholder="e.g. Row 3, Spots 1-2"/>
     <label style="font-size:12px;color:#555;font-weight:600;margin-top:8px;display:block;">Guide assigned</label>
     <input id="bp-guide" placeholder="Volunteer name"/>
+    <label style="font-size:12px;color:#555;font-weight:600;margin-top:8px;display:block;">School / show logo</label>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <div id="bp-logo-preview" style="width:52px;height:52px;border:1.5px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f8f9fa;overflow:hidden;flex-shrink:0;">🎺</div>
+      <div style="flex:1;">
+        <label style="display:inline-block;padding:6px 12px;background:#f0f4ff;border:1px solid #c7d7f5;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;color:#1565C0;">
+          📁 Choose image
+          <input type="file" id="bp-logo-file" accept="image/*" style="display:none;" onchange="previewLogo(this)"/>
+        </label>
+        <div style="font-size:11px;color:#aaa;margin-top:4px;">PNG, JPG · Will be scaled to fit</div>
+      </div>
+      <button class="btn btn-xs btn-red" onclick="clearLogo()" style="flex-shrink:0;">✕ Clear</button>
+    </div>
+    <input type="hidden" id="bp-logo-data"/>
     <div class="modal-footer">
       <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('band-parking-modal')">Cancel</button>
       <button class="btn btn-blue" onclick="saveBandParking()">Save</button>
@@ -1522,8 +1556,18 @@ function renderBadges(){
     const badgeBorder = (b.type==='volunteer' && b.areaColor) ? b.areaColor : borderColor;
     card.style.borderColor = badgeBorder;
 
+    // Get band logo if available (for director badges)
+    const bandLogo = (b.type==='director' && bandParking[b.school]?.logo) ? bandParking[b.school].logo : null;
     let inner='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:6px;"></div>';
-    inner+='<img src="'+EC_LOGO+'" style="height:36px;width:auto;margin:0 auto 5px;display:block;"/>';
+    // Show band logo + EC logo side by side, or just EC logo
+    if (bandLogo) {
+      inner+='<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:5px;">'+
+        '<img src="'+bandLogo+'" style="height:36px;width:auto;max-width:50px;object-fit:contain;"/>'+
+        '<img src="'+EC_LOGO+'" style="height:28px;width:auto;opacity:.6;"/>'+
+      '</div>';
+    } else {
+      inner+='<img src="'+EC_LOGO+'" style="height:36px;width:auto;margin:0 auto 5px;display:block;"/>';
+    }
     inner+='<div class="b-event" style="color:'+badgeColor+';">'+escHtml(evtName)+'</div>';
     inner+='<div class="b-date">'+escHtml(evtDate)+'</div>';
     inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(b.type?.toUpperCase()||'DIRECTOR')+'</div>';
@@ -1760,6 +1804,38 @@ function renderParkingMain() {
   out.innerHTML = html;
 }
 
+// ── Band logo upload ──────────────────────────────────
+function previewLogo(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    // Resize to max 200px on longest side before storing
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const MAX = 200;
+      let w = img.width, h = img.height;
+      if (w > h) { if(w>MAX){h=Math.round(h*MAX/w);w=MAX;} }
+      else        { if(h>MAX){w=Math.round(w*MAX/h);h=MAX;} }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const data = canvas.toDataURL('image/png');
+      document.getElementById('bp-logo-data').value = data;
+      const prev = document.getElementById('bp-logo-preview');
+      prev.innerHTML = '<img src="'+data+'" style="width:100%;height:100%;object-fit:contain;"/>';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearLogo() {
+  document.getElementById('bp-logo-data').value = '';
+  document.getElementById('bp-logo-file').value = '';
+  document.getElementById('bp-logo-preview').innerHTML = '🎺';
+}
+
 // ── Lot CRUD ──────────────────────────────────────────
 let _editLotIdx = -1;
 function openAddLot() {
@@ -1810,6 +1886,15 @@ function openBandParking(bandName) {
   document.getElementById('bp-spot').value    = p.spot    || '';
   document.getElementById('bp-guide').value   = p.guide   || '';
   document.getElementById('bp-notes').value   = p.vehicles|| '';
+  // Logo preview
+  document.getElementById('bp-logo-data').value = p.logo || '';
+  document.getElementById('bp-logo-file').value = '';
+  const prev = document.getElementById('bp-logo-preview');
+  if (p.logo) {
+    prev.innerHTML = '<img src="'+p.logo+'" style="width:100%;height:100%;object-fit:contain;"/>';
+  } else {
+    prev.innerHTML = '🎺';
+  }
   document.getElementById('bp-trailer').checked = !!p.trailer;
   document.getElementById('bp-pit').checked     = !!p.pit;
   document.getElementById('bp-truck').checked   = !!p.truck;
@@ -1821,6 +1906,7 @@ function openBandParking(bandName) {
 }
 function saveBandParking() {
   const p = bandParking[_editBandName] || {};
+  const newLogo = document.getElementById('bp-logo-data').value;
   bandParking[_editBandName] = {
     ...p,
     lot:     document.getElementById('bp-lot').value,
@@ -1830,6 +1916,7 @@ function saveBandParking() {
     trailer: document.getElementById('bp-trailer').checked,
     pit:     document.getElementById('bp-pit').checked,
     truck:   document.getElementById('bp-truck').checked,
+    logo:    newLogo || p.logo || '',
   };
   closeModal('band-parking-modal'); save(); renderParking();
 }
@@ -2342,6 +2429,7 @@ async function apiCallComms(params) {
 }
 
 async function loadComms() {
+  populatePrivSchoolDropdown();
   try {
     const [chatRes, annRes, privRes] = await Promise.all([
       apiCallComms({action:'toc_chat_load'}),
@@ -2413,15 +2501,74 @@ function renderPrivAdmin(messages) {
   }
   el.innerHTML = messages.map(m => {
     const ts = new Date(m.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-    return `<div style="background:#F3E5F5;border:1px solid #CE93D8;border-radius:8px;padding:9px 12px;margin-bottom:6px;">
+    const fromStaff = m.fromStaff;
+    const label = fromStaff
+      ? '⭐ Staff → ' + escHtml(m.to)
+      : '🔒 ' + escHtml(m.from) + ' → Staff';
+    const bg     = fromStaff ? '#E8F5E9' : '#F3E5F5';
+    const border = fromStaff ? '#A5D6A7' : '#CE93D8';
+    const color  = fromStaff ? '#2E7D32' : '#7B1FA2';
+    return `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:9px 12px;margin-bottom:6px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;">
-        <span style="font-weight:700;font-size:12px;color:#7B1FA2;">🔒 ${escHtml(m.school)}</span>
-        <span style="font-size:10px;color:#aaa;">${ts}</span>
+        <span style="font-weight:700;font-size:12px;color:${color};">${label}</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:10px;color:#aaa;">${ts}</span>
+          ${!fromStaff ? `<button class="btn btn-xs" style="background:#7B1FA2;color:white;padding:2px 7px;" onclick="openPrivReply('${escHtml(m.from)}')">↩ Reply</button>` : ''}
+          <button class="btn btn-xs btn-red" onclick="deletePrivMsg('${m.id}')" style="padding:2px 5px;">×</button>
+        </div>
       </div>
       <div style="font-size:13px;color:#333;line-height:1.4;">${escHtml(m.message)}</div>
     </div>`;
   }).join('');
   el.scrollTop = el.scrollHeight;
+}
+
+function openPrivReply(toSchool) {
+  document.getElementById('priv-reply-to').value   = toSchool;
+  document.getElementById('priv-reply-label').textContent = 'Replying privately to: ' + toSchool;
+  document.getElementById('priv-reply-msg').value  = '';
+  document.getElementById('priv-reply-box').style.display = 'block';
+  document.getElementById('priv-reply-msg').focus();
+}
+
+async function sendPrivReply() {
+  const to  = document.getElementById('priv-reply-to').value;
+  const msg = document.getElementById('priv-reply-msg').value.trim();
+  if (!to || !msg) return;
+  try {
+    await apiCallComms({action:'toc_priv_post', school:'Event Staff', to, message:msg, fromStaff:'true'});
+    document.getElementById('priv-reply-box').style.display = 'none';
+    showToast('Private reply sent to ' + to);
+    loadComms();
+  } catch(e) { showToast('Failed to send reply'); }
+}
+
+async function deletePrivMsg(id) {
+  if (!confirm('Delete this private message?')) return;
+  try {
+    await apiCallComms({action:'toc_priv_delete', id});
+    loadComms();
+  } catch(e) { showToast('Delete failed'); }
+}
+
+async function sendPrivNew() {
+  const to  = document.getElementById('priv-to-school').value;
+  const msg = document.getElementById('priv-new-msg').value.trim();
+  if (!to || !msg) { showToast('Select a school and enter a message'); return; }
+  try {
+    await apiCallComms({action:'toc_priv_post', school:'Event Staff', to, message:msg, fromStaff:'true'});
+    document.getElementById('priv-new-msg').value = '';
+    showToast('Private message sent to ' + to);
+    loadComms();
+  } catch(e) { showToast('Failed to send'); }
+}
+
+function populatePrivSchoolDropdown() {
+  const sel = document.getElementById('priv-to-school');
+  if (!sel) return;
+  const bands = getBands();
+  sel.innerHTML = '<option value="">— Select school —</option>' +
+    bands.map(b => `<option value="${escHtml(b.band)}">${escHtml(b.band)}</option>`).join('');
 }
 
 async function postAnnouncement() {
