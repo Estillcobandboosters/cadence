@@ -1561,21 +1561,16 @@ function renderBadges(){
 
     // Get band logo if available (for director badges)
     const bandLogo = (b.type==='director' && bandParking[b.school]?.logo) ? bandParking[b.school].logo : null;
-    let inner='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:6px;"></div>';
-    // Show band logo + EC logo side by side, or just EC logo
-    if (bandLogo) {
-      inner+='<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:5px;">'+
-        '<img src="'+bandLogo+'" style="height:36px;width:auto;max-width:50px;object-fit:contain;"/>'+
-        '<img src="'+EC_LOGO+'" style="height:28px;width:auto;opacity:.6;"/>'+
-      '</div>';
-    } else {
-      inner+='<img src="'+EC_LOGO+'" style="height:36px;width:auto;margin:0 auto 5px;display:block;"/>';
-    }
+    let inner='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:5px;"></div>';
+    // EC logo always at top
+    inner+='<img src="'+EC_LOGO+'" style="height:30px;width:auto;margin:0 auto 4px;display:block;"/>';
     inner+='<div class="b-event" style="color:'+badgeColor+';">'+escHtml(evtName)+'</div>';
     inner+='<div class="b-date">'+escHtml(evtDate)+'</div>';
     inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(b.type?.toUpperCase()||'DIRECTOR')+'</div>';
     if(b.name)    inner+='<div class="b-name">'+escHtml(b.name)+'</div>';
     if(b.school)  inner+='<div class="b-school">'+escHtml(b.school)+'</div>';
+    // Band logo below name
+    if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;"/>';
     if(b.cls)     inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
     // Volunteer: show area name + position
     if(b.type==='volunteer'){

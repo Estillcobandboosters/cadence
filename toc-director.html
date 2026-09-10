@@ -434,10 +434,18 @@ function renderSchoolList(rows) {
       html += `<div class="school-divider">${cls}</div>`;
     }
     if (r.t==='band') {
-      html += `<button class="school-btn" onclick="selectSchool('${r.band.replace(/'/g,"\\'")}')">
-        <div>
-          <div class="sname">${r.band}</div>
-          <div class="sclass">${cls} · Draw #${r.draw} · Performs ${r.perform}</div>
+      const p    = getParkingFor(r.band);
+      const logo = p.logo || '';
+      const logoEl = logo
+        ? `<img src="${logo}" style="height:36px;width:36px;object-fit:contain;border-radius:6px;flex-shrink:0;background:#f0f4ff;padding:2px;"/>`
+        : `<div style="width:36px;height:36px;border-radius:6px;background:#f0f4ff;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🎺</div>`;
+      html += `<button class="school-btn" onclick="selectSchool('${r.band.replace(/'/g,"\'")}')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          ${logoEl}
+          <div>
+            <div class="sname">${r.band}</div>
+            <div class="sclass">${cls} · Draw #${r.draw} · Performs ${r.perform}</div>
+          </div>
         </div>
         <div class="arr">›</div>
       </button>`;
@@ -493,9 +501,8 @@ function selectSchool(bandName) {
   ab.textContent = band.area;
   ab.className   = 'area-badge ab-'+band.area;
 
-  // Band logo — parking values may be raw objects or JSON strings from Sheets
-  const _pRaw = (_data.parking || {})[bandName];
-  const _pObj = _pRaw ? (typeof _pRaw==='string' ? JSON.parse(_pRaw) : _pRaw) : {};
+  // Band logo
+  const _pObj       = getParkingFor(bandName);
   const bandLogoUrl = _pObj.logo || '';
   const bandLogoEl = document.getElementById('d-band-logo');
   if (bandLogoEl) {
@@ -982,12 +989,20 @@ function renderAnnsDir(anns) {
 
 const escHtmlDir = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+// Safely parse parking data for a band (may be object or JSON string from Sheets)
+function getParkingFor(bandName) {
+  const raw = (_data?.parking || {})[bandName];
+  if (!raw) return {};
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch(e) { return {}; } }
+  return raw;
+}
+
 // ── Init ──────────────────────────────────────────────
 (async function init() {
   loadLogo();
   await loadData();
   const rows = buildScheduleRows();
-  renderSchoolList(rows);
+  renderSchoolList(rows);  // logos now available since loadData completed
   setInterval(refresh, 60000);
 })();
 </script>
