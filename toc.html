@@ -282,7 +282,8 @@ table.sch tr:hover td{background:#f8f9ff;}
   </div>
   <div class="nav-actions" style="display:flex;align-items:center;gap:10px;">
     <span id="save-indicator" style="font-size:11px;color:rgba(255,255,255,.5);">✓ Saved</span>
-    <button class="btn btn-outline" onclick="manualSync()" title="Sync with Google Sheets">⟳ Sync</button>
+    <button class="btn btn-outline" onclick="manualSync()" title="Push local data to Google Sheets">⬆ Save</button>
+    <button class="btn btn-outline" onclick="pullFromSheets()" title="Pull latest data from Google Sheets">⬇ Load</button>
     <button class="btn btn-outline" onclick="exportCSV()">⬇ CSV</button>
     <button class="btn btn-outline" onclick="printSchedule()">🖨 Print schedule</button>
     <button class="btn btn-outline" onclick="clearAll()" style="opacity:.6;" title="Reset all data">↺ Reset</button>
@@ -912,21 +913,32 @@ function setSaveStatus(s){
 }
 
 async function apiCall(params, forceGet){
-  // Use GET for reads (need response body), POST no-cors for writes (avoids CORS/URL-length issues)
+  // For writes: chunk large values and send as separate GET requests.
+  // Apps Script POST redirects cross-origin cause the body to be dropped silently;
+  // GET requests work reliably. Values over 1400 chars are split into key__0, key__1 etc.
   const isWrite = !forceGet && params.action && params.action.includes('save');
   if(isWrite){
-    // POST as form-encoded with no-cors — browser allows this cross-origin, Apps Script receives it via doPost
-    const body = new URLSearchParams(params).toString();
-    // Use redirect:'manual' — Apps Script redirects on POST, and no-cors + follow
-    // can silently drop the body across the redirect. Manual redirect avoids that.
-    await fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {'Content-Type':'application/x-www-form-urlencoded'},
-      body: body,
-      redirect: 'manual'
+    const skip = ['action'];
+    const keys = Object.keys(params).filter(k => !skip.includes(k));
+    const CHUNK = 1400;
+    const requests = [];
+    keys.forEach(key => {
+      const val = String(params[key]);
+      if(val.length <= CHUNK){
+        requests.push({ action: params.action, [key]: val });
+      } else {
+        const n = Math.ceil(val.length / CHUNK);
+        for(let i=0; i<n; i++){
+          requests.push({ action: params.action, [key+'__'+i]: val.slice(i*CHUNK,(i+1)*CHUNK) });
+        }
+        // Store chunk count so load() knows how many pieces to reassemble
+        requests.push({ action: params.action, [key+'__n']: String(n) });
+      }
     });
-    // no-cors returns opaque response — we can't read it, assume success
+    await Promise.all(requests.map(async p => {
+      const url = SCRIPT_URL + '?' + new URLSearchParams(p).toString();
+      try { const r = await fetch(url,{method:'GET',redirect:'follow'}); await r.text(); } catch(e){}
+    }));
     return {success:true};
   }
   const url=SCRIPT_URL+'?'+new URLSearchParams(params).toString();
@@ -967,45 +979,23 @@ function save(){
 }
 
 async function manualSync(){
-  showToast('Syncing with Google Sheets…');
-  // Flush any pending debounced save first
+  // PUSH mode: flush local state → Sheets, then confirm. Never pull from Sheets during a push
+  // because the GET round-trip completes before Sheets finishes writing, causing a stale overwrite.
+  showToast('Saving to Google Sheets…');
   clearTimeout(_saveTimer);
-  // If a save is already in-flight, wait for it to finish (up to 5s)
   let waited = 0;
   while(_saving && waited < 5000){ await new Promise(r=>setTimeout(r,100)); waited+=100; }
-  // Snapshot local parking data before pushing — with no-cors POST we can't confirm
-  // the save succeeded, so we protect local changes from being overwritten by stale Sheets data
-  const _localLots    = JSON.parse(JSON.stringify(parkingLots));
-  const _localParking = JSON.parse(JSON.stringify(bandParking));
-  // Now do a fresh push (force _saving=false so it doesn't bail)
   _saving = false;
   await pushToSheets();
+  showToast('✓ Saved to Google Sheets');
+  renderSidebar(); rebuild(); renderVolunteers(); renderParking();
+}
+
+async function pullFromSheets(){
+  // PULL mode: load latest from Sheets, overwriting local state. Separate from Sync.
+  showToast('Loading from Google Sheets…');
   await load();
-  // If Sheets returned fewer lot assignments or empty parking, restore local snapshot.
-  // This handles the case where the POST succeeded fire-and-forget but Sheets hasn't
-  // flushed yet, OR where Code.gs hasn't been patched and the POST failed silently.
-  if(_localLots.length > parkingLots.length){
-    parkingLots = _localLots;
-    try{ localStorage.setItem('toc_lots', JSON.stringify(parkingLots)); }catch(e){}
-  }
-  const sheetsAssigned = Object.values(bandParking).filter(p=>p&&p.lot).length;
-  const localAssigned  = Object.values(_localParking).filter(p=>p&&p.lot).length;
-  if(localAssigned > sheetsAssigned){
-    // Merge: keep Sheets data for bands Sheets knows about, but don't lose local assignments
-    const merged = Object.assign({}, _localParking, bandParking);
-    // For any band where local had a lot but Sheets doesn't, restore the local assignment
-    Object.keys(_localParking).forEach(k=>{
-      if(_localParking[k]&&_localParking[k].lot && !(bandParking[k]&&bandParking[k].lot)){
-        merged[k] = _localParking[k];
-      }
-    });
-    bandParking = merged;
-    try{ localStorage.setItem('toc_parking', JSON.stringify(bandParking)); }catch(e){}
-  }
-  renderSidebar();
-  rebuild();
-  renderVolunteers();
-  renderParking();
+  renderSidebar(); rebuild(); renderVolunteers(); renderParking();
 }
 
 async function pushToSheets(){
@@ -1045,9 +1035,28 @@ async function load(){
     const res = await Promise.race([fetchPromise, timeoutPromise]);
 
     if(res.success && res.data && Object.keys(res.data).length>0){
-      const d=res.data;
-      console.log('[TOC] load() — d.lots raw:', typeof d.lots, JSON.stringify(d.lots||'').substring(0,200));
-      console.log('[TOC] load() — d.parking keys:', d.parking ? Object.keys(typeof d.parking==='object'?d.parking:JSON.parse(d.parking||'{}')).length : 'missing');
+      // Reassemble any chunked values (key__0, key__1… + key__n) back into key
+      const raw=res.data;
+      const d={};
+      const seen=new Set();
+      Object.keys(raw).forEach(k=>{
+        const m=k.match(/^(.+)__(\d+)$/);
+        const mn=k.match(/^(.+)__n$/);
+        if(mn){ seen.add(mn[1]); return; } // skip count keys
+        if(m){ seen.add(m[1]); return; }   // skip chunk keys — handled below
+        d[k]=raw[k];
+      });
+      // Reassemble chunked keys
+      Object.keys(raw).filter(k=>k.endsWith('__n')).forEach(nk=>{
+        const base=nk.slice(0,-3);
+        const n=parseInt(raw[nk])||0;
+        let assembled='';
+        for(let i=0;i<n;i++) assembled+=(raw[base+'__'+i]||'');
+        // parse if it was JSON
+        try{ d[base]=JSON.parse(assembled); }catch(e){ d[base]=assembled; }
+      });
+      console.log('[TOC] load() — keys from Sheets:', Object.keys(d).join(', '));
+      console.log('[TOC] load() — d.parking keys:', d.parking ? Object.keys(typeof d.parking==='object'?d.parking:{}).length : 'missing');
       if(d.sections)   sections = Array.isArray(d.sections)   ? d.sections   : JSON.parse(d.sections);
       if(d.volunteers) volunteers= Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
       if(d.checkin)    checkinStatus = (typeof d.checkin==='object' && !Array.isArray(d.checkin)) ? d.checkin : JSON.parse(d.checkin||'{}');
