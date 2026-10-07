@@ -455,7 +455,8 @@ function buildScheduleRows() {
     }
   });
 
-  rows.push({t:'awd', label:'PRELIM AWARDS', time:fmt12(cur-gap+30)});
+  const awdGap = parseInt(settings['awd-gap'] || 15);
+  rows.push({t:'awd', label:'PRELIM AWARDS', time:fmt12(cur-gap+awdGap)});
   return rows;
 }
 
@@ -529,24 +530,22 @@ function selectSchool(bandName) {
   ab.textContent = band.area;
   ab.className   = 'area-badge ab-'+band.area;
 
+  // Gate entry callout
+  const GATE1_BANDS = ['Danville','Williamstown','Powell County','Owen County'];
+  const isGate1 = GATE1_BANDS.some(g => bandName.toLowerCase().includes(g.toLowerCase()));
+
   // Parking data (already parsed by getParkingFor)
   const p    = getParkingFor(bandName);
   const rawLots = _data.lots || [];
   const lots = rawLots.map(l => typeof l==='string' ? JSON.parse(l) : l);
   const lot  = lots.find(l => l.id === p.lot);
-  if (lot || p.spot || p.guide || p.vehicles) {
-    document.getElementById('parking-card').style.display = 'block';
-    const eg = document.getElementById('d-entry-gate');
-    if(eg) eg.textContent = isGate1 ? 'Gate 1 (west — Lots B & C)' : 'Gate 2 (main)';
-    document.getElementById('d-lot').textContent      = lot ? lot.name : '—';
-    document.getElementById('d-spot').textContent     = p.spot || 'Will be assigned on arrival';
-    document.getElementById('d-guide').textContent    = p.guide || '—';
-    document.getElementById('d-vehicles').textContent = p.vehicles || '—';
-  }
-
-  // Gate entry callout
-  const GATE1_BANDS = ['Danville','Williamstown','Powell County','Owen County'];
-  const isGate1 = GATE1_BANDS.some(g => bandName.toLowerCase().includes(g.toLowerCase()));
+  document.getElementById('parking-card').style.display = 'block';
+  const eg = document.getElementById('d-entry-gate');
+  if(eg) eg.textContent = isGate1 ? 'Gate 1' : 'Gate 2';
+  document.getElementById('d-lot').textContent      = lot ? lot.name : '—';
+  document.getElementById('d-spot').textContent     = p.spot || '—';
+  document.getElementById('d-guide').textContent    = p.guide || '—';
+  document.getElementById('d-vehicles').textContent = p.vehicles || '—';
   const gc = document.getElementById('gate-callout');
   if(gc){
     if(isGate1){
@@ -554,7 +553,7 @@ function selectSchool(bandName) {
       gc.style.background='#E3F2FD';
       gc.style.border='1.5px solid #1565C0';
       gc.style.color='#1565C0';
-      gc.innerHTML='🚌 <strong>Enter via GATE 1</strong> — Equipment vehicles for Lots B &amp; C use Gate 1 (west entrance).';
+      gc.innerHTML='🚌 <strong>Enter via GATE 1</strong> — Equipment vehicles for Lots B &amp; C use Gate 1.';
     } else {
       gc.style.display='block';
       gc.style.background='#E8F5E9';
