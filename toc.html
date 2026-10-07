@@ -1065,6 +1065,8 @@ function loadFromLocalStorage(){
     const set=localStorage.getItem('toc_settings');
     if(set){
       const s=JSON.parse(set);
+      // Migrate old awd-gap default of 30 → 15
+      if(s['awd-gap']==='30'||s['awd-gap']===30) s['awd-gap']='15';
       Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
     }
     const pins=localStorage.getItem('toc_pins');
@@ -1139,6 +1141,8 @@ async function load(){
       }
       if(d.settings){
         const s = typeof d.settings==='object' ? d.settings : JSON.parse(d.settings||'{}');
+        // Migrate old awd-gap default of 30 → 15
+        if(s['awd-gap']==='30'||s['awd-gap']===30) s['awd-gap']='15';
         Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
       }
       // Write the merged result back to localStorage as the new cache
