@@ -917,12 +917,14 @@ async function apiCall(params, forceGet){
   if(isWrite){
     // POST as form-encoded with no-cors — browser allows this cross-origin, Apps Script receives it via doPost
     const body = new URLSearchParams(params).toString();
+    // Use redirect:'manual' — Apps Script redirects on POST, and no-cors + follow
+    // can silently drop the body across the redirect. Manual redirect avoids that.
     await fetch(SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: {'Content-Type':'application/x-www-form-urlencoded'},
       body: body,
-      redirect: 'follow'
+      redirect: 'manual'
     });
     // no-cors returns opaque response — we can't read it, assume success
     return {success:true};
@@ -971,10 +973,35 @@ async function manualSync(){
   // If a save is already in-flight, wait for it to finish (up to 5s)
   let waited = 0;
   while(_saving && waited < 5000){ await new Promise(r=>setTimeout(r,100)); waited+=100; }
+  // Snapshot local parking data before pushing — with no-cors POST we can't confirm
+  // the save succeeded, so we protect local changes from being overwritten by stale Sheets data
+  const _localLots    = JSON.parse(JSON.stringify(parkingLots));
+  const _localParking = JSON.parse(JSON.stringify(bandParking));
   // Now do a fresh push (force _saving=false so it doesn't bail)
   _saving = false;
   await pushToSheets();
   await load();
+  // If Sheets returned fewer lot assignments or empty parking, restore local snapshot.
+  // This handles the case where the POST succeeded fire-and-forget but Sheets hasn't
+  // flushed yet, OR where Code.gs hasn't been patched and the POST failed silently.
+  if(_localLots.length > parkingLots.length){
+    parkingLots = _localLots;
+    try{ localStorage.setItem('toc_lots', JSON.stringify(parkingLots)); }catch(e){}
+  }
+  const sheetsAssigned = Object.values(bandParking).filter(p=>p&&p.lot).length;
+  const localAssigned  = Object.values(_localParking).filter(p=>p&&p.lot).length;
+  if(localAssigned > sheetsAssigned){
+    // Merge: keep Sheets data for bands Sheets knows about, but don't lose local assignments
+    const merged = Object.assign({}, _localParking, bandParking);
+    // For any band where local had a lot but Sheets doesn't, restore the local assignment
+    Object.keys(_localParking).forEach(k=>{
+      if(_localParking[k]&&_localParking[k].lot && !(bandParking[k]&&bandParking[k].lot)){
+        merged[k] = _localParking[k];
+      }
+    });
+    bandParking = merged;
+    try{ localStorage.setItem('toc_parking', JSON.stringify(bandParking)); }catch(e){}
+  }
   renderSidebar();
   rebuild();
   renderVolunteers();
