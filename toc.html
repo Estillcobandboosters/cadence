@@ -278,6 +278,7 @@ table.sch tr:hover td{background:#f8f9ff;}
     <div class="nav-tab" onclick="showPage('badges')">🪪 Badges</div>
     <div class="nav-tab" onclick="showPage('parking')">🚌 Parking</div>
     <div class="nav-tab" onclick="showPage('comms')">💬 Comms</div>
+    <div class="nav-tab" onclick="showPage('maps')">🗺 Maps</div>
   </div>
   <div class="nav-actions" style="display:flex;align-items:center;gap:10px;">
     <span id="save-indicator" style="font-size:11px;color:rgba(255,255,255,.5);">✓ Saved</span>
@@ -632,6 +633,38 @@ table.sch tr:hover td{background:#f8f9ff;}
 </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════
+     PAGE 8: VENUE MAPS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-maps">
+<div style="max-width:900px;margin:0 auto;padding:16px;">
+  <h2 style="font-size:20px;font-weight:700;color:#1a1a2e;margin-bottom:4px;">Venue Maps</h2>
+  <p style="font-size:13px;color:#666;margin-bottom:20px;">Equipment lot assignments and traffic flow for directors and guides.</p>
+
+  <!-- Map tabs -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="map-tab-row">
+    <button class="btn btn-blue" onclick="showMap('lot-a')" id="maptab-lot-a" style="font-size:12px;padding:6px 14px;">Lot A</button>
+    <button class="btn" onclick="showMap('lot-bc')" id="maptab-lot-bc" style="font-size:12px;padding:6px 14px;background:#f0f0f0;color:#333;">Lots B &amp; C</button>
+    <button class="btn" onclick="showMap('lot-de')" id="maptab-lot-de" style="font-size:12px;padding:6px 14px;background:#f0f0f0;color:#333;">Lots D &amp; E</button>
+    <button class="btn" onclick="showMap('flow')" id="maptab-flow" style="font-size:12px;padding:6px 14px;background:#f0f0f0;color:#333;">Band Flow</button>
+    <button class="btn" onclick="showMap('spectator')" id="maptab-spectator" style="font-size:12px;padding:6px 14px;background:#f0f0f0;color:#333;">Spectator Parking</button>
+  </div>
+
+  <div style="background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
+    <img id="map-img-lot-a"     src="map-lot-a.png"     alt="Equipment Lot A"           style="width:100%;display:block;" />
+    <img id="map-img-lot-bc"    src="map-lot-bc.png"    alt="Equipment Lots B and C"    style="width:100%;display:none;" />
+    <img id="map-img-lot-de"    src="map-lot-de.png"    alt="Equipment Lots D and E"    style="width:100%;display:none;" />
+    <img id="map-img-flow"      src="map-flow.png"      alt="Band and Equipment Flow"   style="width:100%;display:none;" />
+    <img id="map-img-spectator" src="map-spectator.png" alt="Spectator Parking"         style="width:100%;display:none;" />
+  </div>
+
+  <div style="margin-top:12px;padding:10px 14px;background:#EFF3FF;border-radius:8px;font-size:12px;color:#1565C0;">
+    💡 These maps are also visible to directors on the Director Portal under "Venue Maps."
+    Upload updated images to GitHub alongside toc.html to refresh them.
+  </div>
+</div>
+</div>
+
 <!-- ── Add band modal ── -->
 <div class="modal-bg" id="band-modal">
   <div class="modal">
@@ -918,10 +951,15 @@ function save(){
 
 async function manualSync(){
   showToast('Syncing with Google Sheets…');
+  // Flush any pending save first so we don't overwrite with stale Sheets data
+  clearTimeout(_saveTimer);
+  if(_saving){ await new Promise(r=>setTimeout(r,2000)); }
+  await pushToSheets();
   await load();
   renderSidebar();
   rebuild();
   renderVolunteers();
+  renderParking();
 }
 
 async function pushToSheets(){
@@ -967,10 +1005,13 @@ async function load(){
         const p = typeof d.pins==='object'&&!Array.isArray(d.pins) ? d.pins : JSON.parse(d.pins||'{}');
         if(Object.keys(p).length > 0) schoolPins = p;
       }
-      if(d.lots){
+      if(d.lots !== undefined && d.lots !== null && d.lots !== ''){
         const l = Array.isArray(d.lots) ? d.lots : JSON.parse(d.lots||'[]');
+        // Only fall back to defaults if key was never saved (null/undefined/empty string)
+        // If user has saved an empty or custom list, respect it
         parkingLots = l.length > 0 ? l : DEFAULT_PARKING_LOTS;
-      } else { parkingLots = DEFAULT_PARKING_LOTS; }
+      }
+      // If d.lots missing entirely from Sheets record, keep current parkingLots (don't overwrite)
       if(d.parking){
         const p = (typeof d.parking==='object'&&!Array.isArray(d.parking)) ? d.parking : JSON.parse(d.parking||'{}');
         bandParking = Object.keys(p).length > 0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING));
@@ -1010,7 +1051,7 @@ async function load(){
     const ci =localStorage.getItem('toc_checkin');     if(ci)   checkinStatus=JSON.parse(ci);
     const bdg=localStorage.getItem('toc_badges');      if(bdg)  extraBadges=JSON.parse(bdg);
     const lts=localStorage.getItem('toc_lots');
-    if(lts){ const l=JSON.parse(lts); parkingLots = l.length>0 ? l : DEFAULT_PARKING_LOTS; }
+    if(lts !== null){ const l=JSON.parse(lts); parkingLots = l.length>0 ? l : DEFAULT_PARKING_LOTS; }
     else { parkingLots = DEFAULT_PARKING_LOTS; }
     const prk=localStorage.getItem('toc_parking');
     if(prk){ const p=JSON.parse(prk); bandParking = Object.keys(p).length>0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
@@ -1061,6 +1102,17 @@ function showPage(id){
   if(id==='parking')    renderParking();
   if(id==='comms')      { loadComms(); startCommsRefresh(); }
   else                  { stopCommsRefresh(); }
+  if(id==='maps')       showMap('lot-a');
+}
+
+function showMap(key){
+  const maps = ['lot-a','lot-bc','lot-de','flow','spectator'];
+  maps.forEach(m=>{
+    const img = document.getElementById('map-img-'+m);
+    const btn = document.getElementById('maptab-'+m);
+    if(img) img.style.display = m===key ? 'block' : 'none';
+    if(btn){ btn.style.background = m===key ? '' : '#f0f0f0'; btn.style.color = m===key ? '' : '#333'; btn.className = m===key ? 'btn btn-blue' : 'btn'; }
+  });
 }
 
 // ════════════════════════════════════════════════════════

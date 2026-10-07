@@ -69,6 +69,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;mi
 /* Parking card */
 .info-card{background:white;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden;margin-bottom:14px;}
 .info-card-header{padding:12px 18px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:white;display:flex;align-items:center;gap:8px;}
+.map-tab-btn{padding:5px 11px;border:1.5px solid #1B5E20;border-radius:20px;background:white;color:#1B5E20;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;}
+.map-tab-active{background:#1B5E20 !important;color:white !important;}
 .info-card-body{padding:14px 18px;}
 .info-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid #f5f5f5;font-size:13px;}
 .info-row:last-child{border-bottom:none;}
@@ -216,6 +218,7 @@ table.fst tr.fst-past td{opacity:.4;}
     <div class="info-card" id="parking-card" style="display:none;">
       <div class="info-card-header" style="background:#E65100;">🚛 Equipment parking</div>
       <div class="info-card-body">
+        <div class="info-row"><span class="info-lbl">Enter via</span><span class="info-val" id="d-entry-gate" style="font-weight:700;">—</span></div>
         <div class="info-row"><span class="info-lbl">Lot assigned</span><span class="info-val" id="d-lot">—</span></div>
         <div class="info-row"><span class="info-lbl">Spot</span><span class="info-val" id="d-spot">—</span></div>
         <div class="info-row"><span class="info-lbl">Guide</span><span class="info-val" id="d-guide">—</span></div>
@@ -293,6 +296,34 @@ table.fst tr.fst-past td{opacity:.4;}
           <button onclick="closePinVerify()" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;background:white;color:#555;font-size:13px;cursor:pointer;font-family:inherit;">Cancel</button>
           <button onclick="verifyPin()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1565C0;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Verify</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Venue Maps card -->
+    <div class="info-card" id="maps-card">
+      <div class="info-card-header" style="background:linear-gradient(135deg,#1B5E20,#2E7D32);">
+        🗺 Venue maps
+        <span style="font-size:10px;font-weight:400;opacity:.7;margin-left:6px;">Equipment lots &amp; traffic flow</span>
+      </div>
+      <div style="padding:12px;">
+        <!-- Map selector tabs -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+          <button onclick="dirShowMap('lot-a',this)"    class="map-tab-btn map-tab-active">Lot A</button>
+          <button onclick="dirShowMap('lot-bc',this)"   class="map-tab-btn">Lots B &amp; C</button>
+          <button onclick="dirShowMap('lot-de',this)"   class="map-tab-btn">Lots D &amp; E</button>
+          <button onclick="dirShowMap('flow',this)"     class="map-tab-btn">Band Flow</button>
+          <button onclick="dirShowMap('spectator',this)" class="map-tab-btn">Spectator</button>
+        </div>
+        <div style="border-radius:10px;overflow:hidden;border:1px solid #e0e0e0;">
+          <img id="dir-map-lot-a"     src="map-lot-a.png"     alt="Equipment Lot A"        style="width:100%;display:block;" />
+          <img id="dir-map-lot-bc"    src="map-lot-bc.png"    alt="Equipment Lots B &amp; C" style="width:100%;display:none;" />
+          <img id="dir-map-lot-de"    src="map-lot-de.png"    alt="Equipment Lots D &amp; E" style="width:100%;display:none;" />
+          <img id="dir-map-flow"      src="map-flow.png"      alt="Band &amp; Equipment Flow" style="width:100%;display:none;" />
+          <img id="dir-map-spectator" src="map-spectator.png" alt="Spectator Parking"      style="width:100%;display:none;" />
+        </div>
+        <!-- Gate entry callout — populated by selectSchool() -->
+        <div id="gate-callout" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;font-size:12px;font-weight:600;"></div>
+        <div style="font-size:11px;color:#666;margin-top:8px;">Tap a lot above to switch maps. Pinch to zoom on mobile.</div>
       </div>
     </div>
 
@@ -505,10 +536,32 @@ function selectSchool(bandName) {
   const lot  = lots.find(l => l.id === p.lot);
   if (lot || p.spot || p.guide || p.vehicles) {
     document.getElementById('parking-card').style.display = 'block';
+    const eg = document.getElementById('d-entry-gate');
+    if(eg) eg.textContent = isGate1 ? 'Gate 1 (west — Lots B & C)' : 'Gate 2 (main)';
     document.getElementById('d-lot').textContent      = lot ? lot.name : '—';
     document.getElementById('d-spot').textContent     = p.spot || 'Will be assigned on arrival';
     document.getElementById('d-guide').textContent    = p.guide || '—';
     document.getElementById('d-vehicles').textContent = p.vehicles || '—';
+  }
+
+  // Gate entry callout
+  const GATE1_BANDS = ['Danville','Williamstown','Powell County','Owen County'];
+  const isGate1 = GATE1_BANDS.some(g => bandName.toLowerCase().includes(g.toLowerCase()));
+  const gc = document.getElementById('gate-callout');
+  if(gc){
+    if(isGate1){
+      gc.style.display='block';
+      gc.style.background='#E3F2FD';
+      gc.style.border='1.5px solid #1565C0';
+      gc.style.color='#1565C0';
+      gc.innerHTML='🚌 <strong>Enter via GATE 1</strong> — Equipment vehicles for Lots B &amp; C use Gate 1 (west entrance).';
+    } else {
+      gc.style.display='block';
+      gc.style.background='#E8F5E9';
+      gc.style.border='1.5px solid #1B5E20';
+      gc.style.color='#1B5E20';
+      gc.innerHTML='🚌 <strong>Enter via GATE 2</strong> — All equipment vehicles except Lots B &amp; C use Gate 2.';
+    }
   }
 
   // Check-in button
@@ -527,6 +580,16 @@ function selectSchool(bandName) {
     if (_chatTimer) clearInterval(_chatTimer);
     _chatTimer = setInterval(loadChatDir, 30000);
   }, 100);
+}
+
+// ── Venue map switcher ────────────────────────────────
+function dirShowMap(key, btn){
+  ['lot-a','lot-bc','lot-de','flow','spectator'].forEach(m=>{
+    const img = document.getElementById('dir-map-'+m);
+    if(img) img.style.display = m===key ? 'block' : 'none';
+  });
+  document.querySelectorAll('.map-tab-btn').forEach(b=>b.classList.remove('map-tab-active'));
+  if(btn) btn.classList.add('map-tab-active');
 }
 
 // ── Full schedule table ───────────────────────────────
@@ -664,6 +727,8 @@ function showLogin() {
   document.getElementById('login-screen').style.display    = 'block';
   document.getElementById('back-btn').style.display        = 'none';
   document.getElementById('parking-card').style.display    = 'none';
+  const gc2 = document.getElementById('gate-callout');
+  if(gc2) gc2.style.display = 'none';
 }
 
 // ── Toast ─────────────────────────────────────────────
