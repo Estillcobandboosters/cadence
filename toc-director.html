@@ -167,7 +167,7 @@ table.fst tr.fst-past td{opacity:.4;}
     <!-- Hero schedule card -->
     <div class="hero-card">
       <div class="hero-header" id="d-hero-header">
-        <img src="" id="d-ec-logo" style="height:44px;width:auto;opacity:.8;margin-bottom:6px;display:block;margin-left:auto;margin-right:auto;"/>
+        <img src="" id="d-ec-logo" style="height:44px;width:auto;filter:brightness(0) invert(1);margin-bottom:6px;display:block;margin-left:auto;margin-right:auto;"/>
         <div class="hero-school" id="d-school"></div>
         <div class="hero-director" id="d-director"></div>
         <div class="hero-class" id="d-class"></div>
@@ -347,6 +347,17 @@ table.fst tr.fst-past td{opacity:.4;}
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec';
+
+// ── Director name fallback (from CSV) ────────────────
+const DIRECTOR_NAMES = {
+  'Casey County':'Isaac Sparks','Lewis County':'Erin Choi','Powell County':'Patrick Howell',
+  'Paris':'John Merz','Danville':'Jeff Towns','Williamstown':'Jake McClain','Lee County':'Tony Barrett',
+  'Pulaski County':'James Sayers','Owen County':'Cade Jenkins',
+  'South Laurel':'Alex Dietz','Boyle County':'Gabe Holman','Mercer County':'Erica Ashford',
+  'Garrard County':'Jordan Humphress','Bourbon County':'Eric Hale','Madison Southern':'Martina Sanders',
+  'Henry Clay':'William Kite','Tates Creek':'Aaron Cunningham','Madison Central':'David Jaggie',
+  'Estill County':'Jason Bowles'
+};
 
 // ── State ────────────────────────────────────────────
 let _data       = null;   // loaded from sheets
@@ -550,7 +561,7 @@ function selectSchool(bandName) {
 
   // Populate hero
   document.getElementById('d-school').textContent   = bandName;
-  document.getElementById('d-director').textContent = dirName || 'Director';
+  document.getElementById('d-director').textContent = dirName || DIRECTOR_NAMES[bandName] || 'Director';
   document.getElementById('d-class').textContent    = foundCls + ' · Draw #' + band.draw;
   document.getElementById('d-arrival').textContent  = band.arrival;
   document.getElementById('d-dress').textContent    = band.dress;
