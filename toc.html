@@ -982,6 +982,7 @@ function save(){
     localStorage.setItem('toc_lots',       JSON.stringify(parkingLots));
     localStorage.setItem('toc_pins',       JSON.stringify(schoolPins));
     localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
+    saveLogosLocal(); // keep toc_logos in sync (logos are stored here since they can't go to Sheets)
   } catch(e){}
 
   setSaveStatus('unsaved');
@@ -1044,10 +1045,43 @@ async function pushToSheets(){
   _saving=false;
 }
 
+function loadFromLocalStorage(){
+  // Load all state from localStorage. Returns true if anything was found.
+  let found = false;
+  try {
+    const sec=localStorage.getItem('toc_sections');
+    if(sec){ const p=JSON.parse(sec); if(Array.isArray(p)&&p.length>0){ sections=p; found=true; } }
+    const vol=localStorage.getItem('toc_volunteers');
+    if(vol){ const p=JSON.parse(vol); if(Array.isArray(p)&&p.length>0){ volunteers=p; found=true; } }
+    const ci=localStorage.getItem('toc_checkin');
+    if(ci){ checkinStatus=JSON.parse(ci); }
+    const bdg=localStorage.getItem('toc_badges');
+    if(bdg){ extraBadges=JSON.parse(bdg); }
+    const lts=localStorage.getItem('toc_lots');
+    parkingLots = (lts !== null) ? JSON.parse(lts) : DEFAULT_PARKING_LOTS;
+    const prk=localStorage.getItem('toc_parking');
+    bandParking = prk ? JSON.parse(prk) : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING));
+    loadLogosLocal();
+    const set=localStorage.getItem('toc_settings');
+    if(set){
+      const s=JSON.parse(set);
+      Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
+    }
+    const pins=localStorage.getItem('toc_pins');
+    if(pins){ const p=JSON.parse(pins); if(Object.keys(p).length>0) schoolPins=p; }
+  } catch(e){ console.warn('localStorage load failed:', e); }
+  return found;
+}
+
 async function load(){
   showToast('Loading data…');
   setSaveStatus('saving');
-  // Try Google Sheets first with timeout
+
+  // Always load localStorage first so the page is never blank
+  const hadLocal = loadFromLocalStorage();
+  if(hadLocal){ renderSidebar(); rebuild(); renderVolunteers(); renderParking(); }
+
+  // Then try Sheets — only overwrite a key if Sheets has non-empty content for it
   try {
     const fetchPromise = apiCall({action:'toc_load'});
     const timeoutPromise = new Promise((_,reject) => setTimeout(()=>reject(new Error('timeout')), 12000));
@@ -1058,52 +1092,56 @@ async function load(){
       // Reassemble any chunked values (key__0, key__1… + key__n) back into key
       const raw=res.data;
       const d={};
-      const seen=new Set();
       Object.keys(raw).forEach(k=>{
-        const m=k.match(/^(.+)__(\d+)$/);
-        const mn=k.match(/^(.+)__n$/);
-        if(mn){ seen.add(mn[1]); return; } // skip count keys
-        if(m){ seen.add(m[1]); return; }   // skip chunk keys — handled below
+        if(k.match(/^(.+)__(\d+)$/) || k.match(/^(.+)__n$/)) return; // handled below
         d[k]=raw[k];
       });
-      // Reassemble chunked keys
       Object.keys(raw).filter(k=>k.endsWith('__n')).forEach(nk=>{
         const base=nk.slice(0,-3);
         const n=parseInt(raw[nk])||0;
         let assembled='';
         for(let i=0;i<n;i++) assembled+=(raw[base+'__'+i]||'');
-        // parse if it was JSON
         try{ d[base]=JSON.parse(assembled); }catch(e){ d[base]=assembled; }
       });
       console.log('[TOC] load() — keys from Sheets:', Object.keys(d).join(', '));
-      console.log('[TOC] load() — d.parking keys:', d.parking ? Object.keys(typeof d.parking==='object'?d.parking:{}).length : 'missing');
-      if(d.sections)   sections = Array.isArray(d.sections)   ? d.sections   : JSON.parse(d.sections);
-      if(d.volunteers) volunteers= Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
-      if(d.checkin)    checkinStatus = (typeof d.checkin==='object' && !Array.isArray(d.checkin)) ? d.checkin : JSON.parse(d.checkin||'{}');
-      if(d.badges)     extraBadges  = Array.isArray(d.badges)   ? d.badges     : JSON.parse(d.badges||'[]');
+
+      // Only overwrite local state if Sheets has non-empty content for that key
+      // This prevents a stale empty [] in Sheets from wiping a rich local cache
+      if(d.sections){
+        const s = Array.isArray(d.sections) ? d.sections : JSON.parse(d.sections);
+        if(s.length > 0){ sections = s; console.log('[TOC] sections from Sheets:', s.length, 'entries'); }
+        else console.log('[TOC] sections in Sheets is empty — keeping local');
+      }
+      if(d.volunteers){
+        const v = Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
+        if(v.length > 0){ volunteers = v; console.log('[TOC] volunteers from Sheets:', v.length, 'entries'); }
+        else console.log('[TOC] volunteers in Sheets is empty — keeping local');
+      }
+      if(d.checkin){
+        const c = (typeof d.checkin==='object'&&!Array.isArray(d.checkin)) ? d.checkin : JSON.parse(d.checkin||'{}');
+        checkinStatus = c;
+      }
+      if(d.badges){
+        const b = Array.isArray(d.badges) ? d.badges : JSON.parse(d.badges||'[]');
+        extraBadges = b;
+      }
       if(d.pins){
         const p = typeof d.pins==='object'&&!Array.isArray(d.pins) ? d.pins : JSON.parse(d.pins||'{}');
         if(Object.keys(p).length > 0) schoolPins = p;
       }
       if(d.lots !== undefined && d.lots !== null && d.lots !== ''){
         const l = Array.isArray(d.lots) ? d.lots : JSON.parse(d.lots||'[]');
-        // Trust whatever came back from Sheets — even a custom list that happens to be empty
-        // Only fall back to defaults if the key was never saved at all (null/undefined/'')
         parkingLots = l;
       }
-      // If d.lots missing entirely from Sheets record, keep current parkingLots (don't overwrite)
       if(d.parking !== undefined && d.parking !== null && d.parking !== ''){
         const p = (typeof d.parking==='object'&&!Array.isArray(d.parking)) ? d.parking : JSON.parse(d.parking||'{}');
-        bandParking = p;
+        if(Object.keys(p).length > 0) bandParking = p;
       }
-      // If d.parking missing entirely, keep current bandParking
       if(d.settings){
         const s = typeof d.settings==='object' ? d.settings : JSON.parse(d.settings||'{}');
-        Object.keys(s).forEach(id=>{
-          const el=document.getElementById(id); if(el) el.value=s[id];
-        });
+        Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
       }
-      // Also update localStorage as cache
+      // Write the merged result back to localStorage as the new cache
       try {
         localStorage.setItem('toc_sections',   JSON.stringify(sections));
         localStorage.setItem('toc_volunteers', JSON.stringify(volunteers));
@@ -1113,42 +1151,22 @@ async function load(){
         localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
         if(d.settings) localStorage.setItem('toc_settings', JSON.stringify(typeof d.settings==='object'?d.settings:JSON.parse(d.settings)));
       } catch(e){}
-      loadLogosLocal();  // logos stored locally only (too large for Sheets)
+      loadLogosLocal();
       setSaveStatus('saved');
-      showToast('✓ Synced with Google Sheets');
+      showToast('✓ Loaded from Google Sheets');
       return;
     } else {
-      // Sheets returned empty — try localStorage
       throw new Error('No data in Sheets');
     }
   } catch(e){
     console.warn('Sheets load failed:', e.message);
-    showToast('Sheets unavailable — using local cache');
-    setSaveStatus('unsaved');
-  }
-
-  // Fall back to localStorage cache
-  try {
-    const sec=localStorage.getItem('toc_sections');    if(sec)  sections=JSON.parse(sec);
-    const vol=localStorage.getItem('toc_volunteers');  if(vol)  volunteers=JSON.parse(vol);
-    const ci =localStorage.getItem('toc_checkin');     if(ci)   checkinStatus=JSON.parse(ci);
-    const bdg=localStorage.getItem('toc_badges');      if(bdg)  extraBadges=JSON.parse(bdg);
-    const lts=localStorage.getItem('toc_lots');
-    parkingLots = (lts !== null) ? JSON.parse(lts) : DEFAULT_PARKING_LOTS;
-    const prk=localStorage.getItem('toc_parking');
-    bandParking = prk ? JSON.parse(prk) : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING));
-    loadLogosLocal();  // merge logos (stored separately due to size)
-    const set=localStorage.getItem('toc_settings');
-    if(set){
-      const s=JSON.parse(set);
-      Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
-    }
-    if(sec) {
-      showToast('⚠ Using cached data — check your connection');
+    if(hadLocal){
+      showToast('⚠ Sheets unavailable — showing cached data');
     } else {
       showToast('Starting fresh — no saved data found');
     }
-  } catch(e){ console.warn('localStorage load failed:', e); }
+    setSaveStatus('unsaved');
+  }
 }
 
 async function clearAll(){
@@ -1963,9 +1981,24 @@ function saveLogosLocal() {
 
 function loadLogosLocal() {
   try {
+    // Primary: dedicated toc_logos key
     const raw = localStorage.getItem('toc_logos');
-    if (!raw) return;
-    const logos = JSON.parse(raw);
+    const logos = raw ? JSON.parse(raw) : {};
+    // Migration: if toc_logos is empty but toc_parking still has logos embedded, recover them
+    if (Object.keys(logos).length === 0) {
+      const prkRaw = localStorage.getItem('toc_parking');
+      if (prkRaw) {
+        try {
+          const prk = JSON.parse(prkRaw);
+          Object.keys(prk).forEach(k => { if (prk[k] && prk[k].logo) logos[k] = prk[k].logo; });
+          if (Object.keys(logos).length > 0) {
+            // Save them to the proper key for next time
+            localStorage.setItem('toc_logos', JSON.stringify(logos));
+            console.log('[TOC] Migrated logos from toc_parking to toc_logos:', Object.keys(logos).join(', '));
+          }
+        } catch(e) {}
+      }
+    }
     Object.keys(logos).forEach(k => {
       if (!bandParking[k]) bandParking[k] = {};
       bandParking[k].logo = logos[k];
