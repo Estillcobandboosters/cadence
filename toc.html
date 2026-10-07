@@ -920,7 +920,7 @@ async function apiCall(params, forceGet){
   if(isWrite){
     const skip = ['action'];
     const keys = Object.keys(params).filter(k => !skip.includes(k));
-    const CHUNK = 1400;
+    const CHUNK = 800; // URL-encoding can 2-3x length; keep total URL well under 8KB
     const requests = [];
     keys.forEach(key => {
       const val = String(params[key]);
@@ -1014,7 +1014,10 @@ async function pushToSheets(){
   if(_saving) return;
   _saving=true;
   setSaveStatus('saving');
-  console.log('[TOC] pushToSheets — lots count:', parkingLots.length, JSON.stringify(parkingLots).substring(0,200));
+  // Always persist logos to localStorage first (they're too big for Sheets)
+  saveLogosLocal();
+  const parkingNoLogos = stripLogos(bandParking);
+  console.log('[TOC] pushToSheets — lots count:', parkingLots.length, 'parking bands:', Object.keys(parkingNoLogos).length);
   try {
     const payload = {
       action:      'toc_save',
@@ -1025,8 +1028,12 @@ async function pushToSheets(){
       settings:    JSON.stringify(getSettings()),
       lots:        JSON.stringify(parkingLots),
       pins:        JSON.stringify(schoolPins),
-      parking:     JSON.stringify(bandParking),
+      parking:     JSON.stringify(parkingNoLogos),
     };
+    // Log payload sizes to catch anything unexpectedly large
+    Object.entries(payload).forEach(([k,v])=>{
+      if(typeof v === 'string' && v.length > 500) console.log('[TOC] payload key='+k+' len='+v.length);
+    });
     const result = await apiCall(payload);
     console.log('[TOC] pushToSheets result:', JSON.stringify(result).substring(0,300));
     setSaveStatus('saved');
