@@ -951,9 +951,13 @@ function save(){
 
 async function manualSync(){
   showToast('Syncing with Google Sheets…');
-  // Flush any pending save first so we don't overwrite with stale Sheets data
+  // Flush any pending debounced save first
   clearTimeout(_saveTimer);
-  if(_saving){ await new Promise(r=>setTimeout(r,2000)); }
+  // If a save is already in-flight, wait for it to finish (up to 5s)
+  let waited = 0;
+  while(_saving && waited < 5000){ await new Promise(r=>setTimeout(r,100)); waited+=100; }
+  // Now do a fresh push (force _saving=false so it doesn't bail)
+  _saving = false;
   await pushToSheets();
   await load();
   renderSidebar();
@@ -966,8 +970,9 @@ async function pushToSheets(){
   if(_saving) return;
   _saving=true;
   setSaveStatus('saving');
+  console.log('[TOC] pushToSheets — lots count:', parkingLots.length, JSON.stringify(parkingLots).substring(0,200));
   try {
-    await apiCall({
+    const payload = {
       action:      'toc_save',
       sections:    JSON.stringify(sections),
       volunteers:  JSON.stringify(volunteers),
@@ -977,11 +982,13 @@ async function pushToSheets(){
       lots:        JSON.stringify(parkingLots),
       pins:        JSON.stringify(schoolPins),
       parking:     JSON.stringify(bandParking),
-    });
+    };
+    const result = await apiCall(payload);
+    console.log('[TOC] pushToSheets result:', JSON.stringify(result).substring(0,300));
     setSaveStatus('saved');
   } catch(e){
     setSaveStatus('unsaved');
-    console.warn('TOC save failed, using localStorage fallback:', e);
+    console.warn('[TOC] TOC save failed:', e);
   }
   _saving=false;
 }
@@ -997,6 +1004,8 @@ async function load(){
 
     if(res.success && res.data && Object.keys(res.data).length>0){
       const d=res.data;
+      console.log('[TOC] load() — d.lots raw:', typeof d.lots, JSON.stringify(d.lots||'').substring(0,200));
+      console.log('[TOC] load() — d.parking keys:', d.parking ? Object.keys(typeof d.parking==='object'?d.parking:JSON.parse(d.parking||'{}')).length : 'missing');
       if(d.sections)   sections = Array.isArray(d.sections)   ? d.sections   : JSON.parse(d.sections);
       if(d.volunteers) volunteers= Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
       if(d.checkin)    checkinStatus = (typeof d.checkin==='object' && !Array.isArray(d.checkin)) ? d.checkin : JSON.parse(d.checkin||'{}');
@@ -1007,15 +1016,16 @@ async function load(){
       }
       if(d.lots !== undefined && d.lots !== null && d.lots !== ''){
         const l = Array.isArray(d.lots) ? d.lots : JSON.parse(d.lots||'[]');
-        // Only fall back to defaults if key was never saved (null/undefined/empty string)
-        // If user has saved an empty or custom list, respect it
-        parkingLots = l.length > 0 ? l : DEFAULT_PARKING_LOTS;
+        // Trust whatever came back from Sheets — even a custom list that happens to be empty
+        // Only fall back to defaults if the key was never saved at all (null/undefined/'')
+        parkingLots = l;
       }
       // If d.lots missing entirely from Sheets record, keep current parkingLots (don't overwrite)
-      if(d.parking){
+      if(d.parking !== undefined && d.parking !== null && d.parking !== ''){
         const p = (typeof d.parking==='object'&&!Array.isArray(d.parking)) ? d.parking : JSON.parse(d.parking||'{}');
-        bandParking = Object.keys(p).length > 0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING));
-      } else { bandParking = JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
+        bandParking = p;
+      }
+      // If d.parking missing entirely, keep current bandParking
       if(d.settings){
         const s = typeof d.settings==='object' ? d.settings : JSON.parse(d.settings||'{}');
         Object.keys(s).forEach(id=>{
@@ -1028,6 +1038,8 @@ async function load(){
         localStorage.setItem('toc_volunteers', JSON.stringify(volunteers));
         localStorage.setItem('toc_checkin',    JSON.stringify(checkinStatus));
         localStorage.setItem('toc_badges',     JSON.stringify(extraBadges));
+        localStorage.setItem('toc_lots',       JSON.stringify(parkingLots));
+        localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
         if(d.settings) localStorage.setItem('toc_settings', JSON.stringify(typeof d.settings==='object'?d.settings:JSON.parse(d.settings)));
       } catch(e){}
       loadLogosLocal();  // logos stored locally only (too large for Sheets)
@@ -1051,11 +1063,9 @@ async function load(){
     const ci =localStorage.getItem('toc_checkin');     if(ci)   checkinStatus=JSON.parse(ci);
     const bdg=localStorage.getItem('toc_badges');      if(bdg)  extraBadges=JSON.parse(bdg);
     const lts=localStorage.getItem('toc_lots');
-    if(lts !== null){ const l=JSON.parse(lts); parkingLots = l.length>0 ? l : DEFAULT_PARKING_LOTS; }
-    else { parkingLots = DEFAULT_PARKING_LOTS; }
+    parkingLots = (lts !== null) ? JSON.parse(lts) : DEFAULT_PARKING_LOTS;
     const prk=localStorage.getItem('toc_parking');
-    if(prk){ const p=JSON.parse(prk); bandParking = Object.keys(p).length>0 ? p : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
-    else { bandParking = JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING)); }
+    bandParking = prk ? JSON.parse(prk) : JSON.parse(JSON.stringify(DEFAULT_BAND_PARKING));
     loadLogosLocal();  // merge logos (stored separately due to size)
     const set=localStorage.getItem('toc_settings');
     if(set){
