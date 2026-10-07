@@ -377,7 +377,31 @@ async function loadData() {
     const text = await res.text();
     const json = JSON.parse(text);
     if (json.success && json.data) {
-      _data = json.data;
+      const raw = json.data;
+
+      // Reassemble chunked keys (key__0, key__1 ... key__n saved by toc.html)
+      const reassembled = {};
+      const chunkKeys = new Set();
+      Object.keys(raw).forEach(k => {
+        const m = k.match(/^(.+)__(\d+)$/);
+        if (m) chunkKeys.add(m[1]);
+      });
+      // Copy non-chunk keys first
+      Object.keys(raw).forEach(k => {
+        if (!/__\d+$/.test(k)) reassembled[k] = raw[k];
+      });
+      // Reassemble each chunked key
+      chunkKeys.forEach(base => {
+        const count = parseInt(raw[base + '__n'] || raw[base + '__count'] || 0);
+        if (count > 0) {
+          let str = '';
+          for (let i = 0; i < count; i++) str += (raw[base + '__' + i] || '');
+          reassembled[base] = str;
+        }
+      });
+
+      _data = reassembled;
+
       // Parse nested JSON strings from Sheets
       const _parseKey = k => {
         if (_data[k] && typeof _data[k] === 'string') {
@@ -511,13 +535,22 @@ function selectSchool(bandName) {
     if (rows[i].t==='band'&&rows[i].band===bandName) break;
   }
 
-  // Director info
+  // Director info — build lookup from sections if needed
   const dirs = _data.DIRECTORS_DATA || {};
   const dir  = dirs[bandName] || {};
+  // Walk sections to find director name for this band
+  let dirName = dir.name || band.dir || '';
+  if (!dirName) {
+    (_data.sections || []).forEach(sec => {
+      (sec.bands || []).forEach(b => {
+        if (b.name === bandName && b.dir) dirName = b.dir;
+      });
+    });
+  }
 
   // Populate hero
   document.getElementById('d-school').textContent   = bandName;
-  document.getElementById('d-director').textContent = dir.name || band.dir || 'Director';
+  document.getElementById('d-director').textContent = dirName || 'Director';
   document.getElementById('d-class').textContent    = foundCls + ' · Draw #' + band.draw;
   document.getElementById('d-arrival').textContent  = band.arrival;
   document.getElementById('d-dress').textContent    = band.dress;
