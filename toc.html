@@ -911,7 +911,22 @@ function setSaveStatus(s){
   else { el.textContent='● Unsaved'; el.style.color='#FFD54F'; }
 }
 
-async function apiCall(params){
+async function apiCall(params, forceGet){
+  // Use GET for reads (need response body), POST no-cors for writes (avoids CORS/URL-length issues)
+  const isWrite = !forceGet && params.action && params.action.includes('save');
+  if(isWrite){
+    // POST as form-encoded with no-cors — browser allows this cross-origin, Apps Script receives it via doPost
+    const body = new URLSearchParams(params).toString();
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: body,
+      redirect: 'follow'
+    });
+    // no-cors returns opaque response — we can't read it, assume success
+    return {success:true};
+  }
   const url=SCRIPT_URL+'?'+new URLSearchParams(params).toString();
   const res=await fetch(url,{
     method:'GET',
