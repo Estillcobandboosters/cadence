@@ -935,10 +935,22 @@ async function apiCall(params, forceGet){
         requests.push({ action: params.action, [key+'__n']: String(n) });
       }
     });
-    await Promise.all(requests.map(async p => {
+    console.log('[TOC] save — sending', requests.length, 'requests. Keys:', requests.map(r=>Object.keys(r).find(k=>k!=='action')));
+    const results = await Promise.all(requests.map(async p => {
       const url = SCRIPT_URL + '?' + new URLSearchParams(p).toString();
-      try { const r = await fetch(url,{method:'GET',redirect:'follow'}); await r.text(); } catch(e){}
+      const key = Object.keys(p).find(k=>k!=='action');
+      try {
+        const r = await fetch(url,{method:'GET',redirect:'follow'});
+        const txt = await r.text();
+        console.log('[TOC] save key='+key+' status='+r.status+' response='+txt.substring(0,100));
+        return {key, ok:true};
+      } catch(e){
+        console.error('[TOC] save key='+key+' FAILED:', e.message);
+        return {key, ok:false, err:e.message};
+      }
     }));
+    const failed = results.filter(r=>!r.ok);
+    if(failed.length) console.error('[TOC] save — FAILED keys:', failed.map(r=>r.key));
     return {success:true};
   }
   const url=SCRIPT_URL+'?'+new URLSearchParams(params).toString();
@@ -1034,6 +1046,7 @@ async function load(){
     const timeoutPromise = new Promise((_,reject) => setTimeout(()=>reject(new Error('timeout')), 12000));
     const res = await Promise.race([fetchPromise, timeoutPromise]);
 
+    console.log('[TOC] load() raw response success='+res.success+' data keys:', res.data ? Object.keys(res.data).join(', ') : 'none');
     if(res.success && res.data && Object.keys(res.data).length>0){
       // Reassemble any chunked values (key__0, key__1… + key__n) back into key
       const raw=res.data;
