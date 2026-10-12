@@ -2416,13 +2416,17 @@ function printParkingGuide() {
 
   // Build a map of lotId → lot info + assigned bands in draw order
   const lotMap = {};
-  parkingLots.forEach(lot => { lotMap[lot.id] = { ...lot, bands:[] }; });
+  parkingLots.forEach(lot => { if(lot.id) lotMap[lot.id] = { ...lot, bands:[] }; });
   const unassigned = [];
 
-  bands.forEach(r => {
+  // If no schedule rows loaded yet, fall back to all bands from bandParking
+  const allBands = bands.length > 0 ? bands :
+    Object.keys(bandParking).map((band, i) => ({ band, draw: String(i+1), perform: '—' }));
+
+  allBands.forEach(r => {
     const p   = bandParking[r.band] || {};
     const dir = DIRECTORS[r.band]   || {};
-    const entry = { draw:r.draw, band:r.band, perform:r.perform, dir:dir.name||'', p, logo: p.logo||null };
+    const entry = { draw:r.draw, band:r.band, perform:r.perform||'—', dir:dir.name||'', p, logo: p.logo||null };
     if (p.lot && lotMap[p.lot]) {
       lotMap[p.lot].bands.push(entry);
     } else {
@@ -2557,6 +2561,7 @@ function printParkingGuide() {
 </div></body></html>`;
 
   const win = window.open('','_blank','width=1000,height=750');
+  if (!win) { alert('Pop-up blocked — please allow pop-ups for this page and try again.'); return; }
   win.document.write(html); win.document.close();
 }
 
