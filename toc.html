@@ -2407,7 +2407,7 @@ function printBandVehicleList() {
 // ════════════════════════════════════════════════════════
 //  PRINT FULL PARKING GUIDE
 // ════════════════════════════════════════════════════════
-function printParkingGuide() {
+function printParkingGuide() { try {
   const evName = document.getElementById('ev-name')?.value || 'Tournament of Champions';
   const evDate = document.getElementById('ev-date')?.value || '';
   const dateStr = evDate ? (()=>{ try{ return new Date(evDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }catch(e){return evDate;} })() : '';
@@ -2563,6 +2563,7 @@ function printParkingGuide() {
   const win = window.open('','_blank','width=1000,height=750');
   if (!win) { alert('Pop-up blocked — please allow pop-ups for this page and try again.'); return; }
   win.document.write(html); win.document.close();
+  } catch(err) { alert('Parking guide error: ' + err.message); console.error(err); }
 }
 
 // ════════════════════════════════════════════════════════
