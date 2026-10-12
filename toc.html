@@ -532,7 +532,8 @@ table.sch tr:hover td{background:#f8f9ff;}
     <button class="btn btn-blue btn-sm" onclick="printGuideCards()" style="text-align:left;">🖨 Guide cards (one per band)</button>
     <button class="btn btn-blue btn-sm" onclick="printParkingSheet()" style="text-align:left;">🖨 Parking crew master sheet</button>
     <button class="btn btn-blue btn-sm" onclick="printBandVehicleList()" style="text-align:left;">🖨 Band vehicle list</button>
-    <button class="btn btn-blue btn-sm" onclick="printParkingGuide()" style="text-align:left;">🖨 Full parking guide</button>
+    <button class="btn btn-blue btn-sm" onclick="printParkingGuide(false)" style="text-align:left;">🖨 Full parking guide</button>
+    <button class="btn btn-blue btn-sm" onclick="printParkingGuide(true)" style="text-align:left;">🖨 Parking guide + maps</button>
   </div>
 </div>
 
@@ -2407,7 +2408,7 @@ function printBandVehicleList() {
 // ════════════════════════════════════════════════════════
 //  PRINT FULL PARKING GUIDE
 // ════════════════════════════════════════════════════════
-function printParkingGuide() { try {
+function printParkingGuide(includeMaps) { try {
   const evName = document.getElementById('ev-name')?.value || 'Tournament of Champions';
   const evDate = document.getElementById('ev-date')?.value || '';
   const dateStr = evDate ? (()=>{ try{ return new Date(evDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }catch(e){return evDate;} })() : '';
@@ -2558,6 +2559,39 @@ function printParkingGuide() { try {
   </div>
 
   ${sections}
+
+  ${includeMaps ? `
+  <div style="page-break-before:always;">
+    <div style="font-size:13pt;font-weight:900;color:#1565C0;border-bottom:2pt solid #1565C0;padding-bottom:5pt;margin-bottom:14pt;">Venue Maps</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16pt;">
+      <div>
+        <div style="font-size:8.5pt;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4pt;">Equipment Lot A</div>
+        <img src="map-lot-a.png" style="width:100%;border:1pt solid #ddd;border-radius:4pt;" onerror="this.style.display='none';this.nextSibling.style.display='block'"/>
+        <div style="display:none;padding:12pt;background:#f5f5f5;border:1pt solid #ddd;border-radius:4pt;font-size:8pt;color:#999;text-align:center;">map-lot-a.png not found</div>
+      </div>
+      <div>
+        <div style="font-size:8.5pt;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4pt;">Equipment Lots B &amp; C</div>
+        <img src="map-lot-bc.png" style="width:100%;border:1pt solid #ddd;border-radius:4pt;" onerror="this.style.display='none';this.nextSibling.style.display='block'"/>
+        <div style="display:none;padding:12pt;background:#f5f5f5;border:1pt solid #ddd;border-radius:4pt;font-size:8pt;color:#999;text-align:center;">map-lot-bc.png not found</div>
+      </div>
+      <div>
+        <div style="font-size:8.5pt;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4pt;">Equipment Lots D &amp; E</div>
+        <img src="map-lot-de.png" style="width:100%;border:1pt solid #ddd;border-radius:4pt;" onerror="this.style.display='none';this.nextSibling.style.display='block'"/>
+        <div style="display:none;padding:12pt;background:#f5f5f5;border:1pt solid #ddd;border-radius:4pt;font-size:8pt;color:#999;text-align:center;">map-lot-de.png not found</div>
+      </div>
+      <div>
+        <div style="font-size:8.5pt;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4pt;">Band &amp; Equipment Flow</div>
+        <img src="map-flow.png" style="width:100%;border:1pt solid #ddd;border-radius:4pt;" onerror="this.style.display='none';this.nextSibling.style.display='block'"/>
+        <div style="display:none;padding:12pt;background:#f5f5f5;border:1pt solid #ddd;border-radius:4pt;font-size:8pt;color:#999;text-align:center;">map-flow.png not found</div>
+      </div>
+      <div style="grid-column:1/-1;">
+        <div style="font-size:8.5pt;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4pt;">Spectator Parking</div>
+        <img src="map-spectator.png" style="width:100%;border:1pt solid #ddd;border-radius:4pt;" onerror="this.style.display='none';this.nextSibling.style.display='block'"/>
+        <div style="display:none;padding:12pt;background:#f5f5f5;border:1pt solid #ddd;border-radius:4pt;font-size:8pt;color:#999;text-align:center;">map-spectator.png not found</div>
+      </div>
+    </div>
+  </div>` : ''}
+
 </div></body></html>`;
 
   const win = window.open('','_blank','width=1000,height=750');
