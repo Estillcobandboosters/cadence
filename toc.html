@@ -131,8 +131,8 @@ table.sch tr:hover td{background:#f8f9ff;}
 .tl-status{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;}
 
 /* ── Badge print ── */
-.badges-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:900px;}
-.badge-card{border:2px solid #1565C0;border-radius:12px;padding:14px;text-align:center;background:white;position:relative;aspect-ratio:2.125/3.375;}
+.badges-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:760px;}
+.badge-card{border:2px solid #1565C0;border-radius:12px;padding:14px;text-align:center;background:white;position:relative;aspect-ratio:2.25/3.5;display:flex;flex-direction:column;align-items:center;}
 .badge-card .b-logo{font-size:28px;margin-bottom:6px;}
 .badge-card .b-event{font-size:9px;font-weight:700;color:#1565C0;text-transform:uppercase;letter-spacing:.08em;}
 .badge-card .b-date{font-size:8px;color:#888;margin-bottom:8px;}
@@ -143,9 +143,9 @@ table.sch tr:hover td{background:#f8f9ff;}
 .badge-card .b-perform{font-size:13px;font-weight:700;color:#1565C0;margin-top:4px;}
 .badge-card .b-hole{width:16px;height:16px;border-radius:50%;border:2px solid #ccc;margin:0 auto 8px;}
 .badge-type-director .b-role{background:#1565C0;}
-.badge-type-volunteer .b-role{background:#2E7D32;}
-.badge-type-staff .b-role{background:#7B1FA2;}
-.badge-type-official .b-role{background:#E65100;}
+.badge-type-volunteer .b-role{background:#333;}
+.badge-type-staff .b-role{background:#1565C0;}
+.badge-type-official .b-role{background:#1565C0;}
 
 /* ── Modal ── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;}
@@ -243,9 +243,9 @@ table.sch tr:hover td{background:#f8f9ff;}
   /* Stats grid — 2 columns */
   .stat-grid { grid-template-columns: 1fr 1fr !important; }
 
-  /* Badges — 2 per row on mobile */
-  .badges-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
-  .badge-card { min-height: auto !important; }
+  /* Badges — 1 per row on mobile */
+  .badges-grid { grid-template-columns: repeat(1, 1fr) !important; gap: 8px !important; }
+  .badge-card { aspect-ratio: 2.25/3.5 !important; }
 
   /* Dashboard */
   .dash-now { padding: 12px 14px; }
@@ -259,9 +259,11 @@ table.sch tr:hover td{background:#f8f9ff;}
   .canvas,.full-canvas{padding:0;}
   body{background:white;}
 
-  /* Badge print */
-  .badges-print-layout{display:grid!important;grid-template-columns:repeat(3,2.125in);gap:.125in;padding:.25in;}
-  .badge-card{width:2.125in;height:3.375in;page-break-inside:avoid;border:1px solid #999;}
+  /* Badge print — 2.25"×3.5" portrait inserts, 2 across × 4 down on letter portrait sheet */
+  @page { size: letter portrait; margin: .5in .625in; }
+  .badges-print-layout{display:grid!important;grid-template-columns:repeat(2,2.25in);column-gap:.875in;row-gap:.25in;padding:0;}
+  .badge-card{width:2.25in!important;height:3.5in!important;page-break-inside:avoid;border:1px solid #999;
+    aspect-ratio:unset!important;flex-direction:column!important;text-align:center!important;padding:12px!important;}
 }
 </style>
 </head>
@@ -461,7 +463,7 @@ table.sch tr:hover td{background:#f8f9ff;}
   <p style="font-size:11px;color:#bbb;margin-bottom:4px;">School staff badges come from each school's "Additional staff badges" in the band parking editor.</p>
   <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
     <button class="btn btn-blue btn-sm" id="btn-dir-toggle" onclick="showDirBadges=!showDirBadges;this.style.opacity=showDirBadges?'1':'.5';renderBadges()">✓ Director badges</button>
-    <button class="btn btn-sm" id="btn-staff-toggle" style="background:#7B1FA2;color:white;opacity:1;" onclick="showStaffBadges=!showStaffBadges;this.style.opacity=showStaffBadges?'1':'.5';renderBadges()">✓ School staff badges</button>
+    <button class="btn btn-sm" id="btn-staff-toggle" style="background:#1565C0;color:white;opacity:1;" onclick="showStaffBadges=!showStaffBadges;this.style.opacity=showStaffBadges?'1':'.5';renderBadges()">✓ School staff badges</button>
     <button class="btn btn-green btn-sm" id="btn-vol-toggle" onclick="showVolBadges=!showVolBadges;this.style.opacity=showVolBadges?'1':'.5';renderBadges()">✓ Volunteer badges</button>
   </div>
 
@@ -1669,7 +1671,7 @@ function renderBadges(){
   const evtDate=document.getElementById('bdg-date')?.value||'';
   const style=document.getElementById('bdg-style')?.value||'color';
 
-  const roleColors={director:'#1565C0',volunteer:'#2E7D32',staff:'#7B1FA2',official:'#E65100'};
+  const roleColors={director:'#1565C0',volunteer:'#333',staff:'#1565C0',official:'#1565C0'};
   const bwColor='#333';
 
   let badges=[];
@@ -1737,7 +1739,6 @@ function renderBadges(){
     const card=document.createElement('div');
     card.className='badge-card badge-type-'+(b.type||'director');
     card.style.borderColor=borderColor;
-    card.style.minHeight='3.6in';
 
     // Use area color for volunteer badges
     const badgeColor  = (b.type==='volunteer' && b.areaColor) ? b.areaColor : roleColor;
@@ -1746,47 +1747,46 @@ function renderBadges(){
 
     // Get band logo if available (for director and school staff badges)
     const bandLogo = ((b.type==='director' || b._isSchoolStaff) && bandParking[b.school]?.logo) ? bandParking[b.school].logo : null;
-    let inner='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:5px;"></div>';
-    // EC logo always at top
+    // Role pill: for school staff show their title, others show type label
+    const rolePill = b._isSchoolStaff ? (b.role||'STAFF') : (b.type?.toUpperCase()||'DIRECTOR');
+
+    // Build schedule rows (for director/staff)
+    let schedHtml='';
+    if(b.perform && (b.type==='director' || b._isSchoolStaff)){
+      const sched=[
+        {lbl:'Arrival',val:b.arrival},{lbl:'Dress',val:b.dress},
+        {lbl:'Warm-up',val:b.warmup+' / Area '+b.area},{lbl:'Travel',val:b.travel},
+        {lbl:'Gate',val:b.gate},{lbl:'Perform',val:b.perform},
+      ];
+      schedHtml='<div class="b-sched" style="width:100%;border:1px solid '+borderColor+';border-radius:4px;overflow:hidden;font-size:8px;">';
+      sched.forEach(function(row,i){
+        var bg=row.lbl==='Perform'?roleColor:(i%2===0?'#f8f9ff':'white');
+        var clr=row.lbl==='Perform'?'white':'#333';
+        var wt=row.lbl==='Perform'?'800':'400';
+        schedHtml+='<div class="b-sched-row" style="display:flex;justify-content:space-between;padding:2px 5px;background:'+bg+';color:'+clr+';font-weight:'+wt+';">'+
+          '<span>'+row.lbl+'</span><span>'+escHtml(row.val||'—')+'</span></div>';
+      });
+      schedHtml+='</div>';
+    }
+
+    // Portrait layout: top-to-bottom
+    let inner='';
+    inner+='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:5px;"></div>';
     inner+='<img src="'+EC_LOGO+'" style="height:30px;width:auto;margin:0 auto 4px;display:block;"/>';
     inner+='<div class="b-event" style="color:'+badgeColor+';">'+escHtml(evtName)+'</div>';
     inner+='<div class="b-date">'+escHtml(evtDate)+'</div>';
-    // Role pill: for school staff show their title, others show type label
-    const rolePill = b._isSchoolStaff ? (b.role||'STAFF') : (b.type?.toUpperCase()||'DIRECTOR');
     inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(rolePill)+'</div>';
     if(b.name)    inner+='<div class="b-name">'+escHtml(b.name)+'</div>';
     if(b.school)  inner+='<div class="b-school">'+escHtml(b.school)+'</div>';
-    // Band logo below name
     if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;"/>';
     if(b.cls && !b._isSchoolStaff) inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
-    // Volunteer: show area name + position
     if(b.type==='volunteer'){
       if(b.area)  inner+='<div class="b-school" style="font-weight:700;color:'+badgeColor+';">'+escHtml(b.area)+'</div>';
       if(b.role)  inner+='<div class="b-class">'+escHtml(b.role)+'</div>';
-    } else if(!b._isSchoolStaff) {
-      if(b.role)  inner+='<div class="b-class" style="color:#777;">'+escHtml(b.role)+'</div>';
+    } else if(!b._isSchoolStaff && b.role){
+      inner+='<div class="b-class" style="color:#777;">'+escHtml(b.role)+'</div>';
     }
-    // Schedule grid for director and school staff badges
-    if(b.perform && (b.type==='director' || b._isSchoolStaff)){
-      inner+='<div style="margin-top:6px;width:100%;border:1px solid '+borderColor+';border-radius:4px;overflow:hidden;font-size:8px;">';
-      const sched=[
-        {lbl:'Arrival',   val:b.arrival},
-        {lbl:'Dress',     val:b.dress},
-        {lbl:'Warm-up',   val:b.warmup+' / Area '+b.area},
-        {lbl:'Travel',    val:b.travel},
-        {lbl:'Gate',      val:b.gate},
-        {lbl:'Perform',   val:b.perform},
-      ];
-      sched.forEach(function(row,i){
-        var bg = row.lbl==='Perform' ? roleColor : (i%2===0?'#f8f9ff':'white');
-        var clr = row.lbl==='Perform' ? 'white' : '#333';
-        var wt  = row.lbl==='Perform' ? '800' : '400';
-        inner+='<div style="display:flex;justify-content:space-between;padding:2px 5px;background:'+bg+';color:'+clr+';font-weight:'+wt+';">'+
-          '<span>'+row.lbl+'</span><span>'+escHtml(row.val||'—')+'</span></div>';
-      });
-      inner+='</div>';
-    }
-
+    inner+=schedHtml;
     card.innerHTML=inner;
     grid.appendChild(card);
   });
@@ -3025,7 +3025,7 @@ function printBadgeBacks() {
     </div>`;
   }
 
-  const roleColors={director:'#1565C0',volunteer:'#2E7D32',staff:'#7B1FA2',official:'#E65100'};
+  const roleColors={director:'#1565C0',volunteer:'#333',staff:'#1565C0',official:'#1565C0'};
 
   // Generate back HTML — reversed 3-per-row to align with fronts when flipped
   // We reverse each row of 3 so left-to-right on back matches right-to-left flip
