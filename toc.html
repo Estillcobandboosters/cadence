@@ -2440,14 +2440,14 @@ function printParkingGuide() { try {
       ? `<img src="${e.logo}" style="height:24px;width:24px;object-fit:contain;border-radius:3px;vertical-align:middle;margin-right:6px;"/>`
       : '';
     return `<tr>
-      <td class="draw">${escHtml(e.draw)}</td>
-      <td>${logoImg}<strong>${escHtml(e.band)}</strong></td>
-      <td>${escHtml(e.dir)}</td>
-      <td class="perf">${escHtml(e.perform)}</td>
-      <td class="spot">${escHtml(e.p.spot||'—')}</td>
-      <td style="font-size:7.5pt;">${escHtml(e.p.vehicles||'—')}</td>
+      <td class="draw">${escHtml(String(e.draw||''))}</td>
+      <td>${logoImg}<strong>${escHtml(String(e.band||''))}</strong></td>
+      <td>${escHtml(String(e.dir||''))}</td>
+      <td class="perf">${escHtml(String(e.perform||''))}</td>
+      <td class="spot">${escHtml(String(e.p.spot||'—'))}</td>
+      <td style="font-size:7.5pt;">${escHtml(String(e.p.vehicles||'—'))}</td>
       <td style="font-size:7pt;">${flags.join(' ')}</td>
-      <td style="font-size:7pt;color:#555;">${escHtml(e.p.guide||'')}</td>
+      <td style="font-size:7pt;color:#555;">${escHtml(String(e.p.guide||''))}</td>
     </tr>`;
   }
 
@@ -2456,8 +2456,8 @@ function printParkingGuide() { try {
     return `
       <div class="lot-block">
         <div class="lot-header">
-          <span class="lot-name">${escHtml(lot.name)}</span>
-          <span class="lot-cap">Capacity: ${lot.capacity || '?'}${lot.notes ? ' &nbsp;·&nbsp; ' + escHtml(lot.notes) : ''}</span>
+          <span class="lot-name">${escHtml(String(lot.name||''))}</span>
+          <span class="lot-cap">Capacity: ${lot.capacity || '?'}${lot.notes ? ' &nbsp;&middot;&nbsp; ' + escHtml(String(lot.notes)) : ''}</span>
           <span class="lot-count">${bands.length} band${bands.length!==1?'s':''} assigned</span>
         </div>
         <table>
@@ -2488,10 +2488,10 @@ function printParkingGuide() { try {
   const lotSummaryRows = parkingLots.map(lot => {
     const assigned = lotMap[lot.id]?.bands.length || 0;
     return `<tr>
-      <td style="font-weight:700;">${escHtml(lot.name)}</td>
+      <td style="font-weight:700;">${escHtml(String(lot.name||''))}</td>
       <td style="text-align:center;">${assigned}</td>
       <td style="text-align:center;">${lot.capacity||'?'}</td>
-      <td style="font-size:7pt;color:#555;">${escHtml(lot.notes||'')}</td>
+      <td style="font-size:7pt;color:#555;">${escHtml(String(lot.notes||''))}</td>
     </tr>`;
   }).join('');
 
