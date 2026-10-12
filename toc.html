@@ -458,8 +458,10 @@ table.sch tr:hover td{background:#f8f9ff;}
     <span style="font-size:10px;color:#aaa;font-weight:400;text-transform:none;"> — auto-filled from schedule</span>
   </div>
   <p style="font-size:11px;color:#bbb;margin-bottom:8px;">Director badges are generated from bands in your schedule. Add directors on the Schedule page.</p>
+  <p style="font-size:11px;color:#bbb;margin-bottom:4px;">School staff badges come from each school's "Additional staff badges" in the band parking editor.</p>
   <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
     <button class="btn btn-blue btn-sm" id="btn-dir-toggle" onclick="showDirBadges=!showDirBadges;this.style.opacity=showDirBadges?'1':'.5';renderBadges()">✓ Director badges</button>
+    <button class="btn btn-sm" id="btn-staff-toggle" style="background:#7B1FA2;color:white;opacity:1;" onclick="showStaffBadges=!showStaffBadges;this.style.opacity=showStaffBadges?'1':'.5';renderBadges()">✓ School staff badges</button>
     <button class="btn btn-green btn-sm" id="btn-vol-toggle" onclick="showVolBadges=!showVolBadges;this.style.opacity=showVolBadges?'1':'.5';renderBadges()">✓ Volunteer badges</button>
   </div>
 
@@ -776,6 +778,11 @@ table.sch tr:hover td{background:#f8f9ff;}
       <button class="btn btn-xs btn-red" onclick="clearLogo()" style="flex-shrink:0;">✕ Clear</button>
     </div>
     <input type="hidden" id="bp-logo-data"/>
+    <!-- Staff members section -->
+    <label style="font-size:12px;color:#555;font-weight:600;margin-top:12px;display:block;">Additional staff badges</label>
+    <div style="font-size:11px;color:#aaa;margin-bottom:6px;">These staff members will get badges showing their school logo and title.</div>
+    <div id="bp-staff-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;"></div>
+    <button class="btn btn-xs" onclick="addBpStaff()" style="background:#f0f4ff;border:1px solid #c7d7f5;color:#1565C0;font-size:11px;">+ Add staff member</button>
     <div class="modal-footer">
       <button class="btn" style="background:#f0f0f0;color:#333;" onclick="closeModal('band-parking-modal')">Cancel</button>
       <button class="btn btn-blue" onclick="saveBandParking()">Save</button>
@@ -832,9 +839,10 @@ let volunteers = [
   {name:'Guides',color:'#558B2F',slots:[{pos:'Guide 1',vol:''},{pos:'Guide 2',vol:''},{pos:'Guide 3',vol:''},{pos:'Guide 4',vol:''},{pos:'Guide 5',vol:''},{pos:'Guide 6',vol:''}]},
 ];
 let checkinStatus = {}; // band name -> 'scheduled'|'arrived'|'warmup'|'performed'
-let extraBadges   = [];
-let showDirBadges = true;
-let showVolBadges = true;
+let extraBadges    = [];
+let showDirBadges  = true;
+let showStaffBadges= true;
+let showVolBadges  = true;
 // Default parking data — only used if nothing is saved yet
 const DEFAULT_PARKING_LOTS = [
   {id:'lot1', name:'Lot A', capacity:20, notes:''},  
@@ -1699,6 +1707,26 @@ function renderBadges(){
     });
   }
 
+  // School staff badges (from band parking staff list)
+  if (showStaffBadges) {
+    _scheduleRows.forEach(r => {
+      if (r.t !== 'band') return;
+      const p = bandParking[r.band] || {};
+      const staffList = p.staff || [];
+      staffList.forEach(s => {
+        if (!s.name) return;
+        badges.push({
+          type: 'staff', name: s.name, school: r.band, cls: r.cls,
+          role: s.title || 'Staff',
+          draw: r.draw, arrival: r.arrival, dress: r.dress,
+          warmup: r.warmup, area: r.area, travel: r.travel,
+          gate: r.gate, perform: r.perform,
+          _isSchoolStaff: true,
+        });
+      });
+    });
+  }
+
   // Extra badges (volunteers/staff)
   extraBadges.forEach(b=>{ badges.push({...b}); });
 
@@ -1716,28 +1744,30 @@ function renderBadges(){
     const badgeBorder = (b.type==='volunteer' && b.areaColor) ? b.areaColor : borderColor;
     card.style.borderColor = badgeBorder;
 
-    // Get band logo if available (for director badges)
-    const bandLogo = (b.type==='director' && bandParking[b.school]?.logo) ? bandParking[b.school].logo : null;
+    // Get band logo if available (for director and school staff badges)
+    const bandLogo = ((b.type==='director' || b._isSchoolStaff) && bandParking[b.school]?.logo) ? bandParking[b.school].logo : null;
     let inner='<div class="b-hole" style="border-color:'+badgeBorder+';margin-bottom:5px;"></div>';
     // EC logo always at top
     inner+='<img src="'+EC_LOGO+'" style="height:30px;width:auto;margin:0 auto 4px;display:block;"/>';
     inner+='<div class="b-event" style="color:'+badgeColor+';">'+escHtml(evtName)+'</div>';
     inner+='<div class="b-date">'+escHtml(evtDate)+'</div>';
-    inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(b.type?.toUpperCase()||'DIRECTOR')+'</div>';
+    // Role pill: for school staff show their title, others show type label
+    const rolePill = b._isSchoolStaff ? (b.role||'STAFF') : (b.type?.toUpperCase()||'DIRECTOR');
+    inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(rolePill)+'</div>';
     if(b.name)    inner+='<div class="b-name">'+escHtml(b.name)+'</div>';
     if(b.school)  inner+='<div class="b-school">'+escHtml(b.school)+'</div>';
     // Band logo below name
     if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;"/>';
-    if(b.cls)     inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
+    if(b.cls && !b._isSchoolStaff) inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
     // Volunteer: show area name + position
     if(b.type==='volunteer'){
       if(b.area)  inner+='<div class="b-school" style="font-weight:700;color:'+badgeColor+';">'+escHtml(b.area)+'</div>';
       if(b.role)  inner+='<div class="b-class">'+escHtml(b.role)+'</div>';
-    } else {
+    } else if(!b._isSchoolStaff) {
       if(b.role)  inner+='<div class="b-class" style="color:#777;">'+escHtml(b.role)+'</div>';
     }
-    // Schedule grid for director badges only
-    if(b.perform && b.type==='director'){
+    // Schedule grid for director and school staff badges
+    if(b.perform && (b.type==='director' || b._isSchoolStaff)){
       inner+='<div style="margin-top:6px;width:100%;border:1px solid '+borderColor+';border-radius:4px;overflow:hidden;font-size:8px;">';
       const sched=[
         {lbl:'Arrival',   val:b.arrival},
@@ -2081,6 +2111,7 @@ function rmLot(i) {
 
 // ── Band parking edit ─────────────────────────────────
 let _editBandName = '';
+let _editBpStaff  = [];
 function openBandParking(bandName) {
   _editBandName = bandName;
   const p   = bandParking[bandName] || {};
@@ -2101,6 +2132,9 @@ function openBandParking(bandName) {
   document.getElementById('bp-trailer').checked = !!p.trailer;
   document.getElementById('bp-pit').checked     = !!p.pit;
   document.getElementById('bp-truck').checked   = !!p.truck;
+  // Populate staff list
+  _editBpStaff = (p.staff || []).map(s => ({...s}));
+  renderBpStaff();
   // Populate lot dropdown
   const lotSel = document.getElementById('bp-lot');
   lotSel.innerHTML = '<option value="">— Not assigned —</option>' +
@@ -2110,6 +2144,14 @@ function openBandParking(bandName) {
 function saveBandParking() {
   const p = bandParking[_editBandName] || {};
   const newLogo = document.getElementById('bp-logo-data').value;
+  // Collect staff from modal inputs
+  const staffRows = document.querySelectorAll('#bp-staff-list .bp-staff-row');
+  const staff = [];
+  staffRows.forEach(row => {
+    const n = row.querySelector('.bp-sname').value.trim();
+    const t = row.querySelector('.bp-stitle').value.trim();
+    if (n) staff.push({name: n, title: t});
+  });
   bandParking[_editBandName] = {
     ...p,
     lot:     document.getElementById('bp-lot').value,
@@ -2120,8 +2162,36 @@ function saveBandParking() {
     pit:     document.getElementById('bp-pit').checked,
     truck:   document.getElementById('bp-truck').checked,
     logo:    newLogo || p.logo || '',
+    staff:   staff,
   };
   closeModal('band-parking-modal'); saveLogosLocal(); save(); renderParking();
+}
+
+function renderBpStaff() {
+  const list = document.getElementById('bp-staff-list');
+  if (!list) return;
+  if (_editBpStaff.length === 0) {
+    list.innerHTML = '<div style="color:#ccc;font-size:11px;padding:2px 0;">No additional staff yet.</div>';
+    return;
+  }
+  list.innerHTML = _editBpStaff.map((s, i) =>
+    `<div class="bp-staff-row" style="display:flex;gap:6px;align-items:center;">
+      <input class="bp-sname" placeholder="Name" value="${escHtml(s.name||'')}" style="flex:1;border:1px solid #e0e0e0;border-radius:5px;padding:4px 7px;font-size:12px;font-family:inherit;"/>
+      <input class="bp-stitle" placeholder="Title (e.g. Asst. Director)" value="${escHtml(s.title||'')}" style="flex:1.4;border:1px solid #e0e0e0;border-radius:5px;padding:4px 7px;font-size:12px;font-family:inherit;"/>
+      <button class="btn btn-xs btn-red" onclick="rmBpStaff(${i})" style="flex-shrink:0;">×</button>
+    </div>`
+  ).join('');
+}
+function addBpStaff() {
+  _editBpStaff.push({name:'', title:''});
+  renderBpStaff();
+  // Focus the new name field
+  const rows = document.querySelectorAll('#bp-staff-list .bp-staff-row');
+  if (rows.length) rows[rows.length-1].querySelector('.bp-sname').focus();
+}
+function rmBpStaff(i) {
+  _editBpStaff.splice(i, 1);
+  renderBpStaff();
 }
 
 // ── Print: Guide cards ────────────────────────────────
@@ -2862,6 +2932,23 @@ function printBadgeBacks() {
         if(sl.vol && sl.vol.trim()) badges.push({
           type:'volunteer', name:sl.vol.trim(),
           role:sl.pos, area:grp.name, areaColor:grp.color,
+        });
+      });
+    });
+  }
+  // School staff badges
+  if (showStaffBadges) {
+    _scheduleRows.forEach(r => {
+      if (r.t !== 'band') return;
+      const p = bandParking[r.band] || {};
+      (p.staff || []).forEach(s => {
+        if (!s.name) return;
+        badges.push({
+          type:'staff', name:s.name, school:r.band, cls:r.cls,
+          role:s.title||'Staff',
+          draw:r.draw, arrival:r.arrival, dress:r.dress,
+          warmup:r.warmup, area:r.area, travel:r.travel,
+          gate:r.gate, perform:r.perform, _isSchoolStaff:true,
         });
       });
     });

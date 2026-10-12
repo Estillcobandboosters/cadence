@@ -332,6 +332,7 @@ table.fst tr.fst-past td{opacity:.4;}
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:10px;">Print options</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <button onclick="printMySchedule()" style="padding:11px 14px;border:1.5px solid #1565C0;border-radius:10px;background:white;color:#1565C0;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">🖨 Print my schedule card</button>
+        <button onclick="printStaffBadges()" id="btn-staff-badges" style="padding:11px 14px;border:1.5px solid #7B1FA2;border-radius:10px;background:white;color:#7B1FA2;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">🪪 Print school badges</button>
         <button onclick="printFullSchedule()" style="padding:11px 14px;border:1.5px solid #555;border-radius:10px;background:white;color:#555;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;">🖨 Print full prelims schedule</button>
       </div>
     </div>
@@ -858,6 +859,94 @@ function printMySchedule() {
     '</body></html>';
   const w=window.open('','_blank','width=700,height=600');
   w.document.write(html); w.document.close();
+}
+
+// ── Print: School badges (director + staff) ────────────────────────────────────
+function printStaffBadges() {
+  if (!_band || !_bandName) return;
+  const evName = document.getElementById('header-event').textContent;
+  const evDate = document.getElementById('header-date').textContent;
+  const dirName = document.getElementById('d-director').textContent;
+  const cls  = document.getElementById('d-class').textContent;
+  const p    = getParkingFor(_bandName);
+  const staffList = p.staff || [];
+
+  // Build badge list: director first, then each staff member
+  const badges = [
+    { name: dirName, role: 'DIRECTOR', roleColor: '#1565C0' },
+    ...staffList.filter(s => s.name).map(s => ({
+      name: s.name,
+      role: (s.title || 'STAFF').toUpperCase(),
+      roleColor: '#7B1FA2',
+    })),
+  ];
+
+  if (badges.length === 0) { alert('No badges to print.'); return; }
+
+  // Schedule table rows for this band
+  const sched = [
+    { lbl:'Arrival',  val: _band.arrival },
+    { lbl:'Dress',    val: _band.dress   },
+    { lbl:'Warm-up',  val: _band.warmup + ' / Area ' + _band.area },
+    { lbl:'Travel',   val: _band.travel  },
+    { lbl:'Gate',     val: _band.gate    },
+    { lbl:'Perform',  val: _band.perform },
+  ];
+
+  const bandLogo = p.logo || '';
+
+  const badgeHtml = badges.map(b => {
+    const schedRows = sched.map((row, i) => {
+      const bg  = row.lbl==='Perform' ? b.roleColor : (i%2===0 ? '#f8f9ff' : 'white');
+      const clr = row.lbl==='Perform' ? 'white' : '#333';
+      const wt  = row.lbl==='Perform' ? '800' : '400';
+      return `<div style="display:flex;justify-content:space-between;padding:2px 5px;background:${bg};color:${clr};font-weight:${wt};font-size:8pt;">
+        <span>${row.lbl}</span><span>${row.val||'—'}</span></div>`;
+    }).join('');
+    return `<div class="badge-card" style="border-color:${b.roleColor};">
+      <div class="b-hole" style="border-color:${b.roleColor};"></div>
+      <img src="${EC_LOGO}" style="height:30px;width:auto;margin:0 auto 4px;display:block;"/>
+      <div class="b-event" style="color:${b.roleColor};">${evName}</div>
+      <div class="b-date">${evDate}</div>
+      <div class="b-role" style="background:${b.roleColor};">${b.role}</div>
+      <div class="b-name">${b.name}</div>
+      <div class="b-school">${_bandName}</div>
+      ${bandLogo ? `<img src="${bandLogo}" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;"/>` : ''}
+      <div class="b-class">${cls}</div>
+      <div style="margin-top:6px;width:100%;border:1px solid ${b.roleColor};border-radius:4px;overflow:hidden;">
+        ${schedRows}
+      </div>
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Badges — ${_bandName}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;padding:.25in;background:#f0f2f5;}
+.np{text-align:center;margin-bottom:16px;}
+.np button{padding:8px 20px;background:#1565C0;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;}
+.grid{display:grid;grid-template-columns:repeat(3,2.125in);gap:.125in;}
+.badge-card{width:2.125in;height:3.375in;border:2px solid #1565C0;border-radius:10px;padding:12px;text-align:center;background:white;page-break-inside:avoid;display:flex;flex-direction:column;align-items:center;}
+.b-hole{width:16px;height:16px;border-radius:50%;border:2px solid #ccc;margin:0 auto 6px;}
+.b-event{font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+.b-date{font-size:7pt;color:#888;margin-bottom:6px;}
+.b-role{font-size:9pt;font-weight:700;color:white;padding:2px 10px;border-radius:10px;margin-bottom:6px;display:inline-block;}
+.b-name{font-size:14pt;font-weight:800;margin-bottom:2px;}
+.b-school{font-size:10pt;color:#555;margin-bottom:2px;}
+.b-class{font-size:8pt;color:#888;margin-bottom:4px;}
+@media print{.np{display:none;}body{padding:.25in;background:white;}
+  .grid{grid-template-columns:repeat(3,2.125in);}
+  .badge-card{border:1px solid #999;}}
+</style></head><body>
+<div class="np"><button onclick="window.print()">🖨 Print badges</button>
+<span style="font-size:12px;color:#555;margin-left:12px;">Printing ${badges.length} badge${badges.length!==1?'s':''} for ${_bandName}</span></div>
+<div class="grid">${badgeHtml}</div>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=800,height=650');
+  w.document.write(html);
+  w.document.close();
 }
 
 // ── Print: Full prelims schedule ─────────────────────────────────────────────
