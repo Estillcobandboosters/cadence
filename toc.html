@@ -1144,7 +1144,12 @@ async function load(){
       if(d.sections){
         const raw = Array.isArray(d.sections) ? d.sections : JSON.parse(d.sections);
         // Sheets may double-encode: each element may be a JSON string rather than an object
-        const s = raw.map(item => (typeof item === 'string') ? JSON.parse(item) : item);
+        // Also ensure breaks always have bands:[] so they survive Apps Script filters
+        const s = raw.map(item => {
+          const obj = (typeof item === 'string') ? JSON.parse(item) : item;
+          if (obj && obj.type === 'break' && !obj.bands) obj.bands = [];
+          return obj;
+        });
         const brks = s.filter(x=>x&&x.type==='break').length;
         console.log('[TOC] sections from Sheets:', s.length, 'entries,', brks, 'breaks. Types:', s.map(x=>x&&x.type).join(','));
         if(s.length > 0){ sections = s; }
@@ -1341,7 +1346,7 @@ const escHtml=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 function upLabel(si,v){ sections[si].label=v; }
 function upBand(si,bi,f,v){ sections[si].bands[bi][f]=v; }
 function rmBand(si,bi){ sections[si].bands.splice(bi,1); renderSidebar(); rebuild(); save(); }
-function addBrk(si){ sections.splice(si+1,0,{type:'break'}); renderSidebar(); rebuild(); save(); }
+function addBrk(si){ sections.splice(si+1,0,{type:'break',bands:[]}); renderSidebar(); rebuild(); save(); }
 function rmSec(si){ sections.splice(si,1); renderSidebar(); rebuild(); save(); }
 function move(f,t){ const x=sections.splice(f,1)[0]; sections.splice(t,0,x); renderSidebar(); rebuild(); save(); }
 function addClass(){ const l=prompt('Class label:','Class'); if(l){ sections.push({type:'class',id:'c'+Date.now(),label:l,bands:[]}); renderSidebar(); rebuild(); save(); } }
