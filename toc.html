@@ -131,8 +131,8 @@ table.sch tr:hover td{background:#f8f9ff;}
 .tl-status{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;}
 
 /* ── Badge print ── */
-.badges-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:760px;}
-.badge-card{border:2px solid #1565C0;border-radius:12px;padding:14px;text-align:center;background:white;position:relative;aspect-ratio:2.25/3.5;display:flex;flex-direction:column;align-items:center;}
+.badges-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:760px;}
+.badge-card{border:2px solid #1565C0;border-radius:12px;padding:12px;text-align:center;background:white;position:relative;aspect-ratio:2.125/3.375;display:flex;flex-direction:column;align-items:center;}
 .badge-card .b-logo{font-size:28px;margin-bottom:6px;}
 .badge-card .b-event{font-size:9px;font-weight:700;color:#1565C0;text-transform:uppercase;letter-spacing:.08em;}
 .badge-card .b-date{font-size:8px;color:#888;margin-bottom:8px;}
@@ -245,7 +245,7 @@ table.sch tr:hover td{background:#f8f9ff;}
 
   /* Badges — 1 per row on mobile */
   .badges-grid { grid-template-columns: repeat(1, 1fr) !important; gap: 8px !important; }
-  .badge-card { aspect-ratio: 2.25/3.5 !important; }
+  .badge-card { aspect-ratio: 2.125/3.375 !important; }
 
   /* Dashboard */
   .dash-now { padding: 12px 14px; }
@@ -259,11 +259,11 @@ table.sch tr:hover td{background:#f8f9ff;}
   .canvas,.full-canvas{padding:0;}
   body{background:white;}
 
-  /* Badge print — 2.25"×3.5" portrait inserts, 2 across × 4 down on letter portrait sheet */
-  @page { size: letter portrait; margin: .5in .625in; }
-  .badges-print-layout{display:grid!important;grid-template-columns:repeat(2,2.25in);column-gap:.875in;row-gap:.25in;padding:0;}
-  .badge-card{width:2.25in!important;height:3.5in!important;page-break-inside:avoid;border:1px solid #999;
-    aspect-ratio:unset!important;flex-direction:column!important;text-align:center!important;padding:12px!important;}
+  /* Badge print — CR80 2.125"×3.375", 3 across × 2 down on letter portrait sheet */
+  @page { size: letter portrait; margin: .375in .4in; }
+  .badges-print-layout{display:grid!important;grid-template-columns:repeat(3,2.125in);column-gap:.125in;row-gap:.125in;padding:0;}
+  .badge-card{width:2.125in!important;height:3.375in!important;page-break-inside:avoid;border:1px solid #999;
+    aspect-ratio:unset!important;flex-direction:column!important;text-align:center!important;padding:10px!important;}
 }
 </style>
 </head>
