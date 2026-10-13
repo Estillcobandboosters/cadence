@@ -1126,8 +1126,13 @@ async function load(){
       // Reassemble any chunked values (key__0, key__1… + key__n) back into key
       const raw=res.data;
       const d={};
+      // Build set of base keys that have chunks — their plain key (stale) must be ignored
+      const chunkedBases = new Set(
+        Object.keys(raw).filter(k=>k.endsWith('__n')).map(k=>k.slice(0,-3))
+      );
       Object.keys(raw).forEach(k=>{
         if(k.match(/^(.+)__(\d+)$/) || k.match(/^(.+)__n$/)) return; // handled below
+        if(chunkedBases.has(k)){ console.log('[TOC] ignoring stale plain key "'+k+'" — chunked version present'); return; }
         d[k]=raw[k];
       });
       Object.keys(raw).filter(k=>k.endsWith('__n')).forEach(nk=>{
