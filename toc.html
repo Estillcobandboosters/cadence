@@ -306,7 +306,7 @@ table.sch tr:hover td{background:#f8f9ff;}
   <div class="sidebar-content">
   <div class="sb-h">Event settings</div>
   <div class="ctrl"><label>Event name</label><input id="ev-name" value="Estill County Tournament of Champions" oninput="save()" onchange="save()"/></div>
-  <div class="ctrl"><label>Event date</label><input type="date" id="ev-date" value="2026-09-26" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
+  <div class="ctrl"><label>Event date</label><input type="date" id="ev-date" value="2026-09-26" oninput="rebuild();syncBadgeDate();save()" onchange="rebuild();syncBadgeDate();save()"/></div>
   <div class="ctrl"><label>Host school</label><input id="ev-host" value="Estill County" oninput="save()" onchange="save()"/></div>
   <div class="ctrl"><label>Host director</label><input id="ev-host-dir" value="Jason Bowles" oninput="save()" onchange="save()"/></div>
   <div class="ctrl"><label>First performance time</label><input type="time" id="start" value="11:00" oninput="rebuild();save()" onchange="rebuild();save()"/></div>
@@ -985,6 +985,18 @@ function getSettings(){
   return settings;
 }
 
+function syncBadgeDate(){
+  const evDate = document.getElementById('ev-date')?.value || '';
+  const bdgEl  = document.getElementById('bdg-date');
+  if (!bdgEl || !evDate) return;
+  try {
+    const [yr,mo,dy] = evDate.split('-').map(Number);
+    const formatted  = new Date(yr, mo-1, dy).toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    bdgEl.value = formatted;
+    renderBadges();
+  } catch(e) {}
+}
+
 function save(){
   // Also save to localStorage as fallback
   try {
@@ -1100,7 +1112,7 @@ async function load(){
 
   // Always load localStorage first so the page is never blank
   const hadLocal = loadFromLocalStorage();
-  if(hadLocal){ renderSidebar(); rebuild(); renderVolunteers(); renderParking(); }
+  if(hadLocal){ renderSidebar(); rebuild(); syncBadgeDate(); renderVolunteers(); renderParking(); }
 
   // Then try Sheets — only overwrite a key if Sheets has non-empty content for it
   try {
@@ -1178,6 +1190,7 @@ async function load(){
         // Migrate old awd-gap default of 30 → 15
         if(s['awd-gap']==='30'||s['awd-gap']===30) s['awd-gap']='15';
         Object.keys(s).forEach(id=>{ const el=document.getElementById(id); if(el) el.value=s[id]; });
+        syncBadgeDate(); // keep bdg-date in sync with ev-date from Sheets
       }
       // Write the merged result back to localStorage as the new cache
       try {
@@ -3387,6 +3400,7 @@ window.addEventListener('resize', initMobileSidebars);
 load().then(function(){
   renderSidebar();
   rebuild();
+  syncBadgeDate();
   initMobileSidebars();
 }).catch(function(e){
   console.error('Load error:', e);
