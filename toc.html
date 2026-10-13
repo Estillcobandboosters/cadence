@@ -1134,8 +1134,18 @@ async function load(){
         const base=nk.slice(0,-3);
         const n=parseInt(raw[nk])||0;
         let assembled='';
-        for(let i=0;i<n;i++) assembled+=(raw[base+'__'+i]||'');
-        try{ d[base]=JSON.parse(assembled); }catch(e){ d[base]=assembled; }
+        for(let i=0;i<n;i++){
+          // Apps Script's tocLoad() JSON.parses every value — a valid JSON chunk fragment
+          // (e.g. ending with '}') would be parsed to an object, not kept as a string.
+          // Re-stringify non-string chunks to get the raw text back before concatenating.
+          const chunk = raw[base+'__'+i];
+          const chunkStr = (typeof chunk === 'string') ? chunk : JSON.stringify(chunk);
+          console.log('[TOC] chunk '+base+'__'+i+' type='+typeof chunk+' len='+(chunkStr||'').length+' first50='+String(chunkStr||'').substring(0,50));
+          assembled += (chunkStr||'');
+        }
+        console.log('[TOC] assembled '+base+' len='+assembled.length+' first100='+assembled.substring(0,100));
+        try{ d[base]=JSON.parse(assembled); console.log('[TOC] reassembled '+base+' ok, length='+(Array.isArray(d[base])?d[base].length:'n/a')); }
+        catch(e){ console.error('[TOC] reassemble JSON.parse failed for '+base+':', e.message, 'snippet:', assembled.substring(0,200)); d[base]=assembled; }
       });
       console.log('[TOC] load() — keys from Sheets:', Object.keys(d).join(', '));
 
