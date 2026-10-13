@@ -938,7 +938,10 @@ async function apiCall(params, forceGet){
       const val = String(params[key]);
       if(val.length <= CHUNK){
         requests.push({ action: params.action, [key]: val });
-        if(key==='sections') console.log('[TOC-SAVE] sections fits in one request, len='+val.length+', val='+val.substring(0,300));
+        // Always write __n=0 to invalidate any stale chunk rows from a previous save
+        // when data was larger. Without this, old chunks linger and win on load.
+        requests.push({ action: params.action, [key+'__n']: '0' });
+        if(key==='sections') console.log('[TOC-SAVE] sections fits in one request, len='+val.length+', writing __n=0 to clear stale chunks');
       } else {
         const n = Math.ceil(val.length / CHUNK);
         if(key==='sections') console.log('[TOC-SAVE] sections chunked into '+n+' chunks, total len='+val.length+', val='+val.substring(0,300));
@@ -1146,6 +1149,11 @@ async function load(){
       Object.keys(raw).filter(k=>k.endsWith('__n')).forEach(nk=>{
         const base=nk.slice(0,-3);
         const n=parseInt(raw[nk])||0;
+        if(n===0){
+          // __n=0 means data was saved unchunked — plain key has the current value, already in d
+          console.log('[TOC] '+base+'__n=0: using plain key (no chunks)');
+          return;
+        }
         let assembled='';
         for(let i=0;i<n;i++){
           // Apps Script's tocLoad() JSON.parses every value — a valid JSON chunk fragment
