@@ -3475,29 +3475,27 @@ function printBadgeBacks() {
   Badges are reversed per row so they align when the sheet is flipped.</p>
 </div>
 <div class="badges-wrap">${backsHTML}</div>
-<script>
-// Scale each back-body's tl-mini table to fit within the fixed card height
-window.addEventListener('load', function() {
-  document.querySelectorAll('.back-badge:not(.empty)').forEach(function(card) {
-    var body = card.querySelector('.back-body');
-    var table = card.querySelector('.tl-mini');
-    if (!body || !table) return;
-    var bodyH = body.clientHeight;
-    var tableH = table.scrollHeight + (card.querySelector('.tl-label') ? card.querySelector('.tl-label').offsetHeight + 4 : 0);
-    if (tableH > bodyH && bodyH > 0) {
-      var scale = bodyH / tableH;
-      table.style.transformOrigin = 'top left';
-      table.style.transform = 'scale(' + scale + ')';
-      table.style.width = (100 / scale) + '%';
-    }
-  });
-});
-</script>
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=1000,height=800');
   win.document.write(html);
   win.document.close();
+  // Inject scale script after doc is written (avoids script-close tag inside template literal)
+  win.addEventListener('load', function() {
+    win.document.querySelectorAll('.back-badge:not(.empty)').forEach(function(card) {
+      var body = card.querySelector('.back-body');
+      var table = card.querySelector('.tl-mini');
+      if (!body || !table) return;
+      var bodyH = body.clientHeight;
+      var tableH = table.scrollHeight + (card.querySelector('.tl-label') ? card.querySelector('.tl-label').offsetHeight + 4 : 0);
+      if (tableH > bodyH && bodyH > 0) {
+        var scale = bodyH / tableH;
+        table.style.transformOrigin = 'top left';
+        table.style.transform = 'scale(' + scale + ')';
+        table.style.width = (100 / scale) + '%';
+      }
+    });
+  });
 }
 
 // ════════════════════════════════════════════════════════
