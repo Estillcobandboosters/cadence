@@ -393,23 +393,32 @@ async function loadData() {
 
       // Reassemble chunked keys (key__0, key__1 ... key__n saved by toc.html)
       const reassembled = {};
-      const chunkKeys = new Set();
+      // Find all bases that have chunk keys (__0, __1, ...) OR a __n sentinel
+      const chunkedBases = new Set();
       Object.keys(raw).forEach(k => {
-        const m = k.match(/^(.+)__(\d+)$/);
-        if (m) chunkKeys.add(m[1]);
+        const m = k.match(/^(.+)__(\d+|n)$/);
+        if (m) chunkedBases.add(m[1]);
       });
-      // Copy non-chunk keys first
+      // Copy non-chunk, non-sentinel keys — skip plain key if a chunked version exists
       Object.keys(raw).forEach(k => {
-        if (!/__\d+$/.test(k)) reassembled[k] = raw[k];
+        if (/^(.+)__(\d+|n)$/.test(k)) return; // chunk or sentinel — handled below
+        if (chunkedBases.has(k)) return;        // stale plain key — chunked version wins
+        reassembled[k] = raw[k];
       });
-      // Reassemble each chunked key
-      chunkKeys.forEach(base => {
-        const count = parseInt(raw[base + '__n'] || raw[base + '__count'] || 0);
-        if (count > 0) {
-          let str = '';
-          for (let i = 0; i < count; i++) str += (raw[base + '__' + i] || '');
-          reassembled[base] = str;
+      // Reassemble each chunked base
+      chunkedBases.forEach(base => {
+        const nVal = raw[base + '__n'];
+        const count = parseInt(nVal) || 0;
+        if (count === 0) {
+          // __n=0 means data fits in one request — plain key has current value (already copied above)
+          return;
         }
+        let str = '';
+        for (let i = 0; i < count; i++) {
+          const chunk = raw[base + '__' + i];
+          str += (typeof chunk === 'string') ? chunk : JSON.stringify(chunk);
+        }
+        reassembled[base] = str;
       });
 
       _data = reassembled;
