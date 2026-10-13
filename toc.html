@@ -1030,8 +1030,9 @@ async function pushToSheets(){
   // Persist logos to localStorage and also save to Sheets (logos are now small enough)
   saveLogosLocal();
   const parkingNoLogos = stripLogos(bandParking);
-  // Build logos object from bandParking
-  const logosObj = {};
+  // Build logos object — merge in-memory logos with localStorage so no logos get dropped on save
+  const localLogosForPush = (() => { try{ return JSON.parse(localStorage.getItem('toc_logos')||'{}'); }catch(e){return {};} })();
+  const logosObj = {...localLogosForPush};
   Object.keys(bandParking).forEach(k => { if(bandParking[k].logo) logosObj[k] = bandParking[k].logo; });
   console.log('[TOC] pushToSheets — lots count:', parkingLots.length, 'parking bands:', Object.keys(parkingNoLogos).length, 'logos:', Object.keys(logosObj).length);
   try {
@@ -1155,13 +1156,20 @@ async function load(){
         const p = (typeof d.parking==='object'&&!Array.isArray(d.parking)) ? d.parking : JSON.parse(d.parking||'{}');
         if(Object.keys(p).length > 0) bandParking = p;
       }
-      // Merge logos from Sheets into bandParking (logos saved separately to keep parking payload small)
+      // Merge logos from Sheets into bandParking — Sheets wins for schools that have no local logo,
+      // but we keep the local logo if one already exists (avoids one user's save wiping another's logos)
+      const localLogos = (() => { try{ return JSON.parse(localStorage.getItem('toc_logos')||'{}'); }catch(e){return {};} })();
       if(d.logos){
-        const logos = (typeof d.logos==='object'&&!Array.isArray(d.logos)) ? d.logos : JSON.parse(d.logos||'{}');
-        Object.keys(logos).forEach(k => { if(bandParking[k]) bandParking[k].logo = logos[k]; });
-        // Also sync to localStorage
-        try{ localStorage.setItem('toc_logos', JSON.stringify(logos)); }catch(e){}
-        console.log('[TOC] logos from Sheets:', Object.keys(logos).length, 'schools');
+        const sheetsLogos = (typeof d.logos==='object'&&!Array.isArray(d.logos)) ? d.logos : JSON.parse(d.logos||'{}');
+        // Merge: local logo takes priority if present, otherwise use Sheets logo
+        const merged = {...sheetsLogos, ...localLogos};
+        Object.keys(merged).forEach(k => { if(bandParking[k]) bandParking[k].logo = merged[k]; });
+        try{ localStorage.setItem('toc_logos', JSON.stringify(merged)); }catch(e){}
+        console.log('[TOC] logos merged — Sheets:', Object.keys(sheetsLogos).length, 'local:', Object.keys(localLogos).length);
+      } else if(Object.keys(localLogos).length > 0) {
+        // No logos in Sheets yet — apply whatever we have locally
+        Object.keys(localLogos).forEach(k => { if(bandParking[k]) bandParking[k].logo = localLogos[k]; });
+        console.log('[TOC] logos from localStorage only:', Object.keys(localLogos).length, 'schools');
       }
       if(d.settings){
         const s = typeof d.settings==='object' ? d.settings : JSON.parse(d.settings||'{}');
@@ -1176,8 +1184,13 @@ async function load(){
         localStorage.setItem('toc_checkin',    JSON.stringify(checkinStatus));
         localStorage.setItem('toc_badges',     JSON.stringify(extraBadges));
         localStorage.setItem('toc_lots',       JSON.stringify(parkingLots));
-        localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
+        localStorage.setItem('toc_parking',    JSON.stringify(stripLogos(bandParking)));
         if(d.settings) localStorage.setItem('toc_settings', JSON.stringify(typeof d.settings==='object'?d.settings:JSON.parse(d.settings)));
+        // Save the merged logos separately so they survive future load cycles
+        const mergedLogosForCache = {};
+        Object.keys(bandParking).forEach(k => { if(bandParking[k].logo) mergedLogosForCache[k] = bandParking[k].logo; });
+        if(Object.keys(mergedLogosForCache).length > 0)
+          localStorage.setItem('toc_logos', JSON.stringify(mergedLogosForCache));
       } catch(e){}
       setSaveStatus('saved');
       showToast('✓ Loaded from Google Sheets');
