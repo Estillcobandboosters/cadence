@@ -977,7 +977,9 @@ async function apiCall(params, forceGet){
 
 function getSettings(){
   const settings={};
-  ['ev-name','ev-date','ev-host','ev-host-dir','start','gap','brklen','lead','fin-start','fin-count','fin-brk','awd-gap'].forEach(id=>{
+  ['ev-name','ev-date','ev-host','ev-host-dir','start','gap','brklen','lead',
+   'off-arrival','off-dress','off-warmup','off-travel','off-gate',
+   'fin-start','fin-count','fin-brk','awd-gap'].forEach(id=>{
     const el=document.getElementById(id); if(el) settings[id]=el.value;
   });
   return settings;
@@ -993,7 +995,7 @@ function save(){
     localStorage.setItem('toc_settings',   JSON.stringify(getSettings()));
     localStorage.setItem('toc_lots',       JSON.stringify(parkingLots));
     localStorage.setItem('toc_pins',       JSON.stringify(schoolPins));
-    localStorage.setItem('toc_parking',    JSON.stringify(bandParking));
+    localStorage.setItem('toc_parking',    JSON.stringify(stripLogos(bandParking)));
     saveLogosLocal(); // keep toc_logos in sync (logos are stored here since they can't go to Sheets)
   } catch(e){}
 
@@ -3214,38 +3216,18 @@ function printBadgeBacks() {
     return rows;
   }
 
-  // For director badges: personal schedule card
-  function directorBack(b, color){
+  // All badge backs show only the full prelims schedule
+  function badgeBack(b, color){
+    let subline = '';
+    if (b.type === 'director') {
+      subline = escHtml(b.school||'') + (b.cls ? ' &bull; ' + escHtml(b.cls) : '');
+    } else {
+      subline = escHtml(b.area||b.role||'') + (b.role&&b.area?' &bull; '+escHtml(b.role):'');
+    }
     return `<div class="back-badge">
       <div class="back-header" style="background:${color};">
         <div class="back-name">${escHtml(b.name)}</div>
-        <div class="back-school">${escHtml(b.school)} &bull; ${escHtml(b.cls)}</div>
-      </div>
-      <div class="back-body">
-        <table class="sched-mini">
-          <tr><td class="lbl">Arrival</td><td class="val">${b.arrival||'—'}</td></tr>
-          <tr><td class="lbl">Dress</td><td class="val">${b.dress||'—'}</td></tr>
-          <tr class="hi"><td class="lbl">Warm-up</td><td class="val">${b.warmup||'—'} / Area ${b.area||'—'}</td></tr>
-          <tr><td class="lbl">Travel</td><td class="val">${b.travel||'—'}</td></tr>
-          <tr><td class="lbl">Gate</td><td class="val">${b.gate||'—'}</td></tr>
-          <tr class="perf"><td class="lbl">PERFORM</td><td class="val">${b.perform||'—'}</td></tr>
-        </table>
-        <div class="divider"></div>
-        <div class="tl-label">Full prelims schedule</div>
-        <table class="tl-mini">
-          <thead><tr><th>#</th><th>Band</th><th>Perf</th></tr></thead>
-          <tbody>${buildTimeline()}</tbody>
-        </table>
-      </div>
-    </div>`;
-  }
-
-  // For volunteer/staff badges: just the full prelims schedule
-  function scheduleBack(b, color){
-    return `<div class="back-badge">
-      <div class="back-header" style="background:${color};">
-        <div class="back-name">${escHtml(b.name)}</div>
-        <div class="back-school">${escHtml(b.area||b.role||'')}${b.role&&b.area?' &bull; '+escHtml(b.role):''}</div>
+        <div class="back-school">${subline}</div>
       </div>
       <div class="back-body">
         <div class="tl-label">Prelims performance schedule</div>
@@ -3256,6 +3238,9 @@ function printBadgeBacks() {
       </div>
     </div>`;
   }
+  // Keep aliases so nothing else breaks
+  const directorBack  = badgeBack;
+  const scheduleBack  = badgeBack;
 
   const roleColors={director:'#1565C0',volunteer:'#333',staff:'#1565C0',official:'#1565C0'};
 

@@ -439,16 +439,39 @@ function applySettings() {
   if (!_data) return;
   const s = _data.settings || {};
   const evName = s['ev-name'] || 'Tournament of Champions';
-  const evDate = s['ev-date'] || '';
+  let evDate   = s['ev-date'] || '';
+  // Normalize slash-delimited dates from Sheets (e.g. "9/26/2026")
+  if (evDate) {
+    const slashMatch = evDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      evDate = slashMatch[3] + '-' + String(slashMatch[1]).padStart(2,'0') + '-' + String(slashMatch[2]).padStart(2,'0');
+      s['ev-date'] = evDate; // normalize in place for countdown use
+    }
+  }
   document.getElementById('header-event').textContent = evName;
   document.getElementById('header-date').textContent = evDate ? fmtDate(evDate) : 'Estill County Marching Engineers';
   document.title = evName + ' — Director Portal';
+  // Cache settings to localStorage so a re-open shows the right date even before Sheets loads
+  try { localStorage.setItem('toc_dir_settings', JSON.stringify(s)); } catch(e) {}
+}
+
+function loadCachedSettings() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('toc_dir_settings') || 'null');
+    if (cached && !_data) {
+      _data = { settings: cached };
+      applySettings();
+      _data = null; // clear until real load completes
+    }
+  } catch(e) {}
 }
 
 // ── Build schedule rows from saved sections/settings ──
 function buildScheduleRows() {
   if (!_data) return [];
-  const sections  = _data.sections  || [];
+  // Sections may be an array of objects or an array of JSON strings — normalize both
+  const rawSecs = _data.sections || [];
+  const sections = rawSecs.map(s => (typeof s === 'string') ? JSON.parse(s) : s);
   const settings  = _data.settings  || {};
   const start      = parseT(settings['start']    || '11:00');
   const gap        = parseInt(settings['gap']      || 15);
@@ -458,14 +481,9 @@ function buildScheduleRows() {
   const offWarmup  = parseInt(settings['off-warmup'] || 45);
   const offTravel  = parseInt(settings['off-travel'] || 15);
   const offGate    = parseInt(settings['off-gate']   || 5);
-  const finStart   = parseT(settings['fin-start'] || '19:00');
-  const finCnt    = parseInt(settings['fin-count']|| 10);
-  const finBrk    = parseInt(settings['fin-brk']  || 5);
-  const host      = settings['ev-host']     || 'Estill County';
-  const hostDir   = settings['ev-host-dir'] || '';
   const areas     = ['A','B'];
 
-  let cur=start, aIdx=0, rows=[];
+  let cur=start, aIdx=0, rows=[], globalDraw=0;
 
   sections.forEach(sec => {
     if (sec.type==='break') {
@@ -475,10 +493,11 @@ function buildScheduleRows() {
       if (!sec.bands?.length) return;
       rows.push({t:'cls', label:sec.label});
       sec.bands.forEach((b,bi) => {
+        globalDraw++;
         const area = areas[aIdx%2]; aIdx++;
         const perf = cur;
         rows.push({
-          t:'band', draw:bi+1, band:b.name||'TBD', dir:b.dir||'',
+          t:'band', draw:bi+1, globalDraw, band:b.name||'TBD', dir:b.dir||'',
           area, perform:fmt12(perf), performMins:perf,
           arrival:fmt12(perf-offArrival),
           dress:  fmt12(perf-offArrival+offDress),
@@ -672,19 +691,29 @@ function startCountdown(performMins) {
     const sub     = document.getElementById('countdown-sub');
     card.className = 'countdown-card';
 
-    if (!evDate) {
+    // Normalize date string to YYYY-MM-DD regardless of how Sheets returns it
+    let evDateStr = evDate;
+    if (evDateStr) {
+      // Accept M/D/YYYY, MM/DD/YYYY, or YYYY-MM-DD
+      const slashMatch = evDateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (slashMatch) {
+        evDateStr = slashMatch[3] + '-' + String(slashMatch[1]).padStart(2,'0') + '-' + String(slashMatch[2]).padStart(2,'0');
+      }
+    }
+
+    if (!evDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(evDateStr)) {
       lbl.textContent   = 'Event date not set';
       timer.textContent = '—';
       sub.textContent   = '';
       return;
     }
 
-    // Build exact perform datetime
-    const eventDay  = new Date(evDate + 'T00:00:00');
+    // Build exact perform datetime — use local noon as base to avoid DST edge cases
+    const [yr,mo,dy] = evDateStr.split('-').map(Number);
+    const eventDay  = new Date(yr, mo-1, dy);          // local midnight
     const perfH     = Math.floor(performMins / 60);
     const perfM     = performMins % 60;
-    const perfDate  = new Date(evDate + 'T00:00:00');
-    perfDate.setHours(perfH, perfM, 0, 0);
+    const perfDate  = new Date(yr, mo-1, dy, perfH, perfM, 0, 0); // exact local time
 
     const diffMs    = perfDate - now;
     const diffMins  = Math.floor(diffMs / 60000);
@@ -1210,6 +1239,7 @@ function getParkingFor(bandName) {
 // ── Init ──────────────────────────────────────────────
 (async function init() {
   loadLogo();
+  loadCachedSettings();   // show event name/date instantly from cache before Sheets loads
   await loadData();
   const rows = buildScheduleRows();
   renderSchoolList(rows);  // logos now available since loadData completed
