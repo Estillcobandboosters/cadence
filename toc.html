@@ -947,20 +947,21 @@ async function apiCall(params, forceGet){
         requests.push({ action: params.action, [key+'__n']: String(n) });
       }
     });
-    console.log('[TOC] save — sending', requests.length, 'requests. Keys:', requests.map(r=>Object.keys(r).find(k=>k!=='action')));
-    const results = await Promise.all(requests.map(async p => {
+    console.log('[TOC] save — sending', requests.length, 'requests sequentially. Keys:', requests.map(r=>Object.keys(r).find(k=>k!=='action')));
+    const results = [];
+    for (const p of requests) {
       const url = SCRIPT_URL + '?' + new URLSearchParams(p).toString();
       const key = Object.keys(p).find(k=>k!=='action');
       try {
         const r = await fetch(url,{method:'GET',redirect:'follow'});
         const txt = await r.text();
         console.log('[TOC] save key='+key+' status='+r.status+' response='+txt.substring(0,100));
-        return {key, ok:true};
+        results.push({key, ok:true});
       } catch(e){
         console.error('[TOC] save key='+key+' FAILED:', e.message);
-        return {key, ok:false, err:e.message};
+        results.push({key, ok:false, err:e.message});
       }
-    }));
+    }
     const failed = results.filter(r=>!r.ok);
     if(failed.length) console.error('[TOC] save — FAILED keys:', failed.map(r=>r.key));
     return {success:true};
@@ -1144,7 +1145,9 @@ async function load(){
         const raw = Array.isArray(d.sections) ? d.sections : JSON.parse(d.sections);
         // Sheets may double-encode: each element may be a JSON string rather than an object
         const s = raw.map(item => (typeof item === 'string') ? JSON.parse(item) : item);
-        if(s.length > 0){ sections = s; console.log('[TOC] sections from Sheets:', s.length, 'entries'); }
+        const brks = s.filter(x=>x&&x.type==='break').length;
+        console.log('[TOC] sections from Sheets:', s.length, 'entries,', brks, 'breaks. Types:', s.map(x=>x&&x.type).join(','));
+        if(s.length > 0){ sections = s; }
         else console.log('[TOC] sections in Sheets is empty — keeping local');
       }
       if(d.volunteers){
