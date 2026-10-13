@@ -1141,7 +1141,9 @@ async function load(){
       // Only overwrite local state if Sheets has non-empty content for that key
       // This prevents a stale empty [] in Sheets from wiping a rich local cache
       if(d.sections){
-        const s = Array.isArray(d.sections) ? d.sections : JSON.parse(d.sections);
+        const raw = Array.isArray(d.sections) ? d.sections : JSON.parse(d.sections);
+        // Sheets may double-encode: each element may be a JSON string rather than an object
+        const s = raw.map(item => (typeof item === 'string') ? JSON.parse(item) : item);
         if(s.length > 0){ sections = s; console.log('[TOC] sections from Sheets:', s.length, 'entries'); }
         else console.log('[TOC] sections in Sheets is empty — keeping local');
       }
@@ -1208,6 +1210,7 @@ async function load(){
           localStorage.setItem('toc_logos', JSON.stringify(mergedLogosForCache));
       } catch(e){}
       setSaveStatus('saved');
+      renderSidebar(); rebuild(); syncBadgeDate(); renderVolunteers(); renderParking();
       showToast('✓ Loaded from Google Sheets');
       return;
     } else {
