@@ -1879,7 +1879,7 @@ function renderBadges(){
     inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(rolePill)+'</div>';
     if(b.name)    inner+='<div class="b-name">'+escHtml(b.name)+'</div>';
     if(b.school)  inner+='<div class="b-school">'+escHtml(b.school)+'</div>';
-    if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;background:transparent;mix-blend-mode:multiply;"/>';
+    if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;"/>';
     if(b.cls && !b._isSchoolStaff) inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
     if(b.type==='volunteer'){
       if(b.area)  inner+='<div class="b-school" style="font-weight:700;color:'+badgeColor+';">'+escHtml(b.area)+'</div>';
@@ -2154,8 +2154,11 @@ function previewLogo(input) {
       if (w > h) { if(w>MAX){h=Math.round(h*MAX/w);w=MAX;} }
       else        { if(h>MAX){w=Math.round(w*MAX/h);h=MAX;} }
       canvas.width=w; canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      const data = canvas.toDataURL('image/jpeg', 0.7); // JPEG for smaller size
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,w,h); // ensure alpha channel is clean (transparent background)
+      ctx.drawImage(img,0,0,w,h);
+      // Use PNG to preserve transparency — at 80px max, PNG is still small (~2-5KB)
+      const data = canvas.toDataURL('image/png');
       document.getElementById('bp-logo-data').value = data;
       const prev = document.getElementById('bp-logo-preview');
       prev.innerHTML = '<img src="'+data+'" style="width:100%;height:100%;object-fit:contain;"/>';
