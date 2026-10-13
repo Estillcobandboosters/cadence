@@ -2195,7 +2195,17 @@ function renderBpStaff() {
     </div>`
   ).join('');
 }
+function flushBpStaff() {
+  // Save whatever is currently typed in the inputs back into _editBpStaff before re-rendering
+  document.querySelectorAll('#bp-staff-list .bp-staff-row').forEach((row, i) => {
+    if (_editBpStaff[i]) {
+      _editBpStaff[i].name  = row.querySelector('.bp-sname')?.value  || '';
+      _editBpStaff[i].title = row.querySelector('.bp-stitle')?.value || '';
+    }
+  });
+}
 function addBpStaff() {
+  flushBpStaff();
   _editBpStaff.push({name:'', title:''});
   renderBpStaff();
   // Focus the new name field
@@ -2203,6 +2213,7 @@ function addBpStaff() {
   if (rows.length) rows[rows.length-1].querySelector('.bp-sname').focus();
 }
 function rmBpStaff(i) {
+  flushBpStaff();
   _editBpStaff.splice(i, 1);
   renderBpStaff();
 }
