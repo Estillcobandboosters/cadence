@@ -436,6 +436,8 @@ async function loadData() {
       _parseKey('sections');
       _parseKey('settings');
       _parseKey('checkin');
+      const brks = Array.isArray(_data.sections) ? _data.sections.filter(x=>x&&x.type==='break').length : 'n/a';
+      console.log('[DIR] sections after parse:', Array.isArray(_data.sections)?_data.sections.length:'not array', 'breaks:', brks, 'types:', Array.isArray(_data.sections)?_data.sections.map(x=>x&&x.type).join(','):'?');
       applySettings();
       return true;
     }
