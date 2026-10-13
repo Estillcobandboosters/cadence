@@ -910,6 +910,7 @@ let _scheduleRows = []; // cached for dashboard/checkin
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwZLMbuSYhGbILyCZPwLa4zjDkmQ34PW6dsJLoiUcMRWMtC1Ih3W7xoGo_D4D2KPquJ/exec';
 
 let _saveTimer = null;
+let _needsRepairPush = false; // set when Sheets has stale/incomplete data that localStorage supersedes
 let schoolPins   = {};   // {bandName: '1234'}
 let _commsTimer  = null;
 let _saving = false;
@@ -1183,8 +1184,18 @@ async function load(){
         });
         const brks = s.filter(x=>x&&x.type==='break').length;
         console.log('[TOC] sections from Sheets:', s.length, 'entries,', brks, 'breaks. Types:', s.map(x=>x&&x.type).join(','));
-        if(s.length > 0){ sections = s; }
-        else console.log('[TOC] sections in Sheets is empty — keeping local');
+        if(s.length > 0){
+          // If localStorage has MORE sections (e.g. breaks added since last clean save),
+          // keep localStorage version and flag that Sheets needs a repair push.
+          const localSec = (() => { try { const ls=localStorage.getItem('toc_sections'); return ls?JSON.parse(ls):[]; } catch(e){ return []; } })();
+          if(localSec.length > s.length){
+            console.log('[TOC] localStorage has more sections ('+localSec.length+') than Sheets ('+s.length+') — keeping local, will repair Sheets');
+            sections = localSec;
+            _needsRepairPush = true;
+          } else {
+            sections = s;
+          }
+        } else console.log('[TOC] sections in Sheets is empty — keeping local');
       }
       if(d.volunteers){
         const v = Array.isArray(d.volunteers) ? d.volunteers : JSON.parse(d.volunteers);
@@ -1248,9 +1259,17 @@ async function load(){
         if(Object.keys(mergedLogosForCache).length > 0)
           localStorage.setItem('toc_logos', JSON.stringify(mergedLogosForCache));
       } catch(e){}
-      setSaveStatus('saved');
       renderSidebar(); rebuild(); syncBadgeDate(); renderVolunteers(); renderParking();
-      showToast('✓ Loaded from Google Sheets');
+      if(_needsRepairPush){
+        _needsRepairPush = false;
+        console.log('[TOC] repair push — saving correct data back to Sheets to fix stale chunks');
+        showToast('✓ Loaded — repairing Sheets data…');
+        setSaveStatus('saving');
+        pushToSheets();
+      } else {
+        setSaveStatus('saved');
+        showToast('✓ Loaded from Google Sheets');
+      }
       return;
     } else {
       throw new Error('No data in Sheets');
