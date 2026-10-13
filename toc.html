@@ -1138,23 +1138,22 @@ async function load(){
       // Reassemble any chunked values (key__0, key__1… + key__n) back into key
       const raw=res.data;
       const d={};
-      // Build set of base keys that have chunks — their plain key (stale) must be ignored
-      const chunkedBases = new Set(
-        Object.keys(raw).filter(k=>k.endsWith('__n')).map(k=>k.slice(0,-3))
-      );
-      Object.keys(raw).forEach(k=>{
-        if(k.match(/^(.+)__(\d+)$/) || k.match(/^(.+)__n$/)) return; // handled below
-        if(chunkedBases.has(k)){ console.log('[TOC] ignoring stale plain key "'+k+'" — chunked version present'); return; }
-        d[k]=raw[k];
-      });
+      // Separate bases with real chunks (count>0) from ones with only __n=0 sentinel
+      const realChunkBases = new Set();
       Object.keys(raw).filter(k=>k.endsWith('__n')).forEach(nk=>{
-        const base=nk.slice(0,-3);
+        const base = nk.slice(0,-3);
+        const count = parseInt(raw[nk]) || 0;
+        if (count > 0) realChunkBases.add(base);
+      });
+      Object.keys(raw).forEach(k=>{
+        if(k.match(/^(.+)__(\d+)$/) || k.match(/^(.+)__n$/)) return; // chunk/sentinel — handled below
+        if(realChunkBases.has(k)){ console.log('[TOC] ignoring stale plain key "'+k+'" — real chunks present'); return; }
+        d[k]=raw[k]; // plain key or __n=0 case: keep it
+      });
+      realChunkBases.forEach(base=>{
+        const nk = base+'__n';
         const n=parseInt(raw[nk])||0;
-        if(n===0){
-          // __n=0 means data was saved unchunked — plain key has the current value, already in d
-          console.log('[TOC] '+base+'__n=0: using plain key (no chunks)');
-          return;
-        }
+        if(n===0) return; // already handled above via plain key
         let assembled='';
         for(let i=0;i<n;i++){
           // Apps Script's tocLoad() JSON.parses every value — a valid JSON chunk fragment
@@ -1880,7 +1879,7 @@ function renderBadges(){
     inner+='<div class="b-role" style="background:'+badgeColor+';">'+escHtml(rolePill)+'</div>';
     if(b.name)    inner+='<div class="b-name">'+escHtml(b.name)+'</div>';
     if(b.school)  inner+='<div class="b-school">'+escHtml(b.school)+'</div>';
-    if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;"/>';
+    if(bandLogo)  inner+='<img src="'+bandLogo+'" style="height:40px;width:auto;max-width:70px;object-fit:contain;margin:5px auto 3px;display:block;border-radius:4px;background:transparent;mix-blend-mode:multiply;"/>';
     if(b.cls && !b._isSchoolStaff) inner+='<div class="b-class">'+escHtml(b.cls)+'</div>';
     if(b.type==='volunteer'){
       if(b.area)  inner+='<div class="b-school" style="font-weight:700;color:'+badgeColor+';">'+escHtml(b.area)+'</div>';
