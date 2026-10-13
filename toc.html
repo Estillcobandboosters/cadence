@@ -938,10 +938,14 @@ async function apiCall(params, forceGet){
       const val = String(params[key]);
       if(val.length <= CHUNK){
         requests.push({ action: params.action, [key]: val });
+        if(key==='sections') console.log('[TOC-SAVE] sections fits in one request, len='+val.length+', val='+val.substring(0,300));
       } else {
         const n = Math.ceil(val.length / CHUNK);
+        if(key==='sections') console.log('[TOC-SAVE] sections chunked into '+n+' chunks, total len='+val.length+', val='+val.substring(0,300));
         for(let i=0; i<n; i++){
-          requests.push({ action: params.action, [key+'__'+i]: val.slice(i*CHUNK,(i+1)*CHUNK) });
+          const chunk = val.slice(i*CHUNK,(i+1)*CHUNK);
+          if(key==='sections') console.log('[TOC-SAVE] sections__'+i+' len='+chunk.length+' first50='+chunk.substring(0,50));
+          requests.push({ action: params.action, [key+'__'+i]: chunk });
         }
         // Store chunk count so load() knows how many pieces to reassemble
         requests.push({ action: params.action, [key+'__n']: String(n) });
@@ -1001,6 +1005,8 @@ function syncBadgeDate(){
 function save(){
   // Also save to localStorage as fallback
   try {
+    const brksLocal = sections.filter(x=>x&&x.type==='break').length;
+    console.log('[TOC-SAVE] localStorage write: '+sections.length+' sections, '+brksLocal+' breaks');
     localStorage.setItem('toc_sections',   JSON.stringify(sections));
     localStorage.setItem('toc_volunteers', JSON.stringify(volunteers));
     localStorage.setItem('toc_checkin',    JSON.stringify(checkinStatus));
@@ -1051,6 +1057,8 @@ async function pushToSheets(){
   Object.keys(bandParking).forEach(k => { if(bandParking[k].logo) logosObj[k] = bandParking[k].logo; });
   console.log('[TOC] pushToSheets — lots count:', parkingLots.length, 'parking bands:', Object.keys(parkingNoLogos).length, 'logos:', Object.keys(logosObj).length);
   try {
+    const brksAtSave = sections.filter(x=>x&&x.type==='break').length;
+    console.log('[TOC-SAVE] sections at save time: '+sections.length+' entries, '+brksAtSave+' breaks. Types: '+sections.map(x=>x&&x.type).join(','));
     const payload = {
       action:      'toc_save',
       sections:    JSON.stringify(sections),
@@ -1082,7 +1090,7 @@ function loadFromLocalStorage(){
   let found = false;
   try {
     const sec=localStorage.getItem('toc_sections');
-    if(sec){ const p=JSON.parse(sec); if(Array.isArray(p)&&p.length>0){ sections=p; found=true; } }
+    if(sec){ const p=JSON.parse(sec); if(Array.isArray(p)&&p.length>0){ sections=p; found=true; const brksLS=p.filter(x=>x&&x.type==='break').length; console.log('[TOC-LOAD] localStorage sections: '+p.length+' entries, '+brksLS+' breaks. Types: '+p.map(x=>x&&x.type).join(',')); } }
     const vol=localStorage.getItem('toc_volunteers');
     if(vol){ const p=JSON.parse(vol); if(Array.isArray(p)&&p.length>0){ volunteers=p; found=true; } }
     const ci=localStorage.getItem('toc_checkin');
